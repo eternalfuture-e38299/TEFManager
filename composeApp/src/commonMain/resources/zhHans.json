@@ -1,0 +1,71 @@
+{
+  "app": {
+    "version": "版本：${version}"
+  },
+  "settings": {
+    "title": "设置",
+    "followSystem": "跟随系统",
+    "general": {
+      "title": "常规",
+      "update": "自动检查更新",
+      "updateDec": "自动检查软件以及内核更新",
+      "language": {
+        "title": "语言",
+        "dec": "选择应用语言"
+      }
+    },
+    "appearance": {
+      "title": "外观",
+      "theme": "主题",
+      "themeDec": "选择应用主题",
+      "lightTheme": "亮色主题",
+      "darkTheme": "暗色主题",
+      "autoTheme": "自动",
+      "fontSize": "字体大小",
+      "fontSizeDec": "控制应用字体大小",
+      "big": "大",
+      "default": "默认",
+      "small": "小",
+      "dynamicColor": "动态取色",
+      "dynamicColorDec": "跟随系统动态颜色",
+      "themeColor": "主题颜色",
+      "themeColorDec": "选择应用主色调",
+      "chooseColor": "选择颜色"
+    },
+    "advanced": {
+      "title": "高级",
+      "kernelLog": "内核日志",
+      "kernelLogDec": "开启内核工作日志",
+      "dumpKernelLog": "转储内核日志",
+      "dumpKernelLogDec": "将内核日志转储至文件",
+      "redirectKernelLog": "重定向内核日志",
+      "redirectKernelLogDec": "重定向内核日志文件到软件私有目录",
+      "softwareLog": "软件日志",
+      "softwareLogDec": "开启软件工作日志",
+      "dumpSoftwareLog": "转储软件日志",
+      "dumpSoftwareLogDec": "将软件日志输出到文件",
+      "autoCleanLogs": "自动清理日志",
+      "autoCleanLogsDec": "自动清理旧日志文件，释放存储空间",
+      "cleanTimeRange": "清理时间范围",
+      "cleanOldLogs": "清理旧日志",
+      "clearLogs": "清除日志",
+      "exportLogs": "导出日志",
+      "minutesAgo": "分钟前",
+      "createdWithin": "创建的日志文件",
+      "hours": "小时",
+      "minutes": "分钟"
+    },
+    "game": {
+      "title": "游戏"
+    },
+    "about": {
+      "title": "关于"
+    }
+  },
+  "home": {
+    "title": "主页"
+  },
+  "confirm": "确定",
+  "apply": "应用",
+  "cancel": "取消"
+}

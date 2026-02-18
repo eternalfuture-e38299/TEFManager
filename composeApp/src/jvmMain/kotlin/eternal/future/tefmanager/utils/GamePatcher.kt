@@ -1,0 +1,134 @@
+package eternal.future.tefmanager.utils
+
+import eternal.future.tefmanager.Platform
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import okio.FileSystem
+import okio.Path
+import okio.Path.Companion.toPath
+import okio.buffer
+import okio.openZip
+import okio.sink
+
+/*******************************************************************************
+ * TEFManager - GamePatcher
+ * Copyright (C) 2026 eternalfuture-e38299
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ *
+ * Author: eternalfuture-e38299
+ * GitHub: https://github.com/eternalfuture-e38299
+ * Created: 2026/2/17
+ *******************************************************************************/
+
+object GamePatcher {
+
+    private val json = Json {
+        prettyPrint = true // 保存时格式化，便于阅读
+        ignoreUnknownKeys = true // 忽略 JSON 中未知的键，提高兼容性
+    }
+
+    @Serializable
+    data class tefloaderConfig(
+        val kernelLibPath: String,
+        val loadersPath: String,
+        val modsPath: String
+    )
+
+    private val files = FileSystem.SYSTEM;
+
+    fun patchViaDotNetGrafting(filePath: Path, addLoader: Boolean = true, architecture: String = Platform.getArchitecture()) {
+        val kernelDir = Platform.getData("tefkernel")
+        val tefloader = files.openZip(kernelDir / "tefloader.zip")
+
+        try {
+            val config = tefloaderConfig(
+                (kernelDir / Platform.getDynamicLibraryName(
+                    "tefkernel.${architecture}"
+                )).toString(),
+                Platform.getData("loaders").toString(),
+                Platform.getData("mods").toString()
+            )
+
+            val targetDir = filePath.parent
+            AppLogger.i("Starting .NET grafting patch process")
+            AppLogger.d("Target directory: $targetDir")
+            AppLogger.d("Add loader: $addLoader")
+
+            if (addLoader) {
+                val netRuntime = if (Platform.isWindows) "net452/" else "net472/"
+                AppLogger.i("Extracting .NET runtime: $netRuntime")
+
+                tefloader.list(netRuntime.toPath()).forEach { entry ->
+                    try {
+                        val entryNameWithoutPrefix = entry.name.removePrefix(netRuntime)
+                        val targetFile = targetDir!!.resolve(entryNameWithoutPrefix)
+
+                        files.sink(targetFile).buffer().use { sink ->
+                            tefloader.source(entry).use { source ->
+                                sink.writeAll(source)
+                            }
+                        }
+                        AppLogger.d("Extracted: ${entry.name} -> $targetFile")
+                    } catch (e: Exception) {
+                        AppLogger.e("Failed to extract ${entry.name}", e)
+                    }
+                }
+            }
+
+            if (!Platform.isWindows) {
+                AppLogger.i("Processing binary files for non-Windows platform")
+                val binFiles = files.list(targetDir!!).filter { file ->
+                    file.name.startsWith("Terraria.bin.")
+                }
+
+                AppLogger.d("Found ${binFiles.size} binary files to process")
+
+                binFiles.forEach { sourceFile ->
+                    try {
+                        val architecture = sourceFile.name.removePrefix("Terraria.bin.")
+                        val targetFile = targetDir.resolve("tefloader.bin.$architecture")
+
+                        files.copy(sourceFile, targetFile)
+                        AppLogger.d("Copied binary: ${sourceFile.name} -> ${targetFile.name}")
+                    } catch (e: Exception) {
+                        AppLogger.e("Failed to copy binary ${sourceFile.name}", e)
+                    }
+                }
+            }
+
+            // 生成配置文件
+            val configFile = targetDir!! / "tefloader-config.json"
+            files.sink(configFile).buffer().use { sink ->
+                sink.writeUtf8(json.encodeToString(config))
+            }
+            AppLogger.i("Config file generated: $configFile")
+
+        } catch (e: Exception) {
+            AppLogger.e("Error in patchViaDotNetGrafting", e)
+            throw e
+        } finally {
+            try {
+                tefloader.close()
+                AppLogger.i("Zip file closed successfully")
+            } catch (e: Exception) {
+                AppLogger.e("Error closing zip file", e)
+            }
+        }
+    }
+
+    fun patchMonoNative(filePath : Path) {
+        throw NotImplementedError("Mono native patch is not implemented yet")
+    }
+}
