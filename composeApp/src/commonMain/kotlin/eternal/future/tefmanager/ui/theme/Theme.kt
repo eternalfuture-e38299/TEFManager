@@ -6,6 +6,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import com.materialkolor.rememberDynamicColorScheme
+import eternal.future.tefmanager.ConfigurationState
+import eternal.future.tefmanager.ConfigurationState.AppConfig.ThemeMode
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
 
 /*******************************************************************************
  * TEFManager - Theme
@@ -34,12 +39,18 @@ expect fun dynamicColorScheme(darkTheme: Boolean): ColorScheme
 
 @Composable
 fun TEFManagerTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = false,
-    seedColor: Color = Color(0xFF2196F3),
+    themeMode: ThemeMode = ConfigurationState.themeMode,
+    dynamicColor: Boolean = ConfigurationState.dynamicColor,
+    seedColor: Color = ConfigurationState.themeSeedColor,
     content: @Composable () -> Unit
 ) {
+    val darkTheme = when (themeMode) {
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.AUTO -> isAutoDarkTheme()
+    }
+
     val colorScheme = when {
         dynamicColor -> dynamicColorScheme(darkTheme)
         else -> rememberDynamicColorScheme(seedColor = seedColor, isDark = darkTheme)
@@ -50,4 +61,12 @@ fun TEFManagerTheme(
         typography = Typography,
         content = content
     )
+}
+
+private fun isAutoDarkTheme(): Boolean {
+    val currentTime = Clock.System.now()
+    val localTime = currentTime.toLocalDateTime(TimeZone.currentSystemDefault())
+    val hour = localTime.hour
+
+    return hour !in 6..<18
 }

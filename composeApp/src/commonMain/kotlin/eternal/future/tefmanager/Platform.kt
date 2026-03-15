@@ -29,5 +29,4 @@ expect object Platform {
     fun getDirectory(type: String?): Path?
     fun getData(type: String?): Path
     fun getArchitecture() : String
-
 }

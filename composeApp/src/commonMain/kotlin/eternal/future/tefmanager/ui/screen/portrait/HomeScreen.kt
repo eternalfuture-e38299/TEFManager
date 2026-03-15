@@ -9,6 +9,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Gamepad
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,7 +21,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import eternal.future.tefmanager.strings.StringsResource.Strings
+import eternal.future.tefmanager.ui.data.GameManager
+import eternal.future.tefmanager.ui.dialogs.AddGameDialog
 import eternal.future.tefmanager.ui.model.GameItem
+import eternal.future.tefmanager.utils.GameLauncher
 
 
 /*******************************************************************************
@@ -46,29 +50,19 @@ import eternal.future.tefmanager.ui.model.GameItem
  *******************************************************************************/
 
 object HomeScreen : Screen, MainScreen.TitledScreen {
-
-    // 模拟数据
-
-    private val gameItems = listOf(
-        GameItem("", "", "1.4.5.3", 202001, "a1b2c3d4e5"),
-        GameItem("", "", "1.4.5.0", 191902, "f6g7h8i9j0"),
-        GameItem("", "", "1.4.4.9", 181802, "k1l2m3n4o5"),
-        GameItem("", "", "1.4.3.6", 171701, "p6q7r8s9t0"),
-    )
-
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
-        var selectedItem by remember { mutableStateOf<GameItem?>(gameItems.firstOrNull()) }
-        var selectedRuntime by remember { mutableStateOf("TEFKernel") }
-        var showControlPanel by remember { mutableStateOf(false) }
+        var selectedItem by remember { mutableStateOf(GameManager.games.firstOrNull()) }
+        val showControlPanel = remember { mutableStateOf(false) }
+        var showAddGameDialog by remember { mutableStateOf(false) }
 
         Scaffold(
             containerColor = MaterialTheme.colorScheme.surface,
             floatingActionButton = {
                 if (selectedItem != null) {
                     ExtendedFloatingActionButton(
-                        onClick = { showControlPanel = true },
+                        onClick = { showControlPanel.value = true },
                         modifier = Modifier.padding(16.dp),
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -88,32 +82,37 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                 }
             }
         ) { paddingValues ->
+
+            if (showAddGameDialog) {
+                AddGameDialog.Show {
+                    showAddGameDialog = false
+                }
+            }
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
                 // 主要内容区域
-                if (showControlPanel) {
+                if (showControlPanel.value) {
                     ControlPanelSheet(
                         selectedItem = selectedItem,
-                        selectedRuntime = selectedRuntime,
-                        onRuntimeSelected = { selectedRuntime = it },
                         onStartGame = {
-                            println("开始游戏: ${selectedItem?.version}")
-                            showControlPanel = false
+                            showControlPanel.value = false
+                            GameLauncher.launch(selectedItem)
                         },
-                        onDismiss = { showControlPanel = false }
+                        onDismiss = { showControlPanel.value = false }
                     )
                 }
 
                 GameListSection(
-                    items = gameItems,
                     selectedItem = selectedItem,
                     onItemClick = { item ->
                         selectedItem = if (selectedItem?.hash == item.hash) null else item
                     },
                     onAddGame = {
+                        showAddGameDialog = true
                         println("添加游戏")
                     }
                 )
@@ -123,7 +122,6 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
 
     @Composable
     private fun GameListSection(
-        items: List<GameItem>,
         selectedItem: GameItem?,
         onItemClick: (GameItem) -> Unit,
         onAddGame: () -> Unit
@@ -167,7 +165,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(items) { item ->
+                items(GameManager.games) { item ->
                     GameListItemCompact(
                         item = item,
                         isSelected = selectedItem?.hash == item.hash,
@@ -284,86 +282,10 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
         }
     }
 
-    @Composable
-    private fun SelectedGameCard(
-        item: GameItem,
-        onDeselect: () -> Unit,
-        modifier: Modifier = Modifier
-    ) {
-        Surface(
-            modifier = modifier,
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 2.dp
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                // 标题栏
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "当前选择",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
-                    TextButton(onClick = onDeselect) {
-                        Text("取消选择")
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 游戏信息
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(MaterialTheme.shapes.medium)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Gamepad,
-                            contentDescription = "Game",
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-
-                    Column {
-                        Text(
-                            text = item.version,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = "版本号: ${item.versionCode}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-    }
-
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun ControlPanelSheet(
         selectedItem: GameItem?,
-        selectedRuntime: String,
-        onRuntimeSelected: (String) -> Unit,
         onStartGame: () -> Unit,
         onDismiss: () -> Unit
     ) {
@@ -400,17 +322,9 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                 // 游戏信息区域
                 GameInfoSectionCompact(selectedItem)
 
-                Divider(
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                )
-
-                // 运行时设置区域
-                RuntimeSectionCompact(
-                    selectedRuntime = selectedRuntime,
-                    onRuntimeSelected = onRuntimeSelected
-                )
-
-                Divider(
+                HorizontalDivider(
+                    Modifier,
+                    DividerDefaults.Thickness,
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                 )
 
@@ -523,61 +437,6 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
         }
     }
 
-    @OptIn(ExperimentalMaterial3Api::class)
-    @Composable
-    private fun RuntimeSectionCompact(
-        selectedRuntime: String,
-        onRuntimeSelected: (String) -> Unit
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(
-                text = "运行时环境",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            val runtimeOptions = listOf("TEFKernel", "Game原版")
-
-            ExposedDropdownMenuBox(
-                expanded = false,
-                onExpandedChange = {}
-            ) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text(
-                                text = selectedRuntime,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = "推荐使用",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                        }
-
-                        Icon(
-                            imageVector = Icons.Rounded.ArrowDropDown,
-                            contentDescription = "展开选项"
-                        )
-                    }
-                }
-            }
-        }
-    }
-
     @Composable
     private fun ControlButtonsSectionCompact(
         selectedItem: GameItem?,
@@ -621,48 +480,13 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                     fontWeight = FontWeight.SemiBold
                 )
             }
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilledTonalButton(
-                    onClick = { /* 游戏设置 */ },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp),
-                    shape = MaterialTheme.shapes.medium,
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Settings,
-                        contentDescription = "设置",
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("设置")
-                }
-
-                OutlinedButton(
-                    onClick = { /* 更多选项 */ },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp),
-                    shape = MaterialTheme.shapes.medium
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.MoreHoriz,
-                        contentDescription = "更多",
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("更多")
-                }
-            }
         }
     }
 
     override val title: String
         get() = Strings.home.title
+
+    override val refreshAction: (() -> Unit) = {
+        GameManager.refreshGames()
+    }
 }

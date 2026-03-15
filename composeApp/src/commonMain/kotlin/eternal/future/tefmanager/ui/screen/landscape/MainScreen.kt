@@ -26,7 +26,6 @@ import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,13 +37,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -53,6 +53,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.transitions.SlideTransition
 import eternal.future.tefmanager.strings.StringsResource.Strings
+import eternal.future.tefmanager.ui.component.RefreshIconButton
 import org.jetbrains.compose.resources.painterResource
 import tefmanager.composeapp.generated.resources.Res
 import tefmanager.composeapp.generated.resources.icon
@@ -83,6 +84,8 @@ import tefmanager.composeapp.generated.resources.icon
 object MainScreen : Screen {
     interface TitledScreen {
         val title: String
+        val refreshAction: (() -> Unit)?
+            get() = null
     }
 
     data class NavigationItem(
@@ -104,10 +107,9 @@ object MainScreen : Screen {
                 modifier = Modifier.fillMaxSize(),
                 containerColor = MaterialTheme.colorScheme.background,
                 topBar = {
-                    val title = when (val currentScreen = navigator.lastItem) {
-                        is TitledScreen -> currentScreen.title
-                        else -> "TEFManager"
-                    }
+                    val currentScreen = navigator.lastItem
+                    var refreshAction: (() -> Unit)? by mutableStateOf(((currentScreen as TitledScreen).refreshAction))
+                    val title = (currentScreen as TitledScreen).title
 
                     Surface(
                         tonalElevation = 1.dp,
@@ -150,6 +152,13 @@ object MainScreen : Screen {
                                 titleContentColor = MaterialTheme.colorScheme.onSurface,
                                 actionIconContentColor = Color.Unspecified
                             ),
+                            actions = {
+                                refreshAction?.let { action ->
+                                    RefreshIconButton(
+                                        refreshAction = action
+                                    )
+                                }
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp)
@@ -199,7 +208,7 @@ object MainScreen : Screen {
                     label = "资源包"
                 ),
                 NavigationItem(
-                    screen = ModManagerScreen,
+                    screen = ManagerScreen,
                     selectedIcon = Icons.Rounded.Widgets,
                     unselectedIcon = Icons.Outlined.Widgets,
                     label = "管理"

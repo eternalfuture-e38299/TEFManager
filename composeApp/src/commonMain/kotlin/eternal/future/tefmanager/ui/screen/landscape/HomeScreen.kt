@@ -21,10 +21,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
-import eternal.future.tefmanager.data.storage.GameStorage
 import eternal.future.tefmanager.strings.StringsResource.Strings
-import eternal.future.tefmanager.ui.model.GameItem
+import eternal.future.tefmanager.ui.data.GameManager
 import eternal.future.tefmanager.ui.dialogs.AddGameDialog
+import eternal.future.tefmanager.ui.model.GameItem
+import eternal.future.tefmanager.utils.GameLauncher
 
 /*******************************************************************************
  * TEFManager - HomeScreen
@@ -48,13 +49,11 @@ import eternal.future.tefmanager.ui.dialogs.AddGameDialog
  * Created: 2026/2/2
  *******************************************************************************/
 
-
-
 object HomeScreen : Screen, MainScreen.TitledScreen {
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
-        var selectedItem by remember { mutableStateOf(GameStorage.uiGames.firstOrNull()) }
+        var selectedItem by remember { mutableStateOf(GameManager.games.firstOrNull()) }
         var showAddGameDialog by remember { mutableStateOf(false) }
 
         Scaffold(
@@ -69,7 +68,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
             ) {
                 // 左侧游戏列表卡片
                 GameListCard(
-                    items = GameStorage.uiGames,
+                    items = GameManager.games,
                     selectedItem = selectedItem,
                     onItemClick = { item ->
                         selectedItem = if (selectedItem?.hash == item.hash) null else item
@@ -81,10 +80,9 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                 )
 
                 if (showAddGameDialog) {
-                    AddGameDialog {
+                    AddGameDialog.Show {
                         showAddGameDialog = false
-                        println(it)
-                        GameStorage.save(it)
+                        if (it != null) GameManager.addGame(it)
                     }
                 }
 
@@ -92,10 +90,10 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                 ControlPanelCard(
                     selectedItem = selectedItem,
                     onStartGame = {
-                        println("开始游戏: ${selectedItem?.version}")
+                        GameLauncher.launch(selectedItem)
                     },
                     onRemoveGame = {
-                        GameStorage.delete(selectedItem?.hash)
+                        selectedItem?.let { GameManager.removeGame(it.hash) }
                     },
                     modifier = Modifier.weight(1.5f)
                 )
@@ -529,4 +527,8 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
 
     override val title: String
         get() = Strings.home.title
+
+    override val refreshAction: (() -> Unit) = {
+        GameManager.refreshGames()
+    }
 }

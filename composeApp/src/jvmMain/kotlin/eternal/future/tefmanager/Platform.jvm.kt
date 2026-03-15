@@ -1,6 +1,9 @@
 package eternal.future.tefmanager
 
 import co.touchlab.kermit.Logger
+import io.github.vinceglb.filekit.FileKit
+import io.github.vinceglb.filekit.filesDir
+import io.github.vinceglb.filekit.path
 import okio.Path
 import okio.Path.Companion.toPath
 import java.lang.System.getProperty
@@ -87,10 +90,11 @@ actual object Platform {
     }
 
     actual fun getData(type: String?): Path {
-        return when {
-            getProperty("os.name").contains("win") -> (System.getenv("LOCALAPPDATA")).toPath() / "TEFManager" / (type ?: "")
-            else -> (getProperty("user.home")).toPath() / "TEFManager" / (type ?: "")
+        val p = FileKit.filesDir.path.toPath()
+        type?.let {
+            return p / type
         }
+        return p
     }
 
     actual val dynamicColor: Boolean = false

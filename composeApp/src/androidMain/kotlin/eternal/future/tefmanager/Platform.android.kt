@@ -33,7 +33,8 @@ actual object Platform {
             when (type?.lowercase()) {
                 "documents" -> Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).path.toPath()
                 "data" -> Environment.getDataDirectory().path.toPath()
-                "tmp" -> MainActivity.context?.cacheDir?.let { (it.absolutePath + "/tmp").toPath() } ?:
+                "tmp" -> MainActivity.context?.externalCacheDir?.absolutePath?.toPath()?.let { it / "tmp" } ?:
+                MainActivity.context?.cacheDir?.let { (it.absolutePath + "/tmp").toPath() } ?:
                 (File.createTempFile("temp", "").parent ?: "/tmp").toPath()
                 else -> (Environment.getDataDirectory().path + "/" + (type ?: "")).toPath()
             }

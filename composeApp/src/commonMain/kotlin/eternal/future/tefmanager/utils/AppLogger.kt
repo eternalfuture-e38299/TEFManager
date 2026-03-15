@@ -4,6 +4,7 @@ import co.touchlab.kermit.Logger
 import co.touchlab.kermit.Severity
 import co.touchlab.kermit.StaticConfig
 import co.touchlab.kermit.platformLogWriter
+import eternal.future.tefmanager.ConfigurationState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -11,16 +12,22 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
-import okio.*
+import okio.FileSystem
+import okio.Path
 import okio.Path.Companion.toPath
+import okio.SYSTEM
+import okio.buffer
+import okio.use
 import kotlin.time.Clock.System.now
 
 /*******************************************************************************
- * TEFManager - Logger
+ * TEFManager - AppLogger
  * Copyright (C) 2026 eternalfuture-e38299
  *
  * This program is free software: you can redistribute it and/or modify
@@ -50,12 +57,14 @@ object AppLogger {
     private var enableFileLogging = false
 
     private var logDirectory: String? = null
+    private var kernelLogDirectory: String? = null
 
     private var currentLogFile: Path? = null
 
     private lateinit var logger: Logger
     private val fileSystem = FileSystem.SYSTEM
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val fileCheckLock = Mutex()
 
     // 同步初始化（适用于应用启动时）
     fun initializeSync(
@@ -68,6 +77,7 @@ object AppLogger {
 
         enableFileLogging = enableFileLog
         logDirectory = logDir
+        kernelLogDirectory = "${logDir}_kernel" // 内核日志目录
 
         // 配置 Kermit Logger
         val config = StaticConfig(
@@ -80,8 +90,9 @@ object AppLogger {
         // 同步初始化文件日志目录
         if (enableFileLogging) {
             runBlocking {
-                initLogDirectory()
+                initLogDirectories()
                 initializeLogFile()
+                setupLogCleanup()
             }
         }
 
@@ -92,18 +103,17 @@ object AppLogger {
         logInternal("I", "Logger initialized - FileLog: $enableFileLog")
     }
 
-    private suspend fun initLogDirectory() = withContext(Dispatchers.IO) {
+    private suspend fun initLogDirectories() = withContext(Dispatchers.IO) {
         try {
-            val dir = logDirectory?.toPath() ?: "logs".toPath()
-            println("Initializing log directory: $dir")
-
-            if (!fileSystem.exists(dir)) {
-                fileSystem.createDirectories(dir)
-                println("Created log directory: $dir")
+            // 初始化应用日志目录
+            val appDir = logDirectory?.toPath() ?: "logs".toPath()
+            if (!fileSystem.exists(appDir)) {
+                fileSystem.createDirectories(appDir)
+                println("Created app log directory: $appDir")
             }
 
             // 测试写入权限
-            val testFile = dir / "test.log"
+            val testFile = appDir / "test.log"
             fileSystem.sink(testFile).use { sink ->
                 sink.buffer().writeUtf8("Test log entry\n").flush()
             }
@@ -196,6 +206,9 @@ object AppLogger {
                 }
             }
 
+            // 检查日志文件大小限制
+            checkLogFileSize()
+
         } catch (e: Exception) {
             println("Write Log To File Failed: ${e.message}")
         }
@@ -245,6 +258,164 @@ object AppLogger {
 
     fun e(message: String, throwable: Throwable? = null) {
         logInternal("E", message, throwable)
+    }
+
+    // 日志管理功能
+    suspend fun cleanupOldLogs() = withContext(Dispatchers.IO) {
+        try {
+            val cleanTimeMinutes = ConfigurationState.autoCleanTime
+
+            // 计算截止时间的时间戳（毫秒）
+            val cutoffTimestamp = now().toEpochMilliseconds() -
+                    (cleanTimeMinutes * 60 * 1000L)
+
+            // 清理应用日志
+            logDirectory?.toPath()?.let { dir ->
+                if (fileSystem.exists(dir)) {
+                    fileSystem.list(dir).forEach { file ->
+                        val fileMetadata = fileSystem.metadata(file)
+                        val fileTime = fileMetadata.lastModifiedAtMillis
+
+                        if (fileTime != null) {
+                            if (fileTime < cutoffTimestamp) {
+                                fileSystem.delete(file)
+                                d("Deleted old app log file: $file")
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 清理内核日志
+            kernelLogDirectory?.toPath()?.let { dir ->
+                if (fileSystem.exists(dir)) {
+                    fileSystem.list(dir).forEach { file ->
+                        val fileMetadata = fileSystem.metadata(file)
+                        val fileTime = fileMetadata.lastModifiedAtMillis
+                        if (fileTime != null) {
+                            if (fileTime < cutoffTimestamp) {
+                                fileSystem.delete(file)
+                                d("Deleted old kernel log file: $file")
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e("Failed to cleanup old logs", e)
+        }
+    }
+
+    private suspend fun checkLogFileSize() = withContext(Dispatchers.IO) {
+        fileCheckLock.withLock {  // 添加互斥锁
+            try {
+                val maxFiles = ConfigurationState.maxAppLogFiles
+                val maxSizeMB = ConfigurationState.maxAppLogSizeMB
+                val maxSizeBytes = maxSizeMB * 1024 * 1024L
+
+                logDirectory?.toPath()?.let { dir ->
+                    if (fileSystem.exists(dir)) {
+                        // 先获取所有文件列表
+                        val files = fileSystem.list(dir).sortedBy {
+                            try {
+                                fileSystem.metadata(it).lastModifiedAtMillis
+                            } catch (e: Exception) {
+                                Long.MAX_VALUE  // 文件不存在时排到最后
+                            }
+                        }
+
+                        // 检查文件数量限制
+                        if (files.size > maxFiles) {
+                            val filesToDelete = files.take(files.size - maxFiles)
+                            filesToDelete.forEach { file ->
+                                try {
+                                    if (fileSystem.exists(file)) {  // 再次检查文件是否存在
+                                        fileSystem.delete(file)
+                                        d("Deleted app log file due to count limit: $file")
+                                    }
+                                } catch (e: Exception) {
+                                    w("Failed to delete file $file: ${e.message}")
+                                }
+                            }
+                        }
+
+                        // 检查总大小限制
+                        var totalSize = 0L
+                        val validFiles = mutableListOf<Path>()
+
+                        files.forEach { file ->
+                            try {
+                                if (fileSystem.exists(file)) {  // 检查文件是否存在
+                                    val metadata = fileSystem.metadata(file)
+                                    totalSize += metadata.size ?: 0
+                                    validFiles.add(file)
+                                }
+                            } catch (e: Exception) {
+                                w("Failed to get metadata for $file: ${e.message}")
+                            }
+                        }
+
+                        if (totalSize > maxSizeBytes) {
+                            var sizeToRemove = totalSize - maxSizeBytes
+                            validFiles.forEach { file ->
+                                if (sizeToRemove > 0) {
+                                    try {
+                                        if (fileSystem.exists(file)) {
+                                            val fileSize = fileSystem.metadata(file).size ?: 0
+                                            fileSystem.delete(file)
+                                            sizeToRemove -= fileSize
+                                            d("Deleted app log file due to size limit: $file")
+                                        }
+                                    } catch (e: Exception) {
+                                        w("Failed to delete file $file: ${e.message}")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e("Failed to check log file size", e)
+            }
+        }
+    }
+
+    fun clearAllLogs() {
+        try {
+            // 清除应用日志
+            logDirectory?.toPath()?.let { dir ->
+                if (fileSystem.exists(dir)) {
+                    fileSystem.deleteRecursively(dir)
+                    fileSystem.createDirectories(dir)
+                    i("Cleared all app logs")
+                }
+            }
+
+            // 清除内核日志
+            kernelLogDirectory?.toPath()?.let { dir ->
+                if (fileSystem.exists(dir)) {
+                    fileSystem.deleteRecursively(dir)
+                    if (ConfigurationState.kernelLogEnabled) {
+                        fileSystem.createDirectories(dir)
+                    }
+                    i("Cleared all kernel logs")
+                }
+            }
+        } catch (e: Exception) {
+            e("Failed to clear logs", e)
+        }
+    }
+
+    private fun setupLogCleanup() {
+        // 定期清理旧日志
+        scope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(60 * 60 * 1000L) // 每小时检查一次
+                if (ConfigurationState.autoCleanLogs) {
+                    cleanupOldLogs()
+                }
+            }
+        }
     }
 
     fun close() {

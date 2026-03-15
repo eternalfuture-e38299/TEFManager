@@ -22,9 +22,10 @@ import eternal.future.tefmanager.ui.model.GameItem
  *
  * Author: eternalfuture-e38299
  * GitHub: https://github.com/eternalfuture-e38299
- * Created: 2026/2/10
+ * Created: 2026/2/28
  *******************************************************************************/
 
-
-@Composable
-expect fun AddGameDialog(onGameAdded: (GameItem?) -> Unit = {})
+expect object AddGameDialog {
+    @Composable
+    fun Show(onResult: (GameItem?) -> Unit)
+}

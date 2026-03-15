@@ -2,18 +2,15 @@ package eternal.future.tefmanager
 
 import eternal.future.tefmanager.utils.AppLogger
 import eternal.future.tefmanager.utils.LightProtoStore
+import eternal.future.tefmanager.utils.TefPkgReader
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import okio.Path.Companion.toPath
 import java.io.File
-import java.util.Timer
-import java.util.UUID
-import kotlin.concurrent.timerTask
 import kotlin.system.measureTimeMillis
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 /*******************************************************************************
  * TEFManager - JvmTest
@@ -50,6 +47,16 @@ class JvmTest {
     }
 
     @Test
+    fun tefPkgRead() {
+        val pkg = TefPkgReader("/home/eternalfuture/CLionProjects/tefpackage/cmake-build-debug/test.pkg".toPath())
+        pkg.open()
+
+        println("文件完整性验证：${pkg.verifyPackageIntegrity()}")
+
+        pkg.close()
+    }
+
+    @Test
     fun example(): Unit = runBlocking {
         val testDir = "/home/eternalfuture/测试目录/simple_test".toPath()
         val store = LightProtoStore(testDir, TestUser.serializer(), "MetadataTest")
@@ -71,7 +78,7 @@ class JvmTest {
             assertEquals(50L, stats1["deletedRecords"])
 
             // 重启
-            store.close()
+            store.destroy()
             val store2 = LightProtoStore(testDir, TestUser.serializer(), "MetadataTest")
 
             // 验证元数据恢复
@@ -80,7 +87,7 @@ class JvmTest {
             assertEquals(50L, stats2["deletedRecords"]) // 必须正确恢复
 
         } finally {
-            store.close()
+            store.destroy()
         }
     }
 
@@ -118,7 +125,7 @@ class JvmTest {
             }
 
             // 强制刷新并重启
-            store.close()
+            store.destroy()
             println("第一次写入完成，重启存储...")
 
             val store2 = LightProtoStore(testDir, TestUser.serializer(), "VeryLargeTest")
@@ -168,7 +175,7 @@ class JvmTest {
             }
 
         } finally {
-            store.close()
+            store.destroy()
             // 清理测试文件（可能需要时间，可以注释掉先查看文件大小）
             // File(testDir.toString()).deleteRecursively()
         }
@@ -209,7 +216,7 @@ class JvmTest {
             println("随机读取平均耗时: ${"%.3f".format(avgReadTime)}ms/次")
 
         } finally {
-            store.close()
+            store.destroy()
             // File(testDir.toString()).deleteRecursively()
         }
     }

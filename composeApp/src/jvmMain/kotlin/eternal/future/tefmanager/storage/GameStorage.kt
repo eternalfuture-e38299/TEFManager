@@ -1,75 +1,67 @@
-package eternal.future.tefmanager.data.storage
+package eternal.future.tefmanager.storage
 
 import eternal.future.tefmanager.Platform
 import eternal.future.tefmanager.ui.model.GameItem
 import eternal.future.tefmanager.utils.AppLogger
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.decodeFromByteArray
-import kotlinx.serialization.encodeToByteArray
-import kotlinx.serialization.protobuf.ProtoBuf
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.snapshots.SnapshotStateList
-import okio.*
+import kotlinx.serialization.json.Json
+import okio.FileSystem
+import okio.buffer
+import okio.use
 
 @OptIn(ExperimentalSerializationApi::class)
 object GameStorage {
     private val dataDir = Platform.getData(null)
-    private val gamesFile = dataDir / "games.pb"
+    private val gamesFile = dataDir / "games.json"
 
-    private val protobuf = ProtoBuf {
+    private val json = Json {
         encodeDefaults = true
+        prettyPrint = true
+        ignoreUnknownKeys = true
     }
 
     // 用于序列化的普通列表
-    private var serializableGames = mutableListOf<GameItem>()
-
-    // 用于 UI 的状态列表
-    private val _uiGames: SnapshotStateList<GameItem> = mutableStateListOf()
-    val uiGames: List<GameItem> get() = _uiGames
+    var serializableGames = mutableListOf<GameItem>()
 
     init {
-        AppLogger.d("Initializing GameStorage with ProtoBuf...")
+        AppLogger.d("Initializing GameStorage with JSON...")
         loadGames()
     }
 
-    private fun loadGames() {
+    fun loadGames() {
         try {
             val fileSystem = FileSystem.SYSTEM
             if (fileSystem.exists(gamesFile)) {
                 fileSystem.source(gamesFile).use { source ->
                     val buffer = source.buffer()
-                    val bytes = buffer.readByteArray()
-                    AppLogger.d("Loaded ${bytes.size} bytes from ProtoBuf file")
+                    val jsonString = buffer.readUtf8()
+                    AppLogger.d("Loaded ${jsonString.length} characters from JSON file")
 
-                    if (bytes.isNotEmpty()) {
-                        serializableGames = protobuf.decodeFromByteArray<List<GameItem>>(bytes).toMutableList()
-                        // 同步到 UI 列表
-                        _uiGames.clear()
-                        _uiGames.addAll(serializableGames)
-                        AppLogger.i("Successfully loaded ${serializableGames.size} games from ProtoBuf file")
+                    if (jsonString.isNotEmpty()) {
+                        serializableGames = json.decodeFromString<List<GameItem>>(jsonString).toMutableList()
+                        AppLogger.i("Successfully loaded ${serializableGames.size} games from JSON file")
                     } else {
-                        AppLogger.w("ProtoBuf file exists but is empty")
+                        AppLogger.w("JSON file exists but is empty")
                         clearBothLists()
                     }
                 }
             } else {
-                AppLogger.i("ProtoBuf file not found, starting with empty list")
+                AppLogger.i("JSON file not found, starting with empty list")
                 clearBothLists()
             }
         } catch (e: Exception) {
-            AppLogger.e("Failed to load games from ProtoBuf", e)
+            AppLogger.e("Failed to load games from JSON", e)
             clearBothLists()
         }
     }
 
     private fun clearBothLists() {
         serializableGames.clear()
-        _uiGames.clear()
     }
 
     private fun saveAllGames() {
         try {
-            AppLogger.d("Encoding ${serializableGames.size} games to ProtoBuf...")
+            AppLogger.d("Encoding ${serializableGames.size} games to JSON...")
 
             // 检查数据是否为空
             if (serializableGames.isEmpty()) {
@@ -77,8 +69,8 @@ object GameStorage {
                 return
             }
 
-            val bytes = protobuf.encodeToByteArray(serializableGames)
-            AppLogger.d("Encoded ${bytes.size} bytes")
+            val jsonString = json.encodeToString(serializableGames)
+            AppLogger.d("Encoded ${jsonString.length} characters")
 
             // 确保目录存在
             gamesFile.parent?.let { parentDir ->
@@ -90,24 +82,21 @@ object GameStorage {
             // 使用更明确的写入方式
             FileSystem.SYSTEM.sink(gamesFile).use { sink ->
                 val bufferedSink = sink.buffer()
-                bufferedSink.write(bytes)
+                bufferedSink.writeUtf8(jsonString)
                 bufferedSink.flush() // 确保立即刷新
             }
 
             // 验证文件大小
             val fileSize = FileSystem.SYSTEM.metadata(gamesFile).size
-            AppLogger.i("Saved ${serializableGames.size} games to ProtoBuf file (${fileSize} bytes)")
+            AppLogger.i("Saved ${serializableGames.size} games to JSON file (${fileSize} bytes)")
 
         } catch (e: Exception) {
-            AppLogger.e("Failed to save games to ProtoBuf", e)
+            AppLogger.e("Failed to save games to JSON", e)
             throw e
         }
     }
 
     private fun syncToUi() {
-        // 同步序列化列表到 UI 列表
-        _uiGames.clear()
-        _uiGames.addAll(serializableGames)
         AppLogger.d("Synced ${serializableGames.size} games to UI")
     }
 
@@ -152,9 +141,5 @@ object GameStorage {
                 AppLogger.w("Game not found for deletion: $itemHash")
             }
         }
-    }
-
-    fun refreshUi() {
-        syncToUi()
     }
 }

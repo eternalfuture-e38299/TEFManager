@@ -22,6 +22,7 @@ import okio.SYSTEM
 import okio.buffer
 import okio.use
 import kotlin.contracts.ExperimentalContracts
+import kotlin.math.min
 import kotlin.time.Clock
 
 /*******************************************************************************
@@ -57,7 +58,7 @@ class LightProtoStore<T>(
     private val batchWriteSize: Int = 1000,
     private val indexSaveDebounceMs: Long = 5000L,
     private val coroutineScope: CoroutineScope? = null
-) : AutoCloseable {
+) {
     @OptIn(ExperimentalSerializationApi::class)
     private val protobuf = ProtoBuf {
         encodeDefaults = true
@@ -78,6 +79,22 @@ class LightProtoStore<T>(
         val dataFileSize: Long = 0L,
         val indexFileSize: Long = 0L,
         val indexEntries: Long = 0L
+    )
+
+    data class QueryResult<T>(
+        val items: List<T>,
+        val totalCount: Int,
+        val hasMore: Boolean,
+        val offset: Int
+    )
+
+    enum class SortOrder { ASC, DESC }
+
+    data class QueryConfig<T>(
+        val offset: Int = 0,
+        val limit: Int = 20,
+        val sortOrder: SortOrder = SortOrder.ASC,
+        val filter: ((String, T) -> Boolean)? = null
     )
 
     // 内存索引
@@ -275,6 +292,87 @@ class LightProtoStore<T>(
         } catch (e: Exception) {
             AppLogger.e("[$storeName] Failed to get key: $key", e)
             return null
+        }
+    }
+
+    /**
+     * 编辑一个已存在的记录
+     * @param key 记录的唯一键
+     * @param editor 编辑函数，传入当前值，返回新的值。返回null表示不修改
+     * @return 编辑后的新值，如果记录不存在或编辑失败则返回null
+     */
+    suspend fun edit(key: String, editor: (T) -> T?): T? {
+        return try {
+            mutex.withLock {
+                val currentValue = get(key)
+                if (currentValue == null) {
+                    AppLogger.d("[$storeName] Key not found for editing: $key")
+                    return@withLock null
+                }
+
+                val newValue = editor(currentValue)
+                if (newValue == null) {
+                    AppLogger.d("[$storeName] Editor returned null, no changes applied: $key")
+                    return@withLock currentValue
+                }
+
+                // 检查值是否真的改变了
+                if (currentValue == newValue) {
+                    AppLogger.d("[$storeName] No changes detected for key: $key")
+                    return@withLock currentValue
+                }
+
+                // 使用put方法进行更新
+                put(key, newValue)
+
+                AppLogger.d("[$storeName] Edited key: $key")
+                newValue
+            }
+        } catch (e: Exception) {
+            AppLogger.e("[$storeName] Failed to edit key: $key", e)
+            null
+        }
+    }
+
+    /**
+     * 条件编辑 - 只有满足条件时才进行编辑
+     * @param key 记录的唯一键
+     * @param condition 条件判断函数，返回true时才执行编辑
+     * @param editor 编辑函数，接收当前值并返回新值
+     * @return 是否成功编辑
+     */
+    suspend fun editIf(key: String, condition: (T) -> Boolean, editor: (T) -> T): Boolean {
+        return try {
+            mutex.withLock {
+                val currentValue = get(key)
+                if (currentValue == null) {
+                    AppLogger.d("[$storeName] Key not found for conditional edit: $key")
+                    return@withLock false
+                }
+
+                // 检查条件
+                if (!condition(currentValue)) {
+                    AppLogger.d("[$storeName] Condition not satisfied for key: $key")
+                    return@withLock false
+                }
+
+                val newValue = editor(currentValue)
+
+                // 检查值是否真的改变了
+                if (currentValue == newValue) {
+                    AppLogger.d("[$storeName] No changes detected (values equal) for key: $key")
+                    return@withLock true  // 条件满足但值未变，也算成功
+                }
+
+                // 执行更新
+                put(key, newValue)
+
+                AppLogger.d("[$storeName] Conditionally edited key: $key")
+                true
+            }
+        } catch (e: Exception) {
+            AppLogger.e("[$storeName] Failed to conditionally edit key: $key", e)
+            false
         }
     }
 
@@ -489,7 +587,65 @@ class LightProtoStore<T>(
         "minRecordsForCompact" to minRecordsForCompact
     )
 
-    override fun close() {
+    suspend fun query(config: QueryConfig<T> = QueryConfig()): QueryResult<T> {
+        return withContext(Dispatchers.IO) {
+            mutex.withLock {
+                try {
+                    val allRecords = mutableListOf<Pair<String, T>>()
+
+                    // 处理缓冲区记录
+                    writeBuffer.forEach { (key, value) ->
+                        if (config.filter == null || config.filter(key, value)) {
+                            allRecords.add(key to value)
+                        }
+                    }
+
+                    // 处理文件记录
+                    memoryIndex.forEach { (key, pointer) ->
+                        if (!pointer.isDeleted && pointer.offset != -1L) {
+                            val value = get(key)
+                            if (value != null && (config.filter == null || config.filter(key, value))) {
+                                allRecords.add(key to value)
+                            }
+                        }
+                    }
+
+                    val sortedRecords = when (config.sortOrder) {
+                        SortOrder.ASC -> allRecords
+                        SortOrder.DESC -> allRecords.reversed()
+                    }
+
+                    val totalCount = sortedRecords.size
+                    val startIndex = min(config.offset, totalCount)
+                    val endIndex = min(config.offset + config.limit, totalCount)
+                    val hasMore = endIndex < totalCount
+
+                    val paginatedItems = sortedRecords
+                        .subList(startIndex, endIndex)
+                        .map { it.second }
+
+                    QueryResult(paginatedItems, totalCount, hasMore, endIndex)
+                } catch (e: Exception) {
+                    AppLogger.e("[$storeName] Query failed", e)
+                    QueryResult(emptyList(), 0, false, 0)
+                }
+            }
+        }
+    }
+
+    suspend fun query(limit: Int = 20, offset: Int = 0): QueryResult<T> {
+        return query(QueryConfig(offset = offset, limit = limit))
+    }
+
+    suspend fun query(
+        limit: Int = 20,
+        offset: Int = 0,
+        filter: (String, T) -> Boolean
+    ): QueryResult<T> {
+        return query(QueryConfig(offset = offset, limit = limit, filter = filter))
+    }
+
+    private fun close() {
         try {
             if (writeBuffer.isNotEmpty()) {
                 runBlocking { flushBuffer() }
@@ -504,7 +660,50 @@ class LightProtoStore<T>(
         }
     }
 
+    fun destroy() {
+        close()
+        memoryIndex.clear()
+        writeBuffer.clear()
+    }
+
     private fun <T> runBlocking(block: suspend () -> T): T {
         return kotlinx.coroutines.runBlocking { block() }
+    }
+
+    fun flush() {
+        try {
+            if (writeBuffer.isNotEmpty()) {
+                // 同步执行写入操作
+                kotlinx.coroutines.runBlocking {
+                    mutex.withLock {
+                        fileSystem.appendingSink(dataFilePath).buffer().use { sink ->
+                            writeBuffer.forEach { (key, value) ->
+                                val bytes = protobuf.encodeToByteArray(serializer, value)
+                                val length = bytes.size
+                                val offset = currentDataFileSize
+
+                                sink.writeInt(length)
+                                sink.write(bytes)
+
+                                memoryIndex[key] = RecordPointer(offset, length, false)
+                                currentDataFileSize += 4 + length
+                            }
+                            sink.flush()
+                        }
+
+                        writeBuffer.clear()
+                        bufferSize = 0
+                    }
+                }
+            }
+
+            // 无论是否有缓冲数据，都强制保存索引和元数据
+            saveIndex()
+            saveMetadata()
+
+            AppLogger.d("[$storeName] Flush completed - buffer cleared, index and metadata saved")
+        } catch (e: Exception) {
+            AppLogger.e("[$storeName] Flush failed", e)
+        }
     }
 }

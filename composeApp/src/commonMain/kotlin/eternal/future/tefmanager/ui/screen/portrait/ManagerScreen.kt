@@ -70,7 +70,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /*******************************************************************************
- * TEFManager - ModManagerScreen
+ * TEFManager - ManagerScreen
  * Copyright (C) 2026 eternalfuture-e38299
  *
  * This program is free software: you can redistribute it and/or modify
@@ -134,7 +134,7 @@ data class KernelPlugin(
     val supportedLoaders: List<String> = emptyList()
 )
 
-object ModManagerScreen : Screen, MainScreen.TitledScreen {
+object ManagerScreen : Screen, MainScreen.TitledScreen {
 
     // 模拟数据
     private val kernelModules = listOf(

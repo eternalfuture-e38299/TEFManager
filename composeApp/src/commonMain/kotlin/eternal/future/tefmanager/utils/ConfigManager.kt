@@ -1,8 +1,6 @@
 package eternal.future.tefmanager.utils
 
-import eternal.future.tefmanager.strings.StringsResource
-import eternal.future.tefmanager.strings.StringsResource.Strings
-import kotlinx.serialization.Serializable
+import eternal.future.tefmanager.ConfigurationState.AppConfig
 import kotlinx.serialization.json.Json
 import okio.FileSystem
 import okio.Path
@@ -44,26 +42,6 @@ class ConfigManager private constructor() {
     private var configFile: Path? = null
     var currentConfig: AppConfig? = null
         private set // 限制外部直接修改
-
-    @Serializable
-    data class AppConfig(
-        var language: StringsResource.Language = StringsResource.Language.System,
-        var themeMode: Theme = Theme.SYSTEM,
-    ) {
-        @Serializable
-        enum class Theme {
-            LIGHT, DARK, AUTO, SYSTEM;
-
-            override fun toString(): String {
-                return when(this) {
-                    LIGHT -> Strings.settings.appearance.lightTheme
-                    DARK -> Strings.settings.appearance.darkTheme
-                    AUTO -> Strings.settings.appearance.autoTheme
-                    SYSTEM -> Strings.settings.followSystem
-                }
-            }
-        }
-    }
 
     companion object {
         @Volatile
@@ -122,16 +100,24 @@ class ConfigManager private constructor() {
         return try {
             currentConfig?.let { config ->
                 configFile?.let { file ->
-                    val jsonString = json.encodeToString(config)
-                    fileSystem.sink(file).use { sink ->
-                        sink.buffer().writeUtf8(jsonString)
-                        sink.flush()
+                    val jsonString = json.encodeToString(AppConfig.serializer(), config)
+
+                    file.parent?.let { parent ->
+                        if (!fileSystem.exists(parent)) fileSystem.createDirectories(parent)
                     }
+
+                    fileSystem.sink(file).use { sink ->
+                        sink.buffer().use { bufferedSink ->
+                            bufferedSink.writeUtf8(jsonString)
+                            bufferedSink.flush()
+                        }
+                    }
+                    AppLogger.d("Config saved: ${jsonString.length} bytes to $file")
                     true
                 } ?: false
             } ?: false
-        } catch (e: Exception) { // 捕获 SerializationException 等
-            AppLogger.e(message = "Failed to save config", throwable = e)
+        } catch (e: Exception) {
+            AppLogger.e("Failed to save config", e)
             false
         }
     }

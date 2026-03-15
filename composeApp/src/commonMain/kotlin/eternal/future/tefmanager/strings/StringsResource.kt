@@ -3,13 +3,9 @@ package eternal.future.tefmanager.strings
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import eternal.future.tefmanager.strings.StringsResource.Language
-// import eternal.future.tefmanager.strings.res.*
-
-import androidx.compose.runtime.*
+import eternal.future.tefmanager.ConfigurationState
 import eternal.future.tefmanager.Platform
 import eternal.future.tefmanager.strings.generated.*
-import kotlinx.serialization.json.internal.FormatLanguage
 
 
 /*******************************************************************************
@@ -35,20 +31,19 @@ import kotlinx.serialization.json.internal.FormatLanguage
  *******************************************************************************/
 
 object StringsResource {
-    var currentLanguage: Language by mutableStateOf(Language.System)
     var Strings by mutableStateOf<LocaleStrings>(ZhHans)
 
     init {
-        setLanguage(Language.System)
+        setLanguage(ConfigurationState.language)
     }
 
     fun setLanguage(code: Language) {
-        currentLanguage = code
+        ConfigurationState.language = code
         val code = if (code == Language.System) fromSystemLocale() else code
         Strings = when (code) {
             Language.ZhHans -> ZhHans
-            // Language.En -> En
-            else -> ZhHans // En
+            Language.En -> En
+            else -> ZhHans
         }
     }
 
@@ -65,10 +60,13 @@ object StringsResource {
     }
 
     fun fromSystemLocale() : Language {
-        val language = Platform.systemLanguage
-        val region = Platform.systemRegion
+        val language = Platform.systemLanguage.lowercase()
+        val region = Platform.systemRegion.lowercase()
+
+        val simplifiedChineseRegions = setOf("hans", "cn", "sg")
+
         return when (language) {
-            "zh" if region == "Hans" -> Language.ZhHans
+            "zh" if (region in simplifiedChineseRegions) -> Language.ZhHans
             "en" -> Language.En
             else -> Language.En
         }

@@ -1,6 +1,5 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinAndroidTarget
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -13,6 +12,12 @@ plugins {
 
 kotlin {
     androidTarget {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_21)
+        }
+    }
+
+    jvm {
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_21)
         }
@@ -33,19 +38,25 @@ kotlin {
         }
     }
 
-    jvm()
     sourceSets {
-        androidMain.dependencies {
-            implementation(libs.compose.uiToolingPreview)
-            implementation(libs.androidx.activity.compose)
-            implementation(libs.ktor.client.android)
-            implementation(fileTree(mapOf("dir" to "libs/android", "include" to listOf("*.jar", "*.aar"))))
+        androidMain {
+            dependencies {
+                implementation(libs.compose.uiToolingPreview)
+                implementation(libs.androidx.activity.compose)
+                implementation(libs.ktor.client.android)
+                implementation(libs.apkzlib)
+                implementation(libs.apksig)
+                implementation(libs.bcprov.jdk18on)
+                implementation(libs.bcpkix.jdk18on)
+                implementation(project(":composeApp:libs:android:aXML"))
+            }
         }
         commonMain {
             kotlin {
                 srcDir("build/generated/strings")
             }
             dependencies {
+                implementation(libs.kamel.image.default)
                 implementation(libs.compose.runtime)
                 implementation(libs.compose.foundation)
                 implementation(libs.compose.material3)
@@ -66,6 +77,9 @@ kotlin {
                 implementation(libs.okio.fakefilesystem)
                 implementation(libs.okio)
                 implementation(libs.ktor.client.core)
+                implementation(libs.filekit.core)
+                implementation(libs.filekit.dialogs.compose)
+                implementation(libs.filekit.coil)
             }
         }
         commonTest.dependencies {
@@ -94,23 +108,8 @@ tasks.register("generateStrings") {
     }
 }
 
-// 修复：为所有 Kotlin 编译任务添加依赖
-tasks.matching { it.name.startsWith("compileKotlin") }.configureEach {
+tasks.matching { it.name.startsWith("composeApp") }.configureEach {
     dependsOn("generateStrings")
-}
-
-// 或者更精确的方式（推荐）：
-afterEvaluate {
-    listOf(
-        "compileKotlinCommon",
-        "compileKotlinAndroid",
-        "compileKotlinJvm",
-        "compileKotlinIosX64",
-        "compileKotlinIosArm64",
-        "compileKotlinIosSimulatorArm64"
-    ).forEach { taskName ->
-        tasks.findByName(taskName)?.dependsOn("generateStrings")
-    }
 }
 
 android {
@@ -132,6 +131,8 @@ android {
     buildTypes {
         getByName("release") {
             isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"),
+                file("proguard-rules.pro"))
         }
     }
 

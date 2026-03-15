@@ -8,7 +8,7 @@ import okio.Path
 import okio.Path.Companion.toPath
 import okio.buffer
 import okio.openZip
-import okio.sink
+import java.io.File
 
 /*******************************************************************************
  * TEFManager - GamePatcher
@@ -55,7 +55,7 @@ object GamePatcher {
         try {
             val config = tefloaderConfig(
                 (kernelDir / Platform.getDynamicLibraryName(
-                    "tefkernel.${architecture}"
+                    "tefkernel.${architecture.lowercase()}"
                 )).toString(),
                 Platform.getData("loaders").toString(),
                 Platform.getData("mods").toString()
@@ -65,6 +65,7 @@ object GamePatcher {
             AppLogger.i("Starting .NET grafting patch process")
             AppLogger.d("Target directory: $targetDir")
             AppLogger.d("Add loader: $addLoader")
+            AppLogger.d("Architecture: $architecture")
 
             if (addLoader) {
                 val netRuntime = if (Platform.isWindows) "net452/" else "net472/"
@@ -80,6 +81,26 @@ object GamePatcher {
                                 sink.writeAll(source)
                             }
                         }
+
+                        // 对非Windows系统，为提取的文件设置可执行权限
+                        if (!Platform.isWindows) {
+                            try {
+                                val file = File(targetFile.toString())
+                                if (file.exists()) {
+                                    val result = file.setExecutable(true)
+                                    if (result) {
+                                        AppLogger.d("Set executable permission for: ${targetFile.name}")
+                                    } else {
+                                        AppLogger.w("Failed to set executable permission for: ${targetFile.name}")
+                                    }
+                                }
+                            } catch (e: SecurityException) {
+                                AppLogger.e("Security exception when setting executable permission for ${targetFile.name}", e)
+                            } catch (e: Exception) {
+                                AppLogger.e("Failed to set executable permission for ${targetFile.name}", e)
+                            }
+                        }
+
                         AppLogger.d("Extracted: ${entry.name} -> $targetFile")
                     } catch (e: Exception) {
                         AppLogger.e("Failed to extract ${entry.name}", e)
@@ -97,10 +118,27 @@ object GamePatcher {
 
                 binFiles.forEach { sourceFile ->
                     try {
-                        val architecture = sourceFile.name.removePrefix("Terraria.bin.")
-                        val targetFile = targetDir.resolve("tefloader.bin.$architecture")
+                        val sourceArchitecture = sourceFile.name.removePrefix("Terraria.bin.")
+                        val targetFile = targetDir.resolve("tefloader.bin.$sourceArchitecture")
 
                         files.copy(sourceFile, targetFile)
+
+                        try {
+                            val copiedFile = File(targetFile.toString())
+                            if (copiedFile.exists()) {
+                                val result = copiedFile.setExecutable(true)
+                                if (result) {
+                                    AppLogger.d("Set executable permission for copied binary: ${targetFile.name}")
+                                } else {
+                                    AppLogger.w("Failed to set executable permission for copied binary: ${targetFile.name}")
+                                }
+                            }
+                        } catch (e: SecurityException) {
+                            AppLogger.e("Security exception when setting executable permission for copied binary ${targetFile.name}", e)
+                        } catch (e: Exception) {
+                            AppLogger.e("Failed to set executable permission for copied binary ${targetFile.name}", e)
+                        }
+
                         AppLogger.d("Copied binary: ${sourceFile.name} -> ${targetFile.name}")
                     } catch (e: Exception) {
                         AppLogger.e("Failed to copy binary ${sourceFile.name}", e)
@@ -126,6 +164,13 @@ object GamePatcher {
                 AppLogger.e("Error closing zip file", e)
             }
         }
+    }
+
+    fun findBin(dirPath: Path, name: String): Path {
+        AppLogger.i("Processing binary files for non-Windows platform")
+        return (files.list(dirPath).filter { file ->
+            file.name.startsWith("$name.bin.")
+        }).first()
     }
 
     fun patchMonoNative(filePath : Path) {

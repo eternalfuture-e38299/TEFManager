@@ -20,22 +20,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.CompareArrows
 import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.AutoDelete
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.DataUsage
 import androidx.compose.material.icons.rounded.DeveloperMode
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.FileDownload
-import androidx.compose.material.icons.rounded.FontDownload
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.SaveAlt
-import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Update
@@ -46,7 +43,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -55,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,13 +70,36 @@ import com.github.skydoves.colorpicker.compose.AlphaSlider
 import com.github.skydoves.colorpicker.compose.ColorPickerController
 import com.github.skydoves.colorpicker.compose.HsvColorPicker
 import com.materialkolor.ktx.toHex
+import eternal.future.tefmanager.ConfigurationState
+import eternal.future.tefmanager.ConfigurationState.AppConfig
 import eternal.future.tefmanager.Platform
 import eternal.future.tefmanager.strings.StringsResource
 import eternal.future.tefmanager.strings.StringsResource.Strings
-import eternal.future.tefmanager.utils.ConfigManager
+import eternal.future.tefmanager.ui.dialogs.UpdateDialog
+import eternal.future.tefmanager.ui.model.UpdateInfo
+import eternal.future.tefmanager.utils.AppLogger
+import eternal.future.tefmanager.utils.NetworkService
+import eternal.future.tefmanager.utils.openUrl
+import io.github.vinceglb.filekit.dialogs.FileKitDialogSettings
+import io.github.vinceglb.filekit.dialogs.compose.rememberFileSaverLauncher
+import io.github.vinceglb.filekit.sink
+import io.ktor.utils.io.core.readAvailable
+import kotlinx.coroutines.launch
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlinx.io.Sink
+import kotlinx.io.buffered
+import kotlinx.io.files.FileSystem
+import kotlinx.io.files.Path
+import kotlinx.io.files.SystemFileSystem
+import kotlinx.io.writeString
+import kotlinx.serialization.json.Json
+import okio.SYSTEM
+import okio.buffer
 import org.jetbrains.compose.resources.painterResource
 import tefmanager.composeapp.generated.resources.Res
 import tefmanager.composeapp.generated.resources.icon
+import kotlin.time.Clock.System.now
 
 /*******************************************************************************
  * TEFManager - SettingsContent
@@ -102,7 +126,6 @@ import tefmanager.composeapp.generated.resources.icon
 object SettingsContent {
     @Composable
     fun GeneralSettings() {
-        var autoUpdate by remember { mutableStateOf(true) }
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -115,9 +138,9 @@ object SettingsContent {
                 description = Strings.settings.general.updateDec,
                 trailingContent = {
                     Switch(
-                        checked = autoUpdate,
+                        checked = ConfigurationState.autoUpdate,
                         {
-                            autoUpdate = it
+                            ConfigurationState.autoUpdate = it
                         }
                     )
                 }
@@ -125,8 +148,8 @@ object SettingsContent {
 
             SettingItem(
                 icon = Icons.Rounded.Translate,
-                title = Strings.settings.general.language.title,
-                description = Strings.settings.general.language.dec,
+                title = Strings.settings.general.language,
+                description = Strings.settings.general.languageDec,
                 trailingContent = {
                     var expanded by remember { mutableStateOf(false) }
                     val languages = listOf(
@@ -140,7 +163,7 @@ object SettingsContent {
                             onClick = { expanded = true },
                             shape = MaterialTheme.shapes.medium
                         ) {
-                            Text(StringsResource.currentLanguage.toString())
+                            Text(ConfigurationState.language.toString())
                             Icon(
                                 imageVector = Icons.Rounded.ArrowDropDown,
                                 contentDescription = "Select Language"
@@ -155,7 +178,7 @@ object SettingsContent {
                                 DropdownMenuItem(
                                     text = { Text(lang.toString()) },
                                     onClick = {
-                                        StringsResource.setLanguage(lang)
+                                        ConfigurationState.language = lang
                                         expanded = false
                                     }
                                 )
@@ -246,11 +269,7 @@ object SettingsContent {
     fun AppearanceSettings() {
         val appearance = remember { Strings.settings.appearance }
 
-        var theme by remember { mutableStateOf(ConfigManager.AppConfig.Theme.SYSTEM) }
-        var fontSize by remember { mutableStateOf(17.0f) }
         var showColorPicker by remember { mutableStateOf(false) }
-        var selectedColor by remember { mutableStateOf(Color(0xFF2196F3)) }
-        var dynamicColorEnabled by remember { mutableStateOf(false) }
 
         Column(
             modifier = Modifier
@@ -260,10 +279,9 @@ object SettingsContent {
         ) {
             if (showColorPicker) {
                 ColorPickerDialog(
-                    initialColor = selectedColor,
+                    initialColor = ConfigurationState.themeSeedColor,
                     onColorSelected = { color ->
-                        selectedColor = color
-                        // ConfigManager.saveThemeColor(color)
+                        ConfigurationState.themeSeedColor = color
                     },
                     onDismiss = { showColorPicker = false }
                 )
@@ -276,10 +294,10 @@ object SettingsContent {
                 trailingContent = {
                     var expanded by remember { mutableStateOf(false) }
                     val themes = listOf(
-                        ConfigManager.AppConfig.Theme.SYSTEM,
-                        ConfigManager.AppConfig.Theme.LIGHT,
-                        ConfigManager.AppConfig.Theme.DARK,
-                        ConfigManager.AppConfig.Theme.AUTO,
+                        AppConfig.ThemeMode.SYSTEM,
+                        AppConfig.ThemeMode.LIGHT,
+                        AppConfig.ThemeMode.DARK,
+                        AppConfig.ThemeMode.AUTO,
                     )
 
                     Box {
@@ -287,7 +305,7 @@ object SettingsContent {
                             onClick = { expanded = true },
                             shape = MaterialTheme.shapes.medium
                         ) {
-                            Text(theme.toString())
+                            Text(ConfigurationState.themeMode.toString())
                             Icon(
                                 imageVector = Icons.Rounded.ArrowDropDown,
                                 contentDescription = "Choose Theme"
@@ -302,7 +320,7 @@ object SettingsContent {
                                 DropdownMenuItem(
                                     text = { Text(t.toString()) },
                                     onClick = {
-                                        theme = t
+                                        ConfigurationState.themeMode = t
                                         expanded = false
                                     }
                                 )
@@ -313,36 +331,6 @@ object SettingsContent {
             )
 
             SettingItem(
-                icon = Icons.Rounded.FontDownload,
-                title = appearance.fontSize,
-                description = appearance.fontSizeDec,
-                trailingContent = {
-                    Text("${fontSize.toInt()}sp")
-                }
-            )
-
-            Slider(
-                value = fontSize,
-                onValueChange = {
-                    fontSize = it
-                },
-                valueRange = 12f..24f,
-                steps = 12,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(appearance.small, style = MaterialTheme.typography.labelSmall)
-                Text(appearance.default, style = MaterialTheme.typography.labelSmall)
-                Text(appearance.big, style = MaterialTheme.typography.labelSmall)
-            }
-
-            SettingItem(
                 icon = Icons.Rounded.Palette,
                 title = appearance.dynamicColor,
                 description = appearance.dynamicColorDec,
@@ -350,9 +338,9 @@ object SettingsContent {
                 trailingContent = {
                     Switch(
                         enabled = Platform.dynamicColor,
-                        checked = dynamicColorEnabled,
+                        checked = ConfigurationState.dynamicColor,
                         onCheckedChange = {
-                            dynamicColorEnabled = it
+                            ConfigurationState.dynamicColor = it
                         }
                     )
                 }
@@ -362,15 +350,15 @@ object SettingsContent {
                 icon = Icons.Rounded.ColorLens,
                 title = appearance.themeColor,
                 description = appearance.themeColorDec,
-                enabled = !dynamicColorEnabled,
+                enabled = !ConfigurationState.dynamicColor,
                 trailingContent = {
                     Box(
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
-                            .background(if (!dynamicColorEnabled) selectedColor else selectedColor.copy(0.5f))
+                            .background(if (!ConfigurationState.dynamicColor) ConfigurationState.themeSeedColor else ConfigurationState.themeSeedColor.copy(0.5f))
                             .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                            .clickable { if (!dynamicColorEnabled) showColorPicker = true }
+                            .clickable { if (!ConfigurationState.dynamicColor) showColorPicker = true }
                     )
                 }
             )
@@ -477,6 +465,15 @@ object SettingsContent {
 
     @Composable
     fun AdvancedSettings() {
+        val logExporter = rememberFileSaverLauncher(FileKitDialogSettings.createDefault()) {  file ->
+            file?.let {
+                val sink = file.sink().buffered()
+                mergeAllLogFilesPureKotlin(baseDir = Platform.getData("logs").toString(),
+                    outputSink = sink)
+                sink.flush()
+            }
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -490,34 +487,13 @@ object SettingsContent {
                 description = Strings.settings.advanced.kernelLogDec,
                 trailingContent = {
                     Switch(
-                        checked = true,
-                        onCheckedChange = {}
-                    )
-                }
-            )
-
-            SettingItem(
-                icon = Icons.Rounded.Storage,
-                title = Strings.settings.advanced.dumpKernelLog,
-                description = Strings.settings.advanced.dumpKernelLogDec,
-                trailingContent = {
-                    Switch(
-                        checked = true,
-                        onCheckedChange = {}
-                    )
-                }
-            )
-
-            SettingItem(
-                icon = Icons.AutoMirrored.Rounded.CompareArrows, // 使用这个存在的图标
-                title = Strings.settings.advanced.redirectKernelLog,
-                description = Strings.settings.advanced.redirectKernelLogDec,
-                enabled = Platform.isAndroid,
-                trailingContent = {
-                    Switch(
-                        enabled = Platform.isAndroid,
-                        checked = false,
-                        onCheckedChange = {}
+                        checked = ConfigurationState.kernelLogEnabled,
+                        onCheckedChange = {
+                            ConfigurationState.kernelLogEnabled = it
+                            val kernelLogDir = Platform.getData("logs") / "tefkernel"
+                            if (ConfigurationState.kernelLogEnabled) okio.FileSystem.SYSTEM.createDirectories(kernelLogDir)
+                            else okio.FileSystem.SYSTEM.deleteRecursively(kernelLogDir)
+                        }
                     )
                 }
             )
@@ -529,20 +505,8 @@ object SettingsContent {
                 description = Strings.settings.advanced.softwareLogDec,
                 trailingContent = {
                     Switch(
-                        checked = true,
-                        onCheckedChange = {}
-                    )
-                }
-            )
-
-            SettingItem(
-                icon = Icons.Rounded.SaveAlt,
-                title = Strings.settings.advanced.dumpSoftwareLog,
-                description = Strings.settings.advanced.dumpSoftwareLogDec,
-                trailingContent = {
-                    Switch(
-                        checked = true,
-                        onCheckedChange = {}
+                        checked = ConfigurationState.softwareLogEnabled,
+                        onCheckedChange = { ConfigurationState.softwareLogEnabled = it }
                     )
                 }
             )
@@ -554,14 +518,14 @@ object SettingsContent {
                 description = Strings.settings.advanced.autoCleanLogsDec,
                 trailingContent = {
                     Switch(
-                        checked = true,
-                        onCheckedChange = {}
+                        checked = ConfigurationState.autoCleanLogs,
+                        onCheckedChange = { ConfigurationState.autoCleanLogs = it }
                     )
                 }
             )
 
             // 当自动清理开启时显示清理时间设置
-            if (true) { // 这里后续替换为autoCleanEnabled状态
+            if (ConfigurationState.autoCleanLogs) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -578,14 +542,14 @@ object SettingsContent {
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
                         )
                         Text(
-                            text = "240${Strings.settings.advanced.minutesAgo}", // 这里后续替换为autoCleanTime状态
+                            text = Strings.settings.advanced.minutesAgo(ConfigurationState.autoCleanTime),
                             style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary)
                         )
                     }
 
                     Slider(
-                        value = 240f, // 这里后续替换为autoCleanTime状态
-                        onValueChange = { /* 后续替换为回调 */ },
+                        value = ConfigurationState.autoCleanTime.toFloat(),
+                        onValueChange = { ConfigurationState.autoCleanTime = it.toInt() },
                         valueRange = 60f..720f, // 1小时到12小时
                         steps = 10,
                         modifier = Modifier.fillMaxWidth()
@@ -629,18 +593,9 @@ object SettingsContent {
                         }
                     }
 
-                    val timeText = if (240 <= 120) {
-                        "2${Strings.settings.advanced.hours}"
-                    } else if (240 <= 360) {
-                        "6${Strings.settings.advanced.hours}"
-                    } else if (240 <= 480) {
-                        "8${Strings.settings.advanced.hours}"
-                    } else {
-                        "12${Strings.settings.advanced.hours}"
-                    }
-
+                    val hours = ConfigurationState.autoCleanTime / 60
                     Text(
-                        text = "${Strings.settings.advanced.cleanOldLogs} $timeText ${Strings.settings.advanced.createdWithin}",
+                        text = "${Strings.settings.advanced.cleanOldLogs} $hours ${Strings.settings.advanced.hours} ${Strings.settings.advanced.createdWithin}",
                         style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.secondary),
                         modifier = Modifier.padding(top = 8.dp)
                     )
@@ -655,13 +610,60 @@ object SettingsContent {
                 )
             }
 
+            // 应用日志限制设置
+            SettingItem(
+                icon = Icons.Rounded.DataUsage,
+                title = Strings.settings.advanced.maxAppLogFiles,
+                description = Strings.settings.advanced.maxAppLogFilesDec,
+                trailingContent = {
+                    Text(
+                        text = ConfigurationState.maxAppLogFiles.toString(),
+                        style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary)
+                    )
+                }
+            )
+
+            Slider(
+                value = ConfigurationState.maxAppLogFiles.toFloat(),
+                onValueChange = { ConfigurationState.maxAppLogFiles = it.toInt() },
+                valueRange = 10f..200f,
+                steps = 19,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+
+            SettingItem(
+                icon = Icons.Rounded.DataUsage,
+                title = Strings.settings.advanced.maxAppLogSize,
+                description = Strings.settings.advanced.maxAppLogSizeDec,
+                trailingContent = {
+                    Text(
+                        text = "${ConfigurationState.maxAppLogSizeMB}MB",
+                        style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary)
+                    )
+                }
+            )
+
+            Slider(
+                value = ConfigurationState.maxAppLogSizeMB.toFloat(),
+                onValueChange = { ConfigurationState.maxAppLogSizeMB = it.toInt() },
+                valueRange = 10f..500f,
+                steps = 49,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+
             // 操作按钮
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedButton(
-                    onClick = { /* 清除日志 */ },
+                    onClick = {
+                        AppLogger.clearAllLogs()
+                    },
                     modifier = Modifier.weight(1f),
                     shape = MaterialTheme.shapes.medium
                 ) {
@@ -674,7 +676,9 @@ object SettingsContent {
                 }
 
                 OutlinedButton(
-                    onClick = { /* 导出日志 */ },
+                    onClick = {
+                        logExporter.launch("tefmanager-logs-${now().toLocalDateTime(TimeZone.currentSystemDefault())}.log")
+                    },
                     modifier = Modifier.weight(1f),
                     shape = MaterialTheme.shapes.medium
                 ) {
@@ -699,26 +703,26 @@ object SettingsContent {
         ) {
             SettingItem(
                 icon = Icons.Rounded.Extension,
-                title = "启用模组支持",
-                description = "允许加载和管理游戏模组",
+                title = Strings.settings.game.modSupport,
+                description = Strings.settings.game.modSupportDec,
                 enabled = Platform.isDesktop,
                 trailingContent = {
                     Switch(
                         enabled = Platform.isDesktop,
-                        checked = true,
-                        onCheckedChange = {  }
+                        checked = ConfigurationState.modSupportEnabled,
+                        onCheckedChange = { ConfigurationState.modSupportEnabled = it }
                     )
                 }
             )
 
             SettingItem(
                 icon = Icons.Rounded.Sync,
-                title = "重定向存档",
-                description = "重定向存档到软件私有目录管理",
+                title = Strings.settings.game.redirectSaves,
+                description = Strings.settings.game.redirectSavesDec,
                 trailingContent = {
                     Switch(
-                        checked = true,
-                        onCheckedChange = {}
+                        checked = ConfigurationState.redirectSavesEnabled,
+                        onCheckedChange = { ConfigurationState.redirectSavesEnabled = it }
                     )
                 }
             )
@@ -727,145 +731,198 @@ object SettingsContent {
 
     @Composable
     fun AboutSettings() {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Logo
-            Surface(
-                modifier = Modifier.size(100.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Image(
-                        painter = painterResource(Res.drawable.icon),
-                        contentDescription = "Logo",
-                        modifier = Modifier.size(48.dp)
+        val json = Json {
+            encodeDefaults = true
+            prettyPrint = true
+            ignoreUnknownKeys = true
+        }
+        val snackbarHostState = remember { SnackbarHostState() }
+        val scope = rememberCoroutineScope()
+        val showUpdateDialog = remember { mutableStateOf(false) }
+        var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+
+        // 检查更新函数
+        fun checkForUpdates() {
+            scope.launch {
+                try {
+                    val networkService = NetworkService()
+                    snackbarHostState.showSnackbar(Strings.common.checkingUpdate)
+
+                    val downloadPath = Platform.getData(null) / "update-download.json"
+                    // 这里应该替换为实际的更新检查URL
+                    networkService.downloadFile(
+                        "https://github.com/eternalfuture-e38299/TEFManager/releases/download/Latest/update.json",
+                        downloadPath
                     )
+
+                    val info = json.decodeFromString<UpdateInfo>(
+                        okio.FileSystem.SYSTEM.source(downloadPath).buffer().readUtf8()
+                    )
+
+                    // 检查版本是否需要更新（这里需要根据实际版本比较逻辑）
+                    if (info.tefmanager.newVersion != "1.0.0") { // 临时硬编码版本号
+                        updateInfo = info
+                        showUpdateDialog.value = true
+                    } else {
+                        snackbarHostState.showSnackbar(Strings.common.latestVersion)
+                    }
+                } catch (e: Exception) {
+                    AppLogger.e("Failed to check for updates", e)
+                    snackbarHostState.showSnackbar(Strings.common.updateFailed(e.message ?: "UNKNOWN"))
                 }
             }
+        }
 
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // 应用信息
-            Text(
-                text = "TEFManager",
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            Text(
-                text = "版本 1.0.0 (Build 202602)",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant
-            ) {
-                Text(
-                    text = "稳定版",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // 信息卡片
-            AboutInfoCard()
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // 开发者信息
-            SettingSectionTitle(
-                title = "开发者信息",
-                icon = Icons.Rounded.DeveloperMode
-            )
-
+        Scaffold(
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+        ) { _ ->
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                AboutItem(
-                    title = "开发者",
-                    value = "eternalfuture-e38299"
-                )
-
-                AboutItem(
-                    title = "GitHub",
-                    value = "github.com/eternalfuture-e38299"
-                )
-
-                AboutItem(
-                    title = "许可证",
-                    value = "GNU Affero General Public License v3.0"
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // 操作按钮
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = { /* 检查更新 */ },
-                    modifier = Modifier.weight(1f),
-                    shape = MaterialTheme.shapes.medium
+                // Logo
+                Surface(
+                    modifier = Modifier.size(100.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Update,
-                        contentDescription = "检查更新"
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("检查更新")
+                    Box(contentAlignment = Alignment.Center) {
+                        Image(
+                            painter = painterResource(Res.drawable.icon),
+                            contentDescription = "Logo",
+                            modifier = Modifier.size(48.dp)
+                        )
+                    }
                 }
 
-                OutlinedButton(
-                    onClick = { /* 关于 */ },
-                    modifier = Modifier.weight(1f),
-                    shape = MaterialTheme.shapes.medium
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // 应用信息
+                Text(
+                    text = Strings.settings.about.appName,
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Text(
+                    text = Strings.settings.about.version,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Info,
-                        contentDescription = "关于"
+                    Text(
+                        text = Strings.settings.about.stableVersion,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Text("关于")
                 }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // 信息卡片
+                AboutInfoCard()
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // 开发者信息
+                SettingSectionTitle(
+                    title = Strings.settings.about.developerInfo,
+                    icon = Icons.Rounded.DeveloperMode
+                )
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    AboutItem(
+                        title = Strings.settings.about.developer,
+                        value = Strings.settings.about.developerName
+                    )
+
+                    AboutItem(
+                        title = Strings.settings.about.github,
+                        value = Strings.settings.about.githubUrl
+                    )
+
+                    AboutItem(
+                        title = Strings.settings.about.license,
+                        value = Strings.settings.about.licenseName
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // 操作按钮
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { checkForUpdates() },
+                        modifier = Modifier.weight(1f),
+                        shape = MaterialTheme.shapes.medium
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Update,
+                            contentDescription = Strings.settings.about.checkUpdate
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(Strings.settings.about.checkUpdate)
+                    }
+
+                    OutlinedButton(
+                        onClick = { openUrl(Strings.settings.about.githubUrl) },
+                        modifier = Modifier.weight(1f),
+                        shape = MaterialTheme.shapes.medium
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Info,
+                            contentDescription = Strings.settings.about.about
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(Strings.settings.about.about)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 开源声明
+                Text(
+                    text = Strings.settings.about.openSourceStatement,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = Strings.settings.about.copyright,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
             }
+        }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // 开源声明
-            Text(
-                text = "TEFManager 是基于开源软件开发的游戏管理工具",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.padding(horizontal = 20.dp)
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                text = "© 2026 eternalfuture-e38299. 保留所有权利。",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline
+        // 更新对话框
+        if (showUpdateDialog.value && updateInfo != null) {
+            UpdateDialog(
+                updates = listOf(updateInfo!!.tefmanager),
+                onDismiss = { showUpdateDialog.value = false }
             )
         }
     }
-
 
     @Composable
     private fun AboutInfoCard() {
@@ -918,6 +975,71 @@ object SettingsContent {
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.Medium
             )
+        }
+    }
+
+    private fun mergeAllLogFilesPureKotlin(
+        baseDir: String,
+        outputSink: Sink,
+        includeAppLogs: Boolean = true,
+        includeKernelLogs: Boolean = true
+    ) {
+        val fileSystem = SystemFileSystem
+
+        try {
+            // 处理应用日志
+            if (includeAppLogs) {
+                val appDir = Path(baseDir, "app")
+                if (fileSystem.exists(appDir)) {
+                    processDirectoryPureKotlin(fileSystem, appDir, "APP", outputSink)
+                }
+            }
+
+            // 处理内核日志
+            if (includeKernelLogs) {
+                val kernelDir = Path(baseDir, "tefkernel")
+                if (fileSystem.exists(kernelDir)) {
+                    processDirectoryPureKotlin(fileSystem, kernelDir, "KERNEL", outputSink)
+                }
+            }
+        } finally {
+            outputSink.flush()
+        }
+    }
+
+    // 处理单个目录
+    private fun processDirectoryPureKotlin(
+        fileSystem: FileSystem,
+        directory: Path,
+        type: String,
+        outputSink: Sink
+    ) {
+        try {
+            val files = fileSystem.list(directory).filter { fileSystem.metadataOrNull(it)?.isRegularFile ?: false }.sortedBy { it.name }
+
+            files.forEach { logFile ->
+                try {
+                    // 写入文件头
+                    outputSink.writeString("=== $type FILE: ${logFile.name} ===\n")
+
+                    // 流式复制内容
+                    fileSystem.source(logFile).buffered().use { source ->
+                        val buffer = ByteArray(8192)
+                        var bytesRead: Int
+                        while (source.readAvailable(buffer).also { bytesRead = it } > 0) {
+                            outputSink.write(buffer, 0, bytesRead)
+                        }
+                    }
+
+                    outputSink.writeString("\n\n")
+                    outputSink.flush()
+
+                } catch (e: Exception) {
+                    outputSink.writeString("=== ERROR processing $type file ${logFile.name}: ${e.message} ===\n\n")
+                }
+            }
+        } catch (e: Exception) {
+            outputSink.writeString("=== ERROR accessing $type directory: ${e.message} ===\n\n")
         }
     }
 }
