@@ -3,7 +3,7 @@ package eternal.future.tefmanager.ui.model
 import kotlinx.serialization.Serializable
 
 /*******************************************************************************
- * TEFManager - PluginItem
+ * TEFManager - Dependence
  * Copyright (C) 2026 eternalfuture-e38299
  *
  * This program is free software: you can redistribute it and/or modify
@@ -21,15 +21,12 @@ import kotlinx.serialization.Serializable
  *
  * Author: eternalfuture-e38299
  * GitHub: https://github.com/eternalfuture-e38299
- * Created: 2026/3/14
+ * Created: 2026/3/22
  *******************************************************************************/
 
 @Serializable
-data class PluginItem(
+data class Dependence(
     val pkgId: String = "",
-    val name: String = "",
-    val author: String = "",
-    val description: String = "",
-    val version: String = "",
-    val versionCode: Int = 0
+    val minVersionCode: Int = 0,
+    val maxVersionCode: Int = 0
 )

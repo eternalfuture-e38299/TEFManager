@@ -1,9 +1,9 @@
-package eternal.future.tefmanager.ui.model
+package eternal.future.tefmanager.utils
 
-import kotlinx.serialization.Serializable
+import okio.Path
 
 /*******************************************************************************
- * TEFManager - PluginItem
+ * TEFManager - toFileUrlString
  * Copyright (C) 2026 eternalfuture-e38299
  *
  * This program is free software: you can redistribute it and/or modify
@@ -21,15 +21,20 @@ import kotlinx.serialization.Serializable
  *
  * Author: eternalfuture-e38299
  * GitHub: https://github.com/eternalfuture-e38299
- * Created: 2026/3/14
+ * Created: 2026/3/22
  *******************************************************************************/
 
-@Serializable
-data class PluginItem(
-    val pkgId: String = "",
-    val name: String = "",
-    val author: String = "",
-    val description: String = "",
-    val version: String = "",
-    val versionCode: Int = 0
-)
+fun Path.toFileUrlString(): String {
+    val pathStr = this.toString()
+    val normalizedPath = if (pathStr.contains('\\')) {
+        pathStr.replace('\\', '/')
+    } else {
+        pathStr
+    }
+    val finalPath = if (normalizedPath.startsWith("/")) {
+        normalizedPath
+    } else {
+        "/$normalizedPath"
+    }
+    return "file://$finalPath"
+}

@@ -26,64 +26,14 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class ModuleItem(
-    val type: String,
     val pkgId: String = "",
     val name: String = "",
     val author: String = "",
     val description: String = "",
+    val brieflyDescribe: String = "",
     val version: String = "",
     val versionCode: Int = 0,
-    val detailedInformationURL: String = "",
+    val detailsURL: String = "",
+    val dependence: List<Dependence> = listOf(),
     val support: PlatformSupport = PlatformSupport()
-) {
-    @Serializable
-    data class PlatformSupport(
-        val android: ArchitectureSupport = ArchitectureSupport(),
-        val windows: ArchitectureSupport = ArchitectureSupport(),
-        val linux: ArchitectureSupport = ArchitectureSupport(),
-        val mac: ArchitectureSupport = ArchitectureSupport(),
-        val ios: ArchitectureSupport = ArchitectureSupport()
-    ) {
-        fun getSupportedPlatforms(): List<String> {
-            val platforms = mutableListOf<String>()
-
-            listOf(
-                "Android" to android,
-                "Windows" to windows,
-                "Linux" to linux,
-                "macOS" to mac,
-                "iOS" to ios
-            ).forEach { (platformName, archSupport) ->
-                val archList = archSupport.getSupportedArchs()
-                if (archList.isNotEmpty()) {
-                    // 格式: "Android (ARM64, x64)" 或 "Android (ARM64)"
-                    val displayText = if (archList.size == 1) {
-                        "$platformName (${archList[0]})"
-                    } else {
-                        "$platformName (${archList.joinToString(", ")})"
-                    }
-                    platforms.add(displayText)
-                }
-            }
-
-            return platforms
-        }
-
-    }
-
-    @Serializable
-    data class ArchitectureSupport(
-        val arm64: Boolean = false,
-        val arm: Boolean = false,
-        val x64: Boolean = false,
-        val x86: Boolean = false
-    ) {
-        fun getSupportedArchs(): List<String> = listOf(
-            "ARM64" to arm64,
-            "ARM" to arm,
-            "x64" to x64,
-            "x86" to x86
-        ).filter { it.second }.map { it.first }
-
-    }
-}
+)
