@@ -34,7 +34,7 @@ actual object Platform {
     actual val isLinux: Boolean = false
     actual val isWindows: Boolean = false
 
-    actual fun getDirectory(type: String?): Path? {
+    actual fun getDirectory(type: String?): Path {
         return try {
             val paths = NSSearchPathForDirectoriesInDomains(
                 directory = NSDocumentDirectory,
@@ -51,11 +51,11 @@ actual object Platform {
                     else -> documentsPath / (type ?: "")
                 }
             } else {
-                null
+                "".toPath()
             }
         } catch (e: Exception) {
             Logger.e("getDirectory Failed ", e)
-            null
+            "".toPath()
         }
     }
 

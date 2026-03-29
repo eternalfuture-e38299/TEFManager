@@ -213,7 +213,7 @@ object Patcher {
 
         val metaData = document.createElement("meta-data")
         metaData.setAttribute("android:name", name)
-        metaData.setAttribute("android:value", value)
+        metaData.setAttribute("android:defaultValue", value)
 
         application?.appendChild(metaData)
     }

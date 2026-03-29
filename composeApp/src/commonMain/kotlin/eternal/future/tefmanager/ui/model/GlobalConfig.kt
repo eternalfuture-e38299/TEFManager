@@ -3,7 +3,7 @@ package eternal.future.tefmanager.ui.model
 import kotlinx.serialization.Serializable
 
 /*******************************************************************************
- * TEFManager - ModuleItem
+ * TEFManager - GlobalConfig
  * Copyright (C) 2026 eternalfuture-e38299
  *
  * This program is free software: you can redistribute it and/or modify
@@ -21,20 +21,42 @@ import kotlinx.serialization.Serializable
  *
  * Author: eternalfuture-e38299
  * GitHub: https://github.com/eternalfuture-e38299
- * Created: 2026/3/15
+ * Created: 2026/3/28
  *******************************************************************************/
 
 @Serializable
-data class ModuleItem(
-    val pkgId: String = "",
-    val name: String = "",
-    val author: String = "",
-    val description: String = "",
-    val brieflyDescribe: String = "",
-    val version: String = "",
-    val versionCode: Int = 0,
-    val detailsURL: String = "",
-    val dependence: List<Dependence> = listOf(),
-    val support: PlatformSupport = PlatformSupport(),
-    val globalConfig: GlobalConfig = GlobalConfig.empty
-)
+data class GlobalConfig(
+    val fileType: String = "null",
+    val generateFile: String = "null",
+    val configItems: List<ConfigItem> = listOf()
+) {
+    companion object {
+        val empty = GlobalConfig("null", "null", listOf())
+    }
+
+    @Serializable
+    data class ConfigItem(
+        val type: Type = Type.UNKNOWN,
+        val key: String = "",
+        val description: String = "",
+        val displayName: String = "",
+        val placeholder: String = ""
+    )
+
+    @Serializable
+    enum class Type {
+        UNKNOWN,
+        INT8,
+        INT16,
+        INT32,
+        INT64,
+        UINT8,
+        UINT16,
+        UINT32,
+        UINT64,
+        FLOAT,
+        DOUBLE,
+        BOOL,
+        STRING
+    }
+}

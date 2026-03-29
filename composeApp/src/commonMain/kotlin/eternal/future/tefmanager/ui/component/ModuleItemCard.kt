@@ -239,15 +239,15 @@ fun ModuleItemCard(
         onClick = { expanded = !expanded },
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(),
+            .animateContentSize()
+            .padding(4.dp),
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.elevatedCardColors(
-            containerColor = if (internalEnabled) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
+            contentColor = if (internalEnabled) {
+                MaterialTheme.colorScheme.primaryContainer
             } else {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
-            },
-            contentColor = MaterialTheme.colorScheme.onSurface
+                MaterialTheme.colorScheme.surfaceVariant
+            }
         ),
         elevation = CardDefaults.elevatedCardElevation(
             defaultElevation = 3.dp,

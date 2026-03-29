@@ -45,63 +45,12 @@ import okio.SYSTEM
  * Created: 2026/3/15
  *******************************************************************************/
 
-@Composable
-@Preview
-private fun Preview() {
-    MaterialTheme {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-            // 测试有描述的插件
-            PluginItemCard(
-                plugin = PluginItem(
-                    pkgId = "com.test.plugin1",
-                    name = "高级渲染插件",
-                    author = "eternalfuture-e38299",
-                    description = "提供高级渲染效果，包括光影、后处理等视觉增强功能",
-                    version = "1.2.0",
-                    versionCode = 12
-                )
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 测试无描述的插件
-            PluginItemCard(
-                plugin = PluginItem(
-                    pkgId = "com.test.plugin2",
-                    name = "网络加速插件",
-                    author = "Network Team",
-                    description = "",
-                    version = "2.0.0",
-                    versionCode = 20
-                )
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 测试短描述插件
-            PluginItemCard(
-                plugin = PluginItem(
-                    pkgId = "com.test.plugin3",
-                    name = "UI美化插件",
-                    author = "UI Design Group with a very long author name",
-                    description = "美化用户界面",
-                    version = "1.5.3",
-                    versionCode = 15
-                )
-            )
-        }
-    }
-}
-
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun PluginItemCard(
     plugin: PluginItem,
-    customIconPath: Path? = null
+    customIconPath: Path? = null,
+    onDelete: () -> Unit = {}
 ) {
     val fileSystem: FileSystem = FileSystem.SYSTEM
     var hasCustomIcon by remember { mutableStateOf(false) }
@@ -129,11 +78,11 @@ fun PluginItemCard(
         onClick = { expanded = !expanded },
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(),
+            .animateContentSize()
+            .padding(4.dp),
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
-            contentColor = MaterialTheme.colorScheme.onSurface
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
         ),
         elevation = CardDefaults.elevatedCardElevation(
             defaultElevation = 3.dp,
@@ -285,7 +234,7 @@ fun PluginItemCard(
 
                 // 删除按钮
                 IconButton(
-                    onClick = {},
+                    onClick = onDelete,
                     modifier = Modifier.size(48.dp)
                 ) {
                     Icon(

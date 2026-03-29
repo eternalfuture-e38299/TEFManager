@@ -5,8 +5,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Color
 import eternal.future.tefmanager.strings.StringsResource
 import eternal.future.tefmanager.strings.StringsResource.Strings
+import eternal.future.tefmanager.ui.model.PluginItem
 import eternal.future.tefmanager.utils.AppLogger
 import eternal.future.tefmanager.utils.ConfigManager
+import eternal.future.tefmanager.utils.LightProtoStore
 import kotlinx.serialization.Serializable
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KMutableProperty1

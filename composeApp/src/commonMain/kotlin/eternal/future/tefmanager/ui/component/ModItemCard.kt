@@ -42,10 +42,10 @@ import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ElevatedAssistChip
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ElevatedSuggestionChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -72,6 +72,7 @@ import eternal.future.tefmanager.ui.model.ArchitectureSupport
 import eternal.future.tefmanager.ui.model.Dependence
 import eternal.future.tefmanager.ui.model.ModItem
 import eternal.future.tefmanager.ui.model.PlatformSupport
+import eternal.future.tefmanager.utils.openUrl
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
 import okio.FileSystem
@@ -100,126 +101,6 @@ import okio.SYSTEM
  * Created: 2026/3/22
  *******************************************************************************/
 
-@Composable
-@Preview
-private fun Preview() {
-    MaterialTheme {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-            // 测试启用的Mod
-            ModItemCard(
-                mod = ModItem(
-                    pkgId = "com.test.mod.optifine",
-                    name = "OptiFine",
-                    author = "sp614x",
-                    brieflyDescribe = "优化游戏性能，提供更多图形选项",
-                    description = "OptiFine是一个功能强大的优化Mod，可显著提升游戏帧率，支持高清材质、光影效果，并提供丰富的图形设置选项。",
-                    version = "HD_U_H1",
-                    versionCode = 1,
-                    features = listOf(
-                        ModItem.ModFeature.VISUAL_ENHANCEMENT,
-                        ModItem.ModFeature.QUALITY_OF_LIFE
-                    ),
-                    sizeCategory = ModItem.ModSizeCategory.MEDIUM,
-                    targetGameVersion = "1.20.1",
-                    minGameVersion = "1.20.0",
-                    maxGameVersion = "1.20.1",
-                    support = PlatformSupport(
-                        android = ArchitectureSupport(arm64 = true, arm = true),
-                        windows = ArchitectureSupport(x64 = true, x86 = true)
-                    ),
-                    dependence = listOf(
-                        Dependence("com.forge.api", 1, 0)
-                    ),
-                    conflicts = listOf("com.test.mod.fabulous"),
-                    detailsURL = "https://optifine.net",
-                    stableVerified = true,
-                    experimental = false,
-                    deprecated = false,
-                    hasExtendedContent = true
-                ),
-                onConfigure = {},
-                enabled = true
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 测试禁用的Mod
-            ModItemCard(
-                mod = ModItem(
-                    pkgId = "com.test.mod.journeymap",
-                    name = "JourneyMap",
-                    author = "techbrew & mysticdrew",
-                    brieflyDescribe = "实时小地图和全屏地图",
-                    description = "JourneyMap提供实时小地图、全屏地图、地点标记、路径点、生物雷达等功能，是探索世界的必备工具。",
-                    version = "5.9.0",
-                    versionCode = 9,
-                    features = listOf(
-                        ModItem.ModFeature.ASSISTANCE,
-                        ModItem.ModFeature.UTILITY,
-                        ModItem.ModFeature.UI_IMPROVEMENT
-                    ),
-                    sizeCategory = ModItem.ModSizeCategory.SMALL,
-                    targetGameVersion = "1.20.1",
-                    minGameVersion = "1.20.0",
-                    maxGameVersion = "1.20.1",
-                    support = PlatformSupport(
-                        android = ArchitectureSupport(arm64 = true),
-                        windows = ArchitectureSupport(x64 = true),
-                        linux = ArchitectureSupport(x64 = true)
-                    ),
-                    dependence = listOf(
-                        Dependence("com.journeymap.api", 1, 0)
-                    ),
-                    detailsURL = "https://journeymap.info",
-                    stableVerified = false,
-                    experimental = true,
-                    deprecated = false,
-                    hasExtendedContent = false
-                ),
-                enabled = false
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 测试无依赖的Mod
-            ModItemCard(
-                mod = ModItem(
-                    pkgId = "com.test.mod.appleskin",
-                    name = "AppleSkin",
-                    author = "squeek502",
-                    brieflyDescribe = "显示食物和饱和度的更多信息",
-                    description = "在HUD上显示食物和饱和度的详细数值，帮助玩家更好地管理饥饿值。",
-                    version = "2.5.0",
-                    versionCode = 5,
-                    features = listOf(
-                        ModItem.ModFeature.QUALITY_OF_LIFE,
-                        ModItem.ModFeature.UI_IMPROVEMENT
-                    ),
-                    sizeCategory = ModItem.ModSizeCategory.TINY,
-                    targetGameVersion = "1.20.1",
-                    minGameVersion = "1.20.0",
-                    maxGameVersion = "1.20.1",
-                    support = PlatformSupport(
-                        android = ArchitectureSupport(arm64 = true, arm = true),
-                        windows = ArchitectureSupport(x64 = true, x86 = true)
-                    ),
-                    dependence = listOf(),
-                    detailsURL = "https://github.com/squeek502/AppleSkin",
-                    stableVerified = true,
-                    experimental = false,
-                    deprecated = false,
-                    hasExtendedContent = false
-                ),
-                enabled = true
-            )
-        }
-    }
-}
-
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun ModItemCard(
@@ -228,8 +109,7 @@ fun ModItemCard(
     customIconPath: Path? = null,
     onEnableChange: (Boolean) -> Unit = {},
     onDelete: () -> Unit = {},
-    onDetails: () -> Unit = {},
-    onConfigure: ((ModItem) -> Unit)? = null
+    configureCallback: ((ModItem) -> Unit)? = null,
 ) {
     val fileSystem: FileSystem = FileSystem.SYSTEM
     var expanded by remember { mutableStateOf(false) }
@@ -265,15 +145,15 @@ fun ModItemCard(
         onClick = { expanded = !expanded },
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(),
+            .animateContentSize()
+            .padding(4.dp),
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.elevatedCardColors(
             containerColor = if (internalEnabled) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
+                MaterialTheme.colorScheme.primaryContainer
             } else {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
-            },
-            contentColor = MaterialTheme.colorScheme.onSurface
+                MaterialTheme.colorScheme.surfaceVariant
+            }
         ),
         elevation = CardDefaults.elevatedCardElevation(
             defaultElevation = 3.dp,
@@ -362,21 +242,6 @@ fun ModItemCard(
                             maxLines = 1
                         )
 
-                        // 版本标签
-                        Surface(
-                            shape = MaterialTheme.shapes.small,
-                            tonalElevation = 1.dp,
-                            color = MaterialTheme.colorScheme.secondaryContainer
-                        ) {
-                            Text(
-                                text = "v${mod.version}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-
                         // 自定义图标标记
                         if (hasCustomIcon) {
                             Surface(
@@ -395,63 +260,6 @@ fun ModItemCard(
                         }
                     }
 
-                    // 特征标签区域
-                    if (mod.features.isNotEmpty()) {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            // 规模分类标签
-                            Surface(
-                                shape = MaterialTheme.shapes.small,
-                                tonalElevation = 1.dp,
-                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-                            ) {
-                                Text(
-                                    text = mod.sizeCategory.getDisplayText(),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 9.sp,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                                )
-                            }
-
-                            // Mod特征标签
-                            mod.features.take(3).forEach { feature ->
-                                Surface(
-                                    shape = MaterialTheme.shapes.small,
-                                    tonalElevation = 1.dp,
-                                    color = MaterialTheme.colorScheme.secondaryContainer
-                                ) {
-                                    Text(
-                                        text = feature.getDisplayText(),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 9.sp,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                                    )
-                                }
-                            }
-
-                            // 扩展内容标记
-                            if (mod.hasExtendedContent) {
-                                Surface(
-                                    shape = MaterialTheme.shapes.small,
-                                    tonalElevation = 1.dp,
-                                    color = MaterialTheme.colorScheme.tertiaryContainer
-                                ) {
-                                    Text(
-                                        text = "扩展内容",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 9.sp,
-                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
                     // ID和作者信息
                     Column(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -466,38 +274,48 @@ fun ModItemCard(
                             )
                         }
 
+                        // ID标签
+                        Text(
+                            text = mod.pkgId,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            fontSize = 10.sp,
+                            maxLines = 1
+                        )
+
+                        // 作者信息
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            // ID标签
+                            Icon(
+                                Icons.Rounded.Person,
+                                contentDescription = "作者",
+                                modifier = Modifier.size(12.dp),
+                                tint = MaterialTheme.colorScheme.outline
+                            )
                             Text(
-                                text = mod.pkgId,
+                                text = mod.author,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.outline,
-                                fontSize = 10.sp,
+                                fontSize = 12.sp,
                                 maxLines = 1
                             )
+                        }
 
-                            // 作者信息
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(
-                                    Icons.Rounded.Person,
-                                    contentDescription = "作者",
-                                    modifier = Modifier.size(12.dp),
-                                    tint = MaterialTheme.colorScheme.outline
-                                )
-                                Text(
-                                    text = mod.author,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    fontSize = 12.sp,
-                                    maxLines = 1
-                                )
-                            }
+                        // 版本标签
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            tonalElevation = 1.dp,
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Text(
+                                text = "v${mod.version}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
                         }
                     }
                 }
@@ -559,9 +377,10 @@ fun ModItemCard(
                         .padding(top = 20.dp)
                 ) {
                     // 分隔线
-                    Divider(
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
-                        thickness = 1.dp
+                    HorizontalDivider(
+                        Modifier,
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
                     )
 
                     Spacer(modifier = Modifier.height(20.dp))
@@ -746,6 +565,67 @@ fun ModItemCard(
                                 lineHeight = 18.sp
                             )
                         }
+
+                        if (mod.features.isNotEmpty()) Spacer(modifier = Modifier.height(4.dp))
+                        else Spacer(modifier = Modifier.height(20.dp))
+                    }
+
+                    // 特征标签区域
+                    if (mod.features.isNotEmpty()) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            // 规模分类标签
+                            Surface(
+                                shape = MaterialTheme.shapes.small,
+                                tonalElevation = 1.dp,
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                            ) {
+                                Text(
+                                    text = mod.sizeCategory.getDisplayText(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 9.sp,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                )
+                            }
+
+                            // Mod特征标签
+                            mod.features.take(3).forEach { feature ->
+                                Surface(
+                                    shape = MaterialTheme.shapes.small,
+                                    tonalElevation = 1.dp,
+                                    color = MaterialTheme.colorScheme.secondaryContainer
+                                ) {
+                                    Text(
+                                        text = feature.getDisplayText(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 9.sp,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+
+                            // 扩展内容标记
+                            if (mod.hasExtendedContent) {
+                                Surface(
+                                    shape = MaterialTheme.shapes.small,
+                                    tonalElevation = 1.dp,
+                                    color = MaterialTheme.colorScheme.tertiaryContainer
+                                ) {
+                                    Text(
+                                        text = "扩展内容",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 9.sp,
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(20.dp))
                     }
 
@@ -993,9 +873,9 @@ fun ModItemCard(
                     }
 
                     // 按钮区域
-                    onConfigure?.let { configureCallback ->
+                    configureCallback?.let {
                         OutlinedButton(
-                            onClick = { configureCallback(mod) },
+                            onClick = { it(mod) },
                             modifier = Modifier.fillMaxWidth(),
                             shape = MaterialTheme.shapes.medium
                         ) {
@@ -1013,19 +893,22 @@ fun ModItemCard(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // 详细信息按钮
-                        OutlinedButton(
-                            onClick = onDetails,
-                            modifier = Modifier.weight(1f),
-                            shape = MaterialTheme.shapes.medium
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Info,
-                                contentDescription = "详细信息",
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("详细信息")
+
+                        if (mod.detailsURL.isNotEmpty()) {
+                            // 详细信息按钮
+                            OutlinedButton(
+                                onClick = { openUrl(mod.detailsURL) },
+                                modifier = Modifier.weight(1f),
+                                shape = MaterialTheme.shapes.medium
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Info,
+                                    contentDescription = "详细信息",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text("详细信息")
+                            }
                         }
 
                         // 删除按钮

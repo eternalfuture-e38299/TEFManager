@@ -215,24 +215,17 @@ fun ModLoaderItemCard(
 
     // MD3E设计
     ElevatedCard(
-        onClick = { if (!internalEnabled) onEnableChange(!internalEnabled) },
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(),
+            .animateContentSize()
+            .padding(4.dp),
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.elevatedCardColors(
             containerColor = if (internalEnabled) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
+                MaterialTheme.colorScheme.primaryContainer
             } else {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
-            },
-            contentColor = MaterialTheme.colorScheme.onSurface
-        ),
-        elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = 3.dp,
-            pressedElevation = 8.dp,
-            focusedElevation = 6.dp,
-            hoveredElevation = 4.dp
+                MaterialTheme.colorScheme.surfaceVariant
+            }
         )
     ) {
         Column(

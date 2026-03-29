@@ -48,7 +48,7 @@ actual object Platform {
         }
     }
 
-    actual fun getDirectory(type: String?): Path? {
+    actual fun getDirectory(type: String?): Path {
         return try {
             when (type?.lowercase()) {
                 "documents" -> getDocumentsDirectory()
@@ -58,11 +58,11 @@ actual object Platform {
             }
         } catch (e: Exception) {
             Logger.e("getDirectory Failed ", e)
-            null
+            "".toPath()
         }
     }
 
-    private fun getDocumentsDirectory(): Path? {
+    private fun getDocumentsDirectory(): Path {
         return when {
             isWindows -> (System.getenv("USERPROFILE") ?: "C:").toPath() / "Documents"
             isMacOS -> (getProperty("user.home") ?: "~").toPath() / "Documents"
@@ -71,7 +71,7 @@ actual object Platform {
         }
     }
 
-    private fun getDataDirectory(): Path? {
+    private fun getDataDirectory(): Path {
         return when {
             isWindows -> (System.getenv("APPDATA") ?: ((System.getenv("USERPROFILE")
                 ?: "C:") + "\\AppData\\Roaming")).toPath()

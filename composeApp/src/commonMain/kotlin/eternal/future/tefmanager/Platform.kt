@@ -26,7 +26,7 @@ expect object Platform {
     val systemLocale: String
 
     fun getDynamicLibraryName(baseName: String): String
-    fun getDirectory(type: String?): Path?
+    fun getDirectory(type: String?): Path
     fun getData(type: String?): Path
     fun getArchitecture() : String
 }

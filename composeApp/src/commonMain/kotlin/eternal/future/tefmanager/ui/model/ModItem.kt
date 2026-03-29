@@ -59,6 +59,8 @@ data class ModItem(
     val experimental: Boolean = false,     // 是否实验性版本
     val deprecated: Boolean = false,       // 是否已弃用
     val hasExtendedContent: Boolean = false, // 是否有扩展内容
+
+    val globalConfig: GlobalConfig = GlobalConfig.empty
 ) {
 
     @Serializable

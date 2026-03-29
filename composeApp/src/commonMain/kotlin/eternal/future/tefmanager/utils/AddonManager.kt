@@ -1,9 +1,20 @@
 package eternal.future.tefmanager.utils
 
+import androidx.compose.runtime.mutableStateMapOf
 import eternal.future.tefmanager.Platform
+import eternal.future.tefmanager.ui.model.GlobalConfig
+import eternal.future.tefmanager.ui.model.ModItem
+import eternal.future.tefmanager.ui.model.ModLoaderItem
 import eternal.future.tefmanager.ui.model.ModuleItem
 import eternal.future.tefmanager.ui.model.PluginItem
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.number
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
@@ -11,6 +22,8 @@ import okio.SYSTEM
 import okio.buffer
 import okio.openZip
 import okio.use
+import kotlin.random.Random
+import kotlin.time.Clock
 
 /*******************************************************************************
  * TEFManager - AddonManager
@@ -35,621 +48,737 @@ import okio.use
  *******************************************************************************/
 
 object AddonManager {
-    private val fileSystem = FileSystem.SYSTEM
 
+    /**
+     * 安装进度状态枚举
+     * 按实际安装流程顺序排列
+     */
+    enum class InstallProgress {
+        // 开始阶段
+        STARTING,
+        OPENING_PACKAGE,
+
+        // 解析阶段
+        READING_MANIFEST,
+        PARSING_METADATA,
+
+        // 检查阶段
+        CHECKING_EXISTING,
+
+        // 文件操作阶段
+        COPYING_FILES,
+        EXTRACTING_ICON,
+
+        // 数据库操作阶段
+        UPDATING_DATABASE,
+
+        // 依赖处理阶段
+        INSTALLING_DEPENDENCIES,
+        PROCESSING_DEPENDENCY,
+
+        // 完成阶段
+        FINISHING,
+        COMPLETED,
+
+        // 错误状态
+        ERROR
+    }
+
+    /**
+     * 进度回调函数类型
+     * @param error 如果发生错误，包含异常信息（可为null）
+     */
+    typealias ProgressCallback = (progress: InstallProgress, error: Throwable?) -> Unit
+
+    private val fileSystem = FileSystem.SYSTEM
     private val json = Json {
-        encodeDefaults = true
-        prettyPrint = true
         ignoreUnknownKeys = true
     }
 
-    enum class ProgressStage {
-        DETECTING_TYPE,
-        LOADING_METADATA,
-        CHECKING_VERSION,
-        INSTALLING_MAIN,
-        INSTALLING_LOADER,
-        INSTALLING_PLUGINS,
-        UPDATING_DATABASE,
-        COMPLETING,
-        FAILED;
+    private val logger = AppLogger
 
-        override fun toString(): String = when (this) {
-            DETECTING_TYPE -> "Detecting addon type..."
-            LOADING_METADATA -> "Loading metadata..."
-            CHECKING_VERSION -> "Checking version..."
-            INSTALLING_MAIN -> "Installing main file..."
-            INSTALLING_LOADER -> "Installing loader..."
-            INSTALLING_PLUGINS -> "Installing plugins..."
-            UPDATING_DATABASE -> "Updating database..."
-            COMPLETING -> "Completing installation..."
-            FAILED -> "Installation failed"
-        }
-    }
-
-    data class ProgressInfo(
-        val stage: ProgressStage,
-        val current: Int = 0,
-        val total: Int = 0,
-        val exception: Exception? = null
+    val pluginsDataBase = LightProtoStore(
+        Platform.getData("plugin") / "db",
+        PluginItem.serializer(), "plugin"
     )
 
-    typealias ProgressCallback = (ProgressInfo) -> Unit
+    val modulesDataBase = LightProtoStore(
+        Platform.getData("module") / "db",
+        ModuleItem.serializer(), "module"
+    )
 
-    suspend fun install(
-        filePath: Path,
-        modDataBase: LightProtoStore<ModuleItem>,
-        loaderDataBase: LightProtoStore<ModuleItem>,
-        moduleDataBase: LightProtoStore<ModuleItem>,
-        pluginDataBase: LightProtoStore<PluginItem>,
-        progressCallback: ProgressCallback? = null
-    ): Boolean = try {
-        AppLogger.d("Starting addon installation from: $filePath")
-        progressCallback?.invoke(ProgressInfo(ProgressStage.DETECTING_TYPE))
+    val modLoaderDataBase = LightProtoStore(
+        Platform.getData("modloader") / "db",
+        ModLoaderItem.serializer(), "modloader"
+    )
+
+    val modDataBaseList = mutableStateMapOf<String, LightProtoStore<ModItem>>()
+
+    /**
+     * 安装或更新附加包
+     * @param filePath 包文件路径
+     * @param progressCallback 进度回调函数，用于报告安装进度和错误
+     */
+    suspend fun installOrUpdate(filePath: Path, progressCallback: ProgressCallback? = null) {
+        logger.d("Starting installOrUpdate for file: $filePath")
+        progressCallback?.invoke(InstallProgress.STARTING, null)
 
         val zip = fileSystem.openZip(filePath)
+        var currentError: Throwable? = null
 
-        val isPlugin = zip.exists("plugin.bin".toPath())
-        val isLoader = zip.exists("loader.bin".toPath())
-        val isModule = zip.exists("module.bin".toPath())
-        val isMod = zip.exists("mod.bin".toPath())
+        try {
+            progressCallback?.invoke(InstallProgress.OPENING_PACKAGE, null)
 
-        when {
-            isMod -> installMod(zip, modDataBase, loaderDataBase, pluginDataBase, progressCallback)
-            isPlugin -> installPlugin(zip, pluginDataBase, progressCallback)
-            isLoader -> installModuleOrLoader(
-                zip,
-                loaderDataBase,
-                pluginDataBase,
-                isUpdate = false,
-                progressCallback
-            )
-
-            isModule -> installModuleOrLoader(
-                zip,
-                moduleDataBase,
-                pluginDataBase,
-                isUpdate = false,
-                progressCallback
-            )
-
-            else -> {
-                val error = Exception("Unknown addon type")
-                AppLogger.e("Unknown addon type: $filePath")
-                progressCallback?.invoke(ProgressInfo(ProgressStage.FAILED, exception = error))
-                return false
+            progressCallback?.invoke(InstallProgress.READING_MANIFEST, null)
+            if (!zip.exists("Manifest.json".toPath())) {
+                val error = IllegalArgumentException("No Manifest.json found in zip file: $filePath")
+                logger.w(error.message ?: "No manifest found")
+                progressCallback?.invoke(InstallProgress.ERROR, error)
+                return
             }
-        }
 
-        zip.close()
+            val manifest = json.parseToJsonElement(
+                zip.source("Manifest.json".toPath()).buffer().readUtf8()
+            ).jsonObject
+            val type = manifest["type"]?.jsonPrimitive?.content?.lowercase()
 
-        progressCallback?.invoke(ProgressInfo(ProgressStage.COMPLETING))
-        AppLogger.i("Addon installation completed successfully")
+            logger.d("Detected addon type: $type")
 
-        true
-    } catch (e: Exception) {
-        AppLogger.e("Installation failed for file: $filePath", e)
-        progressCallback?.invoke(ProgressInfo(ProgressStage.FAILED, exception = e))
-        false
-    }
-
-
-    suspend fun update(
-        filePath: Path,
-        modDataBase: LightProtoStore<ModuleItem>,
-        loaderDataBase: LightProtoStore<ModuleItem>,
-        moduleDataBase: LightProtoStore<ModuleItem>,
-        pluginDataBase: LightProtoStore<PluginItem>,
-        progressCallback: ProgressCallback? = null
-    ): Boolean {
-        return try {
-            AppLogger.d("Starting addon update from: $filePath")
-            progressCallback?.invoke(ProgressInfo(ProgressStage.DETECTING_TYPE))
-
-            val zip = fileSystem.openZip(filePath)
-
-            val isPlugin = zip.exists("plugin.bin".toPath())
-            val isLoader = zip.exists("loader.bin".toPath())
-            val isModule = zip.exists("module.bin".toPath())
-            val isMod = zip.exists("mod.bin".toPath())
-
-            val result = when {
-                isMod -> updateMod(zip, modDataBase, progressCallback)
-                isPlugin -> updatePlugin(zip, pluginDataBase, progressCallback)
-                isLoader -> updateModuleOrLoader(zip, loaderDataBase, progressCallback)
-                isModule -> updateModuleOrLoader(zip, moduleDataBase, progressCallback)
+            when (type) {
+                "plugin" -> {
+                    logger.i("Installing/updating plugin")
+                    progressCallback?.invoke(InstallProgress.STARTING, null)
+                    try {
+                        installOrUpdatePlugin(zip, manifest, progressCallback)
+                    } catch (e: Exception) {
+                        currentError = e
+                        logger.e("Plugin installation failed", e)
+                        progressCallback?.invoke(InstallProgress.ERROR, e)
+                        throw e
+                    }
+                }
+                "module" -> {
+                    logger.i("Installing/updating module")
+                    progressCallback?.invoke(InstallProgress.STARTING, null)
+                    try {
+                        installOrUpdateModule(zip, manifest, progressCallback)
+                    } catch (e: Exception) {
+                        currentError = e
+                        logger.e("Module installation failed", e)
+                        progressCallback?.invoke(InstallProgress.ERROR, e)
+                        throw e
+                    }
+                }
+                "modloader" -> {
+                    logger.i("Installing/updating modloader")
+                    progressCallback?.invoke(InstallProgress.STARTING, null)
+                    try {
+                        installOrUpdateModLoader(zip, manifest, progressCallback)
+                    } catch (e: Exception) {
+                        currentError = e
+                        logger.e("ModLoader installation failed", e)
+                        progressCallback?.invoke(InstallProgress.ERROR, e)
+                        throw e
+                    }
+                }
+                "mod" -> {
+                    logger.i("Installing/updating mod")
+                    progressCallback?.invoke(InstallProgress.STARTING, null)
+                    try {
+                        installOrUpdateMod(zip, manifest, progressCallback)
+                    } catch (e: Exception) {
+                        currentError = e
+                        logger.e("Mod installation failed", e)
+                        progressCallback?.invoke(InstallProgress.ERROR, e)
+                        throw e
+                    }
+                }
                 else -> {
-                    val error = Exception("Unknown update type")
-                    AppLogger.e("Unknown update type: $filePath")
-                    progressCallback?.invoke(ProgressInfo(ProgressStage.FAILED, exception = error))
-                    false
+                    val error = IllegalArgumentException("Unknown addon type: $type")
+                    logger.w("Unknown addon type: $type")
+                    progressCallback?.invoke(InstallProgress.ERROR, error)
+                    return
                 }
             }
 
+            if (currentError == null) {
+                progressCallback?.invoke(InstallProgress.FINISHING, null)
+                logger.i("Successfully processed addon: $filePath")
+                progressCallback?.invoke(InstallProgress.COMPLETED, null)
+            }
+        } catch (e: Exception) {
+            if (currentError == null) {
+                logger.e("Error processing addon: $filePath", e)
+                progressCallback?.invoke(InstallProgress.ERROR, e)
+            }
+            throw e
+        } finally {
             zip.close()
-
-            if (result) {
-                progressCallback?.invoke(ProgressInfo(ProgressStage.COMPLETING))
-                AppLogger.i("Addon update completed successfully")
-            } else {
-                AppLogger.w("Addon update failed")
-            }
-
-            result
-        } catch (e: Exception) {
-            AppLogger.e("Update failed for file: $filePath", e)
-            progressCallback?.invoke(ProgressInfo(ProgressStage.FAILED, exception = e))
-            false
         }
     }
 
-    private suspend fun installMod(
+    private suspend fun installOrUpdatePlugin(
         zip: FileSystem,
-        database: LightProtoStore<ModuleItem>,
-        loaderDataBase: LightProtoStore<ModuleItem>? = null,
-        pluginDataBase: LightProtoStore<PluginItem>? = null,
+        manifest: JsonObject,
         progressCallback: ProgressCallback? = null
-    ): Boolean {
-        return try {
-            AppLogger.d("Starting Mod installation")
-            progressCallback?.invoke(ProgressInfo(ProgressStage.LOADING_METADATA))
+    ) {
+        logger.d("installOrUpdatePlugin started")
 
-            val moduleItem = json.decodeFromString<ModuleItem>(
-                zip.source("info.json".toPath()).buffer().readUtf8()
-            )
+        progressCallback?.invoke(InstallProgress.PARSING_METADATA, null)
+        val targetFilePath = manifest["file"]?.jsonPrimitive?.content?.toPath() ?: run {
+            val error = IllegalArgumentException("Plugin manifest missing 'file' field")
+            logger.e(error.message ?: "Missing file field")
+            progressCallback?.invoke(InstallProgress.ERROR, error)
+            throw error
+        }
 
-            var parentLoader: String?
+        val pluginItem = json.decodeFromString<PluginItem>(
+            zip.source("Info.json".toPath()).buffer().readUtf8()
+        )
 
-            // Prioritize reading parentLoader.txt
-            if (zip.exists("parentLoader.txt".toPath())) {
-                AppLogger.d("Reading parent loader from parentLoader.txt")
-                progressCallback?.invoke(ProgressInfo(ProgressStage.CHECKING_VERSION))
-                parentLoader = zip.source("parentLoader.txt".toPath()).buffer().readUtf8Line()
-            }
-            // If no parentLoader.txt, try to install loader.bin
-            else if (zip.exists("loader.bin".toPath())) {
-                AppLogger.d("Installing loader from loader.bin")
-                progressCallback?.invoke(ProgressInfo(ProgressStage.INSTALLING_LOADER))
-                val loaderZip = zip.openZip("loader.bin".toPath())
-                val loaderItem = installModuleOrLoader(
-                    loaderZip,
-                    loaderDataBase!!,
-                    pluginDataBase,
-                    isUpdate = false,
-                    progressCallback
-                )
-                parentLoader = loaderItem.pkgId
-                loaderZip.close()
-                AppLogger.i("Loader installed: ${loaderItem.pkgId}")
-            } else {
-                throw Exception("Mod missing parent loader information")
-            }
+        logger.d("Processing plugin: ${pluginItem.pkgId}, version: ${pluginItem.versionCode}")
 
-            if (parentLoader == null) {
-                throw Exception("Unable to determine parent loader")
-            }
+        progressCallback?.invoke(InstallProgress.CHECKING_EXISTING, null)
+        val originalPluginItem = pluginsDataBase.get(pluginItem.pkgId)
+        val filePath = Platform.getData("plugin") / "pkg" / "${pluginItem.pkgId}.tefpkg"
 
-            AppLogger.d("Parent loader: $parentLoader")
-            progressCallback?.invoke(ProgressInfo(ProgressStage.CHECKING_VERSION))
-            val isUpdate = isModExists(moduleItem.pkgId, parentLoader)
-            if (isUpdate) {
-                AppLogger.w("Mod already exists: ${moduleItem.pkgId}, use update instead")
-                progressCallback?.invoke(
-                    ProgressInfo(
-                        ProgressStage.FAILED,
-                        exception = Exception("Mod already exists, use update function")
-                    )
-                )
-                return false
-            }
+        filePath.parent?.let { fileSystem.createDirectories(it) }
 
-            AppLogger.d("Installing Mod file: ${moduleItem.pkgId}")
-            progressCallback?.invoke(ProgressInfo(ProgressStage.INSTALLING_MAIN))
-            fileSystem.sink(Platform.getData("mod") / parentLoader / "mod" / moduleItem.pkgId)
-                .buffer().use {
-                val pkgFileSize = zip.metadataOrNull("mod.bin".toPath())?.size
-                val pkgFile = zip.source("mod.bin".toPath())
-                it.write(pkgFile, pkgFileSize ?: 0)
-                it.flush()
-            }
-            AppLogger.i("Mod file installed: ${moduleItem.pkgId}")
+        zip.source(targetFilePath).use { source ->
+            if (originalPluginItem != null) {
+                logger.d("Plugin ${pluginItem.pkgId} already exists (version: ${originalPluginItem.versionCode})")
+                if (pluginItem.versionCode > originalPluginItem.versionCode) {
+                    progressCallback?.invoke(InstallProgress.STARTING, null)
 
-            // Install associated plugins
-            val pluginPaths = zip.listOrNull("plugins".toPath())
-            if (!pluginPaths.isNullOrEmpty()) {
-                AppLogger.d("Installing ${pluginPaths.size} associated plugins")
-                progressCallback?.invoke(
-                    ProgressInfo(
-                        ProgressStage.INSTALLING_PLUGINS,
-                        current = 0,
-                        total = pluginPaths.size
-                    )
-                )
+                    progressCallback?.invoke(InstallProgress.COPYING_FILES, null)
+                    fileSystem.sink(filePath).buffer().use { sink ->
+                        source.buffer().use { buffer ->
+                            sink.writeAll(buffer)
+                            sink.flush()
+                        }
+                    }
 
-                pluginPaths.forEachIndexed { index, path ->
-                    AppLogger.d("Installing plugin: ${path.name}")
-                    progressCallback?.invoke(
-                        ProgressInfo(
-                            ProgressStage.INSTALLING_PLUGINS,
-                            current = index + 1,
-                            total = pluginPaths.size
-                        )
-                    )
-                    val plugin = zip.openZip(path)
-                    installPlugin(plugin, pluginDataBase!!, progressCallback)
-                    plugin.close()
+                    progressCallback?.invoke(InstallProgress.UPDATING_DATABASE, null)
+                    pluginsDataBase.edit(pluginItem.pkgId) { pluginItem }
+                    pluginsDataBase.flush()
+
+                    progressCallback?.invoke(InstallProgress.EXTRACTING_ICON, null)
+                    releaseIcon(Platform.getData("plugin") / "icons" / "${pluginItem.pkgId}.icon", zip, manifest)
+
+                    logger.i("Plugin ${pluginItem.pkgId} updated successfully")
+                } else {
+                    logger.w("Plugin ${pluginItem.pkgId} already has same or newer version")
+                    progressCallback?.invoke(InstallProgress.COMPLETED, null)
                 }
-                AppLogger.i("All plugins installed successfully")
+                return
             }
 
-            AppLogger.d("Updating database for Mod: ${moduleItem.pkgId}")
-            progressCallback?.invoke(ProgressInfo(ProgressStage.UPDATING_DATABASE))
-            database.put(moduleItem.pkgId, moduleItem)
-            AppLogger.i("Mod installation completed: ${moduleItem.pkgId}")
+            progressCallback?.invoke(InstallProgress.STARTING, null)
 
-            true
-        } catch (e: Exception) {
-            AppLogger.e("Mod installation failed", e)
-            progressCallback?.invoke(ProgressInfo(ProgressStage.FAILED, exception = e))
-            false
+            progressCallback?.invoke(InstallProgress.COPYING_FILES, null)
+            fileSystem.sink(filePath).buffer().use { sink ->
+                source.buffer().use { buffer ->
+                    sink.writeAll(buffer)
+                    sink.flush()
+                }
+            }
+
+            progressCallback?.invoke(InstallProgress.UPDATING_DATABASE, null)
+            pluginsDataBase.put(pluginItem.pkgId, pluginItem)
+            pluginsDataBase.flush()
+
+            progressCallback?.invoke(InstallProgress.EXTRACTING_ICON, null)
+            releaseIcon(Platform.getData("plugin") / "icons" / "${pluginItem.pkgId}.icon", zip, manifest)
+
+            logger.i("Plugin ${pluginItem.pkgId} installed successfully")
         }
     }
 
-    private suspend fun updateMod(
+    private suspend fun installOrUpdateModule(
         zip: FileSystem,
-        database: LightProtoStore<ModuleItem>,
+        manifest: JsonObject,
         progressCallback: ProgressCallback? = null
-    ): Boolean {
-        return try {
-            AppLogger.d("Starting Mod update")
-            progressCallback?.invoke(ProgressInfo(ProgressStage.LOADING_METADATA))
+    ) {
+        logger.d("installOrUpdateModule started")
 
-            val newModuleItem = json.decodeFromString<ModuleItem>(
-                zip.source("info.json".toPath()).buffer().readUtf8()
-            )
-
-            // Get parent loader
-            var parentLoader: String?
-            if (zip.exists("parentLoader.txt".toPath())) {
-                parentLoader = zip.source("parentLoader.txt".toPath()).buffer().readUtf8Line()
-                AppLogger.d("Parent loader from file: $parentLoader")
-            } else if (zip.exists("loader.bin".toPath())) {
-                val loaderZip = zip.openZip("loader.bin".toPath())
-                parentLoader = json.decodeFromString<ModuleItem>(loaderZip.source("info.json".toPath()).buffer().readUtf8()).pkgId
-                loaderZip.close()
-                AppLogger.d("Parent loader from database: $parentLoader")
-            } else {
-                throw Exception("Mod missing parent loader information")
-            }
-
-            if (parentLoader == null) {
-                throw Exception("Unable to determine parent loader")
-            }
-
-            AppLogger.d("Checking version for Mod: ${newModuleItem.pkgId}")
-            progressCallback?.invoke(ProgressInfo(ProgressStage.CHECKING_VERSION))
-            val existingItem = database.get(newModuleItem.pkgId)
-            if (existingItem == null) {
-                AppLogger.w("Mod not found in database: ${newModuleItem.pkgId}")
-                progressCallback?.invoke(
-                    ProgressInfo(
-                        ProgressStage.FAILED,
-                        exception = Exception("Mod not found, use install function")
-                    )
-                )
-                return false
-            }
-
-            if (newModuleItem.versionCode <= existingItem.versionCode) {
-                AppLogger.w("New version (${newModuleItem.versionCode}) not higher than current (${existingItem.versionCode})")
-                progressCallback?.invoke(
-                    ProgressInfo(
-                        ProgressStage.FAILED,
-                        exception = Exception("New version not higher than current version")
-                    )
-                )
-                return false
-            }
-
-            AppLogger.d("Updating Mod file: ${newModuleItem.pkgId}")
-            progressCallback?.invoke(ProgressInfo(ProgressStage.INSTALLING_MAIN))
-            fileSystem.sink(Platform.getData("mod") / parentLoader / "mod" / newModuleItem.pkgId)
-                .buffer().use {
-                val pkgFileSize = zip.metadataOrNull("mod.bin".toPath())?.size
-                val pkgFile = zip.source("mod.bin".toPath())
-                it.write(pkgFile, pkgFileSize ?: 0)
-                it.flush()
-            }
-            AppLogger.i("Mod file updated: ${newModuleItem.pkgId}")
-
-            AppLogger.d("Updating database for Mod: ${newModuleItem.pkgId}")
-            progressCallback?.invoke(ProgressInfo(ProgressStage.UPDATING_DATABASE))
-            database.editIf(
-                newModuleItem.pkgId,
-                { newModuleItem.versionCode > it.versionCode }
-            ) { newModuleItem }
-            AppLogger.i("Mod update completed: ${newModuleItem.pkgId}")
-
-            true
-        } catch (e: Exception) {
-            AppLogger.e("Mod update failed", e)
-            progressCallback?.invoke(ProgressInfo(ProgressStage.FAILED, exception = e))
-            false
+        progressCallback?.invoke(InstallProgress.PARSING_METADATA, null)
+        val targetFilePath = manifest["file"]?.jsonPrimitive?.content?.toPath() ?: run {
+            val error = IllegalArgumentException("Module manifest missing 'file' field")
+            logger.e(error.message ?: "Missing file field")
+            progressCallback?.invoke(InstallProgress.ERROR, error)
+            throw error
         }
-    }
 
-    private suspend fun installModuleOrLoader(
-        zip: FileSystem,
-        database: LightProtoStore<ModuleItem>,
-        pluginDataBase: LightProtoStore<PluginItem>? = null,
-        isUpdate: Boolean = false,
-        progressCallback: ProgressCallback? = null
-    ): ModuleItem {
-        AppLogger.d("Starting Module/Loader installation (update: $isUpdate)")
-        progressCallback?.invoke(ProgressInfo(ProgressStage.LOADING_METADATA))
+        val config = manifest["config"]?.jsonPrimitive?.content?.toPath()?.let { configPath ->
+            json.decodeFromString<GlobalConfig>(zip.source(configPath).buffer().readUtf8())
+        }
 
         val moduleItem = json.decodeFromString<ModuleItem>(
-            zip.source("info.json".toPath()).buffer().readUtf8()
-        )
+            zip.source("Info.json".toPath()).buffer().readUtf8()
+        ).copy(globalConfig = config ?: GlobalConfig.empty)
 
-        val isModule = zip.exists("module.bin".toPath())
-        val isLoader = zip.exists("loader.bin".toPath())
+        logger.d("Processing module: ${moduleItem.pkgId}, version: ${moduleItem.versionCode}")
 
-        if (!isModule && !isLoader) {
-            throw Exception("Invalid module/loader file")
-        }
-
-        val typeName = if (isModule) "Module" else "Loader"
-        val targetFile = if (isModule) "module.bin" else "loader.bin"
-        val outDir = if (isModule) "module" else "loader"
-
-        AppLogger.d("Detected type: $typeName, Package ID: ${moduleItem.pkgId}")
-
-        progressCallback?.invoke(ProgressInfo(ProgressStage.CHECKING_VERSION))
-        val exists = isModuleExists(moduleItem.pkgId) || isLoaderExists(moduleItem.pkgId)
-
-        if (exists && !isUpdate) {
-            AppLogger.w("$typeName already exists: ${moduleItem.pkgId}, use update instead")
-            throw Exception("$typeName already exists, use update function")
-        } else if (!exists && isUpdate) {
-            AppLogger.w("$typeName not found: ${moduleItem.pkgId}, use install instead")
-            throw Exception("$typeName not found, use install function")
-        }
-
-        val outFile = Platform.getData(outDir) / "pkg" / "${moduleItem.pkgId}.tefpkg"
-
-        AppLogger.d("Installing $typeName file: ${moduleItem.pkgId}")
-        progressCallback?.invoke(ProgressInfo(ProgressStage.INSTALLING_MAIN))
-        fileSystem.sink(outFile).buffer().use {
-            val pkgFileSize = zip.metadataOrNull(targetFile.toPath())?.size
-            val pkgFile = zip.source(targetFile.toPath())
-            it.write(pkgFile, pkgFileSize ?: 0)
-            it.flush()
-        }
-        AppLogger.i("$typeName file installed: ${moduleItem.pkgId}")
-
-        // Install associated plugins
-        val pluginPaths = zip.listOrNull("plugins".toPath())
-        if (!pluginPaths.isNullOrEmpty() && pluginDataBase != null) {
-            AppLogger.d("Installing ${pluginPaths.size} associated plugins")
-            progressCallback?.invoke(
-                ProgressInfo(
-                    ProgressStage.INSTALLING_PLUGINS,
-                    current = 0,
-                    total = pluginPaths.size
-                )
-            )
-
-            pluginPaths.forEachIndexed { index, path ->
-                AppLogger.d("Installing plugin: ${path.name}")
-                progressCallback?.invoke(
-                    ProgressInfo(
-                        ProgressStage.INSTALLING_PLUGINS,
-                        current = index + 1,
-                        total = pluginPaths.size
-                    )
-                )
-                val plugin = zip.openZip(path)
-                installPlugin(plugin, pluginDataBase, progressCallback)
-                plugin.close()
+        progressCallback?.invoke(InstallProgress.CHECKING_EXISTING, null)
+        val originalModuleItem = modulesDataBase.get(moduleItem.pkgId)
+        val filePath = (Platform.getData("module") / "pkg" / "${moduleItem.pkgId}.tefpkg").also {
+            it.parent?.let { dir ->
+                fileSystem.createDirectories(dir)
             }
-            AppLogger.i("All plugins installed successfully")
         }
 
-        AppLogger.d("Updating database for $typeName: ${moduleItem.pkgId}")
-        progressCallback?.invoke(ProgressInfo(ProgressStage.UPDATING_DATABASE))
-        if (isUpdate) {
-            database.editIf(
-                moduleItem.pkgId,
-                { moduleItem.versionCode > it.versionCode }
-            ) { moduleItem }
-            AppLogger.i("$typeName updated in database: ${moduleItem.pkgId}")
-        } else {
-            database.put(moduleItem.pkgId, moduleItem)
-            AppLogger.i("$typeName added to database: ${moduleItem.pkgId}")
-        }
+        zip.source(targetFilePath).use { source ->
+            if (originalModuleItem != null) {
+                logger.d("Module ${moduleItem.pkgId} already exists (version: ${originalModuleItem.versionCode})")
+                if (moduleItem.versionCode > originalModuleItem.versionCode) {
+                    progressCallback?.invoke(InstallProgress.STARTING, null)
 
-        return moduleItem
+                    progressCallback?.invoke(InstallProgress.COPYING_FILES, null)
+                    fileSystem.sink(filePath).buffer().use { sink ->
+                        source.buffer().use { buffer ->
+                            sink.writeAll(buffer)
+                            sink.flush()
+                        }
+                    }
+
+                    progressCallback?.invoke(InstallProgress.UPDATING_DATABASE, null)
+                    modulesDataBase.edit(moduleItem.pkgId) { moduleItem }
+                    modulesDataBase.flush()
+
+                    progressCallback?.invoke(InstallProgress.EXTRACTING_ICON, null)
+                    releaseIcon(Platform.getData("module") / "icons" / "${moduleItem.pkgId}.icon", zip, manifest)
+
+                    logger.i("Module ${moduleItem.pkgId} updated successfully")
+
+                    progressCallback?.invoke(InstallProgress.INSTALLING_DEPENDENCIES, null)
+                    installDependence(zip, manifest, progressCallback)
+                } else {
+                    logger.w("Module ${moduleItem.pkgId} already has same or newer version")
+                    progressCallback?.invoke(InstallProgress.COMPLETED, null)
+                }
+                return
+            }
+
+            progressCallback?.invoke(InstallProgress.STARTING, null)
+
+            progressCallback?.invoke(InstallProgress.COPYING_FILES, null)
+            fileSystem.sink(filePath).buffer().use { sink ->
+                source.buffer().use { buffer ->
+                    sink.writeAll(buffer)
+                    sink.flush()
+                }
+            }
+
+            progressCallback?.invoke(InstallProgress.UPDATING_DATABASE, null)
+            modulesDataBase.put(moduleItem.pkgId, moduleItem)
+            modulesDataBase.flush()
+
+            progressCallback?.invoke(InstallProgress.EXTRACTING_ICON, null)
+            releaseIcon(Platform.getData("module") / "icons" / "${moduleItem.pkgId}.icon", zip, manifest)
+
+            progressCallback?.invoke(InstallProgress.INSTALLING_DEPENDENCIES, null)
+            installDependence(zip, manifest, progressCallback)
+
+            logger.i("Module ${moduleItem.pkgId} installed successfully")
+        }
     }
 
-    private suspend fun updateModuleOrLoader(
+    private suspend fun installOrUpdateModLoader(
         zip: FileSystem,
-        database: LightProtoStore<ModuleItem>,
+        manifest: JsonObject,
         progressCallback: ProgressCallback? = null
-    ): Boolean {
-        return try {
-            AppLogger.d("Starting Module/Loader update")
-            progressCallback?.invoke(ProgressInfo(ProgressStage.LOADING_METADATA))
+    ) {
+        logger.d("installOrUpdateModLoader started")
 
-            val newModuleItem = json.decodeFromString<ModuleItem>(
-                zip.source("info.json".toPath()).buffer().readUtf8()
-            )
-
-            val isModule = zip.exists("module.bin".toPath())
-            zip.exists("loader.bin".toPath())
-            val typeName = if (isModule) "Module" else "Loader"
-            val targetFile = if (isModule) "module.bin" else "loader.bin"
-            val outDir = if (isModule) "module" else "loader"
-
-            AppLogger.d("Updating $typeName: ${newModuleItem.pkgId}")
-
-            progressCallback?.invoke(ProgressInfo(ProgressStage.CHECKING_VERSION))
-            val existingItem = database.get(newModuleItem.pkgId)
-            if (existingItem == null) {
-                AppLogger.w("$typeName not found in database: ${newModuleItem.pkgId}")
-                progressCallback?.invoke(
-                    ProgressInfo(
-                        ProgressStage.FAILED,
-                        exception = Exception("$typeName not found, use install function")
-                    )
-                )
-                return false
-            }
-
-            if (newModuleItem.versionCode <= existingItem.versionCode) {
-                AppLogger.w("New version (${newModuleItem.versionCode}) not higher than current (${existingItem.versionCode})")
-                progressCallback?.invoke(
-                    ProgressInfo(
-                        ProgressStage.FAILED,
-                        exception = Exception("New version not higher than current version")
-                    )
-                )
-                return false
-            }
-
-            val outFile = Platform.getData(outDir) / "pkg" / "${newModuleItem.pkgId}.tefpkg"
-
-            AppLogger.d("Installing updated $typeName file")
-            progressCallback?.invoke(ProgressInfo(ProgressStage.INSTALLING_MAIN))
-            fileSystem.sink(outFile).buffer().use {
-                val pkgFileSize = zip.metadataOrNull(targetFile.toPath())?.size
-                val pkgFile = zip.source(targetFile.toPath())
-                it.write(pkgFile, pkgFileSize ?: 0)
-                it.flush()
-            }
-            AppLogger.i("$typeName file updated: ${newModuleItem.pkgId}")
-
-            AppLogger.d("Updating database for $typeName: ${newModuleItem.pkgId}")
-            progressCallback?.invoke(ProgressInfo(ProgressStage.UPDATING_DATABASE))
-            database.editIf(
-                newModuleItem.pkgId,
-                { newModuleItem.versionCode > it.versionCode }
-            ) { newModuleItem }
-            AppLogger.i("$typeName update completed: ${newModuleItem.pkgId}")
-
-            true
-        } catch (e: Exception) {
-            AppLogger.e("update failed", e)
-            progressCallback?.invoke(ProgressInfo(ProgressStage.FAILED, exception = e))
-            false
+        progressCallback?.invoke(InstallProgress.PARSING_METADATA, null)
+        val targetFilePath = manifest["file"]?.jsonPrimitive?.content?.toPath() ?: run {
+            val error = IllegalArgumentException("ModLoader manifest missing 'file' field")
+            logger.e(error.message ?: "Missing file field")
+            progressCallback?.invoke(InstallProgress.ERROR, error)
+            throw error
         }
-    }
 
-    private suspend fun installPlugin(
-        pluginZip: FileSystem,
-        database: LightProtoStore<PluginItem>,
-        progressCallback: ProgressCallback? = null
-    ): PluginItem {
-        AppLogger.d("Starting Plugin installation")
-        progressCallback?.invoke(ProgressInfo(ProgressStage.LOADING_METADATA))
-
-        val pluginItem: PluginItem = json.decodeFromString<PluginItem>(
-            pluginZip.source("info.json".toPath()).buffer().readUtf8()
+        val modLoaderItem = json.decodeFromString<ModLoaderItem>(
+            zip.source("Info.json".toPath()).buffer().readUtf8()
         )
 
-        AppLogger.d("Installing Plugin: ${pluginItem.pkgId}")
-        progressCallback?.invoke(ProgressInfo(ProgressStage.INSTALLING_MAIN))
-        fileSystem.sink(Platform.getData("plugin") / "pkg" / "${pluginItem.pkgId}.tefpkg").buffer()
-            .use {
-                val pkgFileSize = pluginZip.metadataOrNull("plugin.bin".toPath())?.size
-                val pkgFile = pluginZip.source("plugin.bin".toPath())
-                it.write(pkgFile, pkgFileSize ?: 0)
-                it.flush()
-            }
-        AppLogger.i("Plugin file installed: ${pluginItem.pkgId}")
+        logger.d("Processing modloader: ${modLoaderItem.pkgId}, version: ${modLoaderItem.versionCode}")
 
-        AppLogger.d("Checking if Plugin exists: ${pluginItem.pkgId}")
-        progressCallback?.invoke(ProgressInfo(ProgressStage.CHECKING_VERSION))
-        if (isPluginExists(pluginItem.pkgId)) {
-            AppLogger.w("Plugin already exists: ${pluginItem.pkgId}, updating if newer")
-            database.editIf(
-                pluginItem.pkgId,
-                { pluginItem.versionCode > it.versionCode }
-            ) { pluginItem }
-            AppLogger.i("Plugin updated in database: ${pluginItem.pkgId}")
-        } else {
-            AppLogger.d("Adding Plugin to database: ${pluginItem.pkgId}")
-            progressCallback?.invoke(ProgressInfo(ProgressStage.UPDATING_DATABASE))
-            database.put(pluginItem.pkgId, pluginItem)
-            AppLogger.i("Plugin added to database: ${pluginItem.pkgId}")
+        progressCallback?.invoke(InstallProgress.CHECKING_EXISTING, null)
+        val originalModLoaderItem = modLoaderDataBase.get(modLoaderItem.pkgId)
+        val filePath = (Platform.getData("modloader") / "pkg" / "${modLoaderItem.pkgId}.tefpkg").also {
+            it.parent?.let { dir ->
+                fileSystem.createDirectories(dir)
+            }
         }
 
-        return pluginItem
+        zip.source(targetFilePath).use { source ->
+            if (originalModLoaderItem != null) {
+                logger.d("ModLoader ${modLoaderItem.pkgId} already exists (version: ${originalModLoaderItem.versionCode})")
+                if (modLoaderItem.versionCode > originalModLoaderItem.versionCode) {
+                    progressCallback?.invoke(InstallProgress.STARTING, null)
+
+                    progressCallback?.invoke(InstallProgress.COPYING_FILES, null)
+                    fileSystem.sink(filePath).buffer().use { sink ->
+                        source.buffer().use { buffer ->
+                            sink.writeAll(buffer)
+                            sink.flush()
+                        }
+                    }
+
+                    progressCallback?.invoke(InstallProgress.UPDATING_DATABASE, null)
+                    modLoaderDataBase.edit(modLoaderItem.pkgId) { modLoaderItem }
+                    modLoaderDataBase.flush()
+
+                    progressCallback?.invoke(InstallProgress.EXTRACTING_ICON, null)
+                    releaseIcon(Platform.getData("modloader") / "icons" / "${modLoaderItem.pkgId}.icon", zip, manifest)
+
+                    progressCallback?.invoke(InstallProgress.INSTALLING_DEPENDENCIES, null)
+                    installDependence(zip, manifest, progressCallback)
+
+                    logger.i("ModLoader ${modLoaderItem.pkgId} updated successfully")
+                } else {
+                    logger.w("ModLoader ${modLoaderItem.pkgId} already has same or newer version")
+                    progressCallback?.invoke(InstallProgress.COMPLETED, null)
+                }
+                return
+            }
+
+            progressCallback?.invoke(InstallProgress.STARTING, null)
+
+            progressCallback?.invoke(InstallProgress.COPYING_FILES, null)
+            fileSystem.sink(filePath).buffer().use { sink ->
+                source.buffer().use { buffer ->
+                    sink.writeAll(buffer)
+                    sink.flush()
+                }
+            }
+
+            progressCallback?.invoke(InstallProgress.UPDATING_DATABASE, null)
+            modLoaderDataBase.put(modLoaderItem.pkgId, modLoaderItem)
+            modLoaderDataBase.flush()
+
+            progressCallback?.invoke(InstallProgress.EXTRACTING_ICON, null)
+            releaseIcon(Platform.getData("modloader") / "icons" / "${modLoaderItem.pkgId}.icon", zip, manifest)
+
+            progressCallback?.invoke(InstallProgress.INSTALLING_DEPENDENCIES, null)
+            installDependence(zip, manifest, progressCallback)
+
+            logger.i("ModLoader ${modLoaderItem.pkgId} installed successfully")
+        }
     }
 
-    private suspend fun updatePlugin(
-        pluginZip: FileSystem,
-        database: LightProtoStore<PluginItem>,
+    /**
+     * 安装或更新模组（自动处理数据库创建）
+     */
+    private suspend fun installOrUpdateMod(
+        zip: FileSystem,
+        manifest: JsonObject,
         progressCallback: ProgressCallback? = null
-    ): Boolean {
-        return try {
-            AppLogger.d("Starting Plugin update")
-            progressCallback?.invoke(ProgressInfo(ProgressStage.LOADING_METADATA))
+    ) {
+        logger.d("installOrUpdateMod started")
 
-            val pluginItem: PluginItem = json.decodeFromString<PluginItem>(
-                pluginZip.source("info.json".toPath()).buffer().readUtf8()
+        val parentLoader = manifest["parentLoader"]?.jsonPrimitive?.content ?: run {
+            val error = IllegalArgumentException("Mod manifest missing 'parentLoader' field")
+            logger.e(error.message ?: "Missing parentLoader field")
+            progressCallback?.invoke(InstallProgress.ERROR, error)
+            throw error
+        }
+
+        progressCallback?.invoke(InstallProgress.INSTALLING_DEPENDENCIES, null)
+        installDependence(zip, manifest, progressCallback)
+
+        if (!isModLoaderExists(parentLoader)) {
+            val error = IllegalStateException("Parent modloader $parentLoader not found")
+            logger.e(error.message ?: "Parent modloader not found")
+            progressCallback?.invoke(InstallProgress.ERROR, error)
+            throw error
+        }
+
+        logger.d("Parent modloader $parentLoader found, proceeding with mod installation")
+
+        progressCallback?.invoke(InstallProgress.PARSING_METADATA, null)
+        val targetFilePath = manifest["file"]?.jsonPrimitive?.content?.toPath() ?: run {
+            val error = IllegalArgumentException("Mod manifest missing 'file' field")
+            logger.e(error.message ?: "Missing file field")
+            progressCallback?.invoke(InstallProgress.ERROR, error)
+            throw error
+        }
+
+        // 自动获取或创建数据库
+        val db = getOrCreateModDatabase(parentLoader, autoCreate = true) ?: run {
+            val error = IllegalStateException("Failed to create database for loader: $parentLoader")
+            logger.e(error.message ?: "Failed to create database")
+            progressCallback?.invoke(InstallProgress.ERROR, error)
+            throw error
+        }
+
+        val config = manifest["config"]?.jsonPrimitive?.content?.toPath()?.let { configPath ->
+            json.decodeFromString<GlobalConfig>(zip.source(configPath).buffer().readUtf8())
+        } ?: GlobalConfig.empty
+
+        val modItem = json.decodeFromString<ModItem>(
+            zip.source("Info.json".toPath()).buffer().readUtf8()
+        ).copy(globalConfig = config)
+
+        logger.d("Processing mod: ${modItem.pkgId}, version: ${modItem.versionCode}")
+
+        progressCallback?.invoke(InstallProgress.CHECKING_EXISTING, null)
+        val originalModItem = db.get(modItem.pkgId)
+        val filePath = (Platform.getData("mods") / parentLoader / "mod" / modItem.pkgId).also {
+            it.parent?.let { dir ->
+                fileSystem.createDirectories(dir)
+            }
+        }
+
+        zip.source(targetFilePath).use { source ->
+            if (originalModItem != null) {
+                logger.d("Mod ${modItem.pkgId} already exists (version: ${originalModItem.versionCode})")
+                if (modItem.versionCode > originalModItem.versionCode) {
+                    progressCallback?.invoke(InstallProgress.STARTING, null)
+
+                    progressCallback?.invoke(InstallProgress.COPYING_FILES, null)
+                    fileSystem.sink(filePath).buffer().use { sink ->
+                        source.buffer().use { buffer ->
+                            sink.writeAll(buffer)
+                            sink.flush()
+                        }
+                    }
+
+                    progressCallback?.invoke(InstallProgress.UPDATING_DATABASE, null)
+                    db.edit(modItem.pkgId) { modItem }
+                    db.flush()
+
+                    progressCallback?.invoke(InstallProgress.EXTRACTING_ICON, null)
+                    releaseIcon(Platform.getData("mods") / parentLoader / "icons" / "${modItem.pkgId}.icon", zip, manifest)
+
+                    logger.i("Mod ${modItem.pkgId} updated successfully")
+                } else {
+                    logger.w("Mod ${modItem.pkgId} already has same or newer version")
+                    progressCallback?.invoke(InstallProgress.COMPLETED, null)
+                }
+                return
+            }
+
+            progressCallback?.invoke(InstallProgress.STARTING, null)
+
+            progressCallback?.invoke(InstallProgress.COPYING_FILES, null)
+            fileSystem.sink(filePath).buffer().use { sink ->
+                source.buffer().use { buffer ->
+                    sink.writeAll(buffer)
+                    sink.flush()
+                }
+            }
+
+            progressCallback?.invoke(InstallProgress.UPDATING_DATABASE, null)
+            db.put(modItem.pkgId, modItem)
+            db.flush()
+
+            progressCallback?.invoke(InstallProgress.EXTRACTING_ICON, null)
+            releaseIcon(Platform.getData("mods") / parentLoader / "icons" / "${modItem.pkgId}.icon", zip, manifest)
+
+            logger.i("Mod ${modItem.pkgId} installed successfully")
+        }
+    }
+
+    /**
+     * 获取或创建模组数据库实例
+     * @param loaderPkgId 模组加载器包ID
+     * @param autoCreate 如果数据库不存在是否自动创建
+     * @return 数据库实例，如果加载器被禁用且autoCreate为false则返回null
+     */
+    fun getOrCreateModDatabase(loaderPkgId: String, autoCreate: Boolean = false): LightProtoStore<ModItem>? {
+        // 检查是否已经有数据库实例
+        val existingDb = modDataBaseList[loaderPkgId]
+        if (existingDb != null) {
+            return existingDb
+        }
+
+        // 检查加载器是否启用
+        val isEnabled = isAddonEnabled("modloader", loaderPkgId)
+        if (!isEnabled && !autoCreate) {
+            logger.d("ModLoader $loaderPkgId is disabled, not creating database")
+            return null
+        }
+
+        // 创建新的数据库实例
+        return try {
+            val dbPath = Platform.getData("mods") / loaderPkgId / "db"
+
+            // 确保目录存在
+            val parentDir = dbPath.parent
+            if (parentDir != null && !fileSystem.exists(parentDir)) {
+                fileSystem.createDirectories(parentDir)
+            }
+
+            val db = LightProtoStore(
+                dbPath,
+                ModItem.serializer(),
+                "mods_$loaderPkgId"
             )
 
-            AppLogger.d("Checking if Plugin exists: ${pluginItem.pkgId}")
-            progressCallback?.invoke(ProgressInfo(ProgressStage.CHECKING_VERSION))
-            val existingItem = database.get(pluginItem.pkgId)
-            if (existingItem == null) {
-                AppLogger.w("Plugin not found in database: ${pluginItem.pkgId}")
-                progressCallback?.invoke(
-                    ProgressInfo(
-                        ProgressStage.FAILED,
-                        exception = Exception("Plugin not found, use install function")
-                    )
-                )
-                return false
-            }
+            modDataBaseList[loaderPkgId] = db
+            logger.i("Created mod database for loader: $loaderPkgId")
+            db
+        } catch (e: Exception) {
+            logger.e("Failed to create mod database for loader: $loaderPkgId", e)
+            null
+        }
+    }
 
-            if (pluginItem.versionCode <= existingItem.versionCode) {
-                AppLogger.w("New version (${pluginItem.versionCode}) not higher than current (${existingItem.versionCode})")
-                progressCallback?.invoke(
-                    ProgressInfo(
-                        ProgressStage.FAILED,
-                        exception = Exception("New version not higher than current version")
-                    )
-                )
-                return false
+    /**
+     * 安全地关闭模组数据库
+     * @param loaderPkgId 模组加载器包ID
+     * @param force 是否强制关闭（即使有正在进行的操作）
+     */
+    fun closeModDatabase(loaderPkgId: String, force: Boolean = false) {
+        val db = modDataBaseList.remove(loaderPkgId)
+        if (db != null) {
+            try {
+                db.destroy()
+                logger.i("Closed mod database for loader: $loaderPkgId")
+            } catch (e: Exception) {
+                logger.e("Failed to close mod database for loader: $loaderPkgId", e)
             }
+        }
+    }
 
-            AppLogger.d("Installing updated Plugin file: ${pluginItem.pkgId}")
-            progressCallback?.invoke(ProgressInfo(ProgressStage.INSTALLING_MAIN))
-            fileSystem.sink(Platform.getData("plugin") / "pkg" / "${pluginItem.pkgId}.tefpkg")
-                .buffer()
-                .use {
-                    val pkgFileSize = pluginZip.metadataOrNull("plugin.bin".toPath())?.size
-                    val pkgFile = pluginZip.source("plugin.bin".toPath())
-                    it.write(pkgFile, pkgFileSize ?: 0)
+    private suspend fun installDependence(
+        zip: FileSystem,
+        manifest: JsonObject,
+        progressCallback: ProgressCallback? = null
+    ) {
+        logger.d("installDependence started")
+
+        // Process modloader dependencies
+        manifest["modloader"]?.jsonObject?.let { modLoader ->
+            logger.d("Found modloader dependency in manifest")
+            val type = modLoader["type"]?.jsonPrimitive?.content?.lowercase()
+            if (type == "inline") {
+                val file = modLoader["file"]?.jsonPrimitive?.content?.toPath() ?: run {
+                    val error = IllegalArgumentException("Inline modloader missing 'file' field")
+                    logger.e(error.message ?: "Missing file field")
+                    progressCallback?.invoke(InstallProgress.ERROR, error)
+                    return@let
+                }
+
+                logger.d("Processing inline modloader: $file")
+                progressCallback?.invoke(InstallProgress.PROCESSING_DEPENDENCY, null)
+
+                val cacheDir = Platform.getDirectory("tmp") / "temp_modloaders"
+                fileSystem.createDirectories(cacheDir)
+
+                val now = Clock.System.now()
+                val localDateTime = now.toLocalDateTime(TimeZone.currentSystemDefault())
+                val timestamp = "${localDateTime.year}${localDateTime.month.number}${localDateTime.day}_" +
+                        "${localDateTime.hour}${localDateTime.minute}${localDateTime.second}"
+                val randomNum = Random.nextInt(1000, 9999)
+                val tempZipPath = cacheDir / "modloader_${timestamp}_${randomNum}.zip"
+
+                logger.d("Creating temporary modloader file: $tempZipPath")
+                fileSystem.sink(tempZipPath, true).buffer().use {
+                    it.writeAll(zip.source(file))
                     it.flush()
                 }
-            AppLogger.i("Plugin file updated: ${pluginItem.pkgId}")
 
-            AppLogger.d("Updating database for Plugin: ${pluginItem.pkgId}")
-            progressCallback?.invoke(ProgressInfo(ProgressStage.UPDATING_DATABASE))
-            database.editIf(
-                pluginItem.pkgId,
-                { pluginItem.versionCode > it.versionCode }
-            ) { pluginItem }
-            AppLogger.i("Plugin update completed: ${pluginItem.pkgId}")
+                val modLoaderZip = fileSystem.openZip(tempZipPath)
+                logger.d("Opened modloader zip for processing")
 
-            true
-        } catch (e: Exception) {
-            AppLogger.e("Plugin update failed", e)
-            progressCallback?.invoke(ProgressInfo(ProgressStage.FAILED, exception = e))
-            false
+                try {
+                    val manifestJson = modLoaderZip.source("Manifest.json".toPath()).buffer().use { it.readUtf8() }
+                    val modLoaderManifest = json.parseToJsonElement(manifestJson).jsonObject
+                    logger.i("Installing inline modloader dependency")
+                    installOrUpdateModLoader(modLoaderZip, modLoaderManifest, progressCallback)
+                } catch (e: Exception) {
+                    logger.e("Failed to install inline modloader dependency", e)
+                    progressCallback?.invoke(InstallProgress.ERROR, e)
+                    throw e
+                } finally {
+                    modLoaderZip.close()
+                    try {
+                        fileSystem.delete(tempZipPath)
+                        logger.d("Cleaned up temporary modloader file")
+                    } catch (e: Exception) {
+                        logger.w("Failed to delete temporary modloader file: $tempZipPath", e)
+                    }
+                    try {
+                        fileSystem.deleteRecursively(cacheDir)
+                        logger.d("Cleaned up temporary modloader directory")
+                    } catch (e: Exception) {
+                        logger.w("Failed to delete temporary modloader directory: $cacheDir", e)
+                    }
+                }
+            }
+        }
+
+        // Process plugin dependencies
+        manifest["plugins"]?.jsonObject?.get("type")?.jsonPrimitive?.content?.let { type ->
+            if (type.lowercase() == "inline") {
+                logger.d("Found inline plugin dependencies in manifest")
+                val files = manifest["plugins"]?.jsonObject?.get("files")?.jsonArray
+                files?.forEachIndexed { index, entry ->
+                    try {
+                        val entryPath = entry.jsonPrimitive.content
+                        logger.d("Processing plugin dependency ${index + 1}/${files.size}: $entryPath")
+                        progressCallback?.invoke(InstallProgress.PROCESSING_DEPENDENCY, null)
+
+                        val cacheDir = Platform.getDirectory("tmp") / "temp_plugins"
+                        fileSystem.createDirectories(cacheDir)
+
+                        val now = Clock.System.now()
+                        val localDateTime = now.toLocalDateTime(TimeZone.currentSystemDefault())
+                        val timestamp = "${localDateTime.year}${localDateTime.month.number}${localDateTime.day}_" +
+                                "${localDateTime.hour}${localDateTime.minute}${localDateTime.second}"
+                        val randomNum = Random.nextInt(1000, 9999)
+                        val tempZipPath = cacheDir / "plugin_${timestamp}_${randomNum}.zip"
+
+                        logger.d("Creating temporary plugin file: $tempZipPath")
+                        zip.source(entryPath.toPath()).buffer().use { source ->
+                            fileSystem.sink(tempZipPath).buffer().use { sink ->
+                                sink.writeAll(source)
+                                sink.flush()
+                            }
+                        }
+
+                        val pluginZip = fileSystem.openZip(tempZipPath)
+                        logger.d("Opened plugin zip for processing")
+
+                        try {
+                            val manifestJson = pluginZip.source("Manifest.json".toPath())
+                                .buffer()
+                                .use { it.readUtf8() }
+
+                            logger.i("Installing inline plugin dependency: $entryPath")
+                            installOrUpdatePlugin(pluginZip, json.parseToJsonElement(manifestJson).jsonObject, progressCallback)
+                        } finally {
+                            pluginZip.close()
+                            try {
+                                fileSystem.delete(tempZipPath)
+                                logger.d("Cleaned up temporary plugin file")
+                            } catch (_: Exception) {
+                                logger.w("Failed to delete temporary plugin file: $tempZipPath")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        logger.e("Failed to process plugin dependency: ${entry.jsonPrimitive.content}", e)
+                        progressCallback?.invoke(InstallProgress.ERROR, e)
+                        throw e
+                    }
+                }
+                logger.i("Finished processing plugin dependencies")
+            }
+        }
+        logger.d("installDependence completed")
+    }
+
+    private fun releaseIcon(filePath: Path, zip: FileSystem, manifest: JsonObject) {
+        manifest["iconFile"]?.jsonPrimitive?.content?.toPath()?.let { iconFile ->
+            filePath.parent?.let { fileSystem.createDirectories(it) }
+
+            fileSystem.sink(filePath, true).buffer().use {
+                it.writeAll(zip.source(iconFile))
+                it.flush()
+            }
         }
     }
 
@@ -659,11 +788,11 @@ object AddonManager {
     fun isModuleExists(pkgId: String): Boolean =
         fileSystem.exists(Platform.getData("module") / "pkg" / "$pkgId.tefpkg")
 
-    fun isLoaderExists(pkgId: String): Boolean =
-        fileSystem.exists(Platform.getData("loader") / "pkg" / "$pkgId.tefpkg")
+    fun isModLoaderExists(pkgId: String): Boolean =
+        fileSystem.exists(Platform.getData("modloader") / "pkg" / "$pkgId.tefpkg")
 
     fun isModExists(pkgId: String, loaderPkgId: String): Boolean =
-        fileSystem.exists(Platform.getData("mod") / loaderPkgId / "mod" / pkgId)
+        fileSystem.exists(Platform.getData("mods") / loaderPkgId / "mod" / pkgId)
 
     /**
      * 启用一个附加组件
@@ -776,11 +905,236 @@ object AddonManager {
         }
     }
 
+    /**
+     * 删除插件
+     * @param pkgId 插件包ID
+     * @return 是否成功删除
+     */
+    suspend fun deletePlugin(pkgId: String): Boolean {
+        logger.d("Deleting plugin: $pkgId")
+        return try {
+            val pluginItem = pluginsDataBase.get(pkgId)
+            if (pluginItem == null) {
+                logger.w("Plugin not found: $pkgId")
+                return false
+            }
+
+            // 1. 从数据库删除
+            pluginsDataBase.edit(pkgId) { null } ?: false
+
+            // 2. 删除插件文件
+            val pluginFile = Platform.getData("plugin") / "pkg" / "${pluginItem.pkgId}.tefpkg"
+            if (fileSystem.exists(pluginFile)) {
+                fileSystem.delete(pluginFile)
+            }
+
+            // 3. 删除图标文件
+            val iconFile = Platform.getData("plugin") / "icons" / "${pluginItem.pkgId}.icon"
+            if (fileSystem.exists(iconFile)) {
+                fileSystem.delete(iconFile)
+            }
+
+            // 4. 禁用插件
+            disableAddon("plugin", pkgId)
+
+            logger.i("Plugin deleted successfully: $pkgId")
+            true
+        } catch (e: Exception) {
+            logger.e("Failed to delete plugin: $pkgId", e)
+            false
+        }
+    }
+
+    /**
+     * 删除模块
+     * @param pkgId 模块包ID
+     * @return 是否成功删除
+     */
+    suspend fun deleteModule(pkgId: String): Boolean {
+        logger.d("Deleting module: $pkgId")
+        return try {
+            val moduleItem = modulesDataBase.get(pkgId)
+            if (moduleItem == null) {
+                logger.w("Module not found: $pkgId")
+                return false
+            }
+
+            modulesDataBase.edit(pkgId) { null } ?: false
+
+            val moduleFile = Platform.getData("module") / "pkg" / "${moduleItem.pkgId}.tefpkg"
+            if (fileSystem.exists(moduleFile)) {
+                fileSystem.delete(moduleFile)
+            }
+
+            val iconFile = Platform.getData("module") / "icons" / "${moduleItem.pkgId}.icon"
+            if (fileSystem.exists(iconFile)) {
+                fileSystem.delete(iconFile)
+            }
+
+            disableAddon("module", pkgId)
+
+            logger.i("Module deleted successfully: $pkgId")
+            true
+        } catch (e: Exception) {
+            logger.e("Failed to delete module: $pkgId", e)
+            false
+        }
+    }
+
+    /**
+     * 删除模组加载器
+     * @param pkgId 模组加载器包ID
+     * @return 是否成功删除
+     */
+    suspend fun deleteModLoader(pkgId: String): Boolean {
+        logger.d("Deleting modloader: $pkgId")
+        return try {
+            val modLoaderItem = modLoaderDataBase.get(pkgId)
+            if (modLoaderItem == null) {
+                logger.w("ModLoader not found: $pkgId")
+                return false
+            }
+
+            deleteAllModsInLoader(pkgId)
+
+            modLoaderDataBase.delete(pkgId)
+            modLoaderDataBase.flush()
+
+            val modLoaderFile = Platform.getData("modloader") / "pkg" / "${modLoaderItem.pkgId}.tefpkg"
+            if (fileSystem.exists(modLoaderFile)) {
+                fileSystem.delete(modLoaderFile)
+            }
+
+            val iconFile = Platform.getData("modloader") / "icons" / "${modLoaderItem.pkgId}.icon"
+            if (fileSystem.exists(iconFile)) {
+                fileSystem.delete(iconFile)
+            }
+
+            disableAddon("modloader", pkgId)
+
+            logger.i("ModLoader deleted successfully: $pkgId")
+            true
+        } catch (e: Exception) {
+            logger.e("Failed to delete modloader: $pkgId", e)
+            false
+        }
+    }
+
+    /**
+     * 删除模组
+     * @param pkgId 模组包ID
+     * @param loaderPkgId 模组加载器包ID
+     * @return 是否成功删除
+     */
+    suspend fun deleteMod(pkgId: String, loaderPkgId: String): Boolean {
+        logger.d("Deleting mod: $pkgId in loader: $loaderPkgId")
+        return try {
+            // 检查加载器是否存在
+            if (!isModLoaderExists(loaderPkgId)) {
+                logger.w("ModLoader not found: $loaderPkgId")
+                return false
+            }
+
+            // 获取数据库（如果不存在则创建）
+            val db = getOrCreateModDatabase(loaderPkgId, autoCreate = false)
+            if (db == null) {
+                logger.w("Mod database not found for loader: $loaderPkgId")
+                return false
+            }
+
+            val modItem = db.get(pkgId)
+            if (modItem == null) {
+                logger.w("Mod not found: $pkgId")
+                return false
+            }
+
+            db.delete(pkgId)
+
+            val modFile = Platform.getData("mods") / loaderPkgId / "mod" / pkgId
+            if (fileSystem.exists(modFile)) {
+                fileSystem.delete(modFile)
+            }
+
+            val iconFile = Platform.getData("mods") / loaderPkgId / "icons" / "${pkgId}.icon"
+            if (fileSystem.exists(iconFile)) {
+                fileSystem.delete(iconFile)
+            }
+
+            disableAddon("mods", pkgId, loaderPkgId)
+
+            // 如果数据库为空，可以考虑关闭它
+            val remainingMods = db.getAllValues()
+            if (remainingMods.isEmpty() && !isAddonEnabled("modloader", loaderPkgId)) {
+                closeModDatabase(loaderPkgId)
+            }
+
+            logger.i("Mod deleted successfully: $pkgId")
+            true
+        } catch (e: Exception) {
+            logger.e("Failed to delete mod: $pkgId", e)
+            false
+        }
+    }
+
+    /**
+     * 删除加载器下的所有模组
+     * @param loaderPkgId 模组加载器包ID
+     */
+    private fun deleteAllModsInLoader(loaderPkgId: String) {
+        logger.d("Deleting all mods in loader: $loaderPkgId")
+        try {
+            val modsDir = Platform.getData("mods") / loaderPkgId
+            if (!fileSystem.exists(modsDir)) {
+                return
+            }
+
+            modDataBaseList[loaderPkgId]?.destroy()
+
+            // 删除整个模组目录
+            if (fileSystem.exists(modsDir)) {
+                fileSystem.deleteRecursively(modsDir)
+            }
+
+            logger.i("All mods deleted in loader: $loaderPkgId")
+        } catch (e: Exception) {
+            logger.e("Failed to delete all mods in loader: $loaderPkgId", e)
+        }
+    }
+
     private fun getEnableFilePath(type: String, loaderPkgId: String? = null): Path {
-        return if (type == "mod" && loaderPkgId != null) {
-            Platform.getData("mod") / loaderPkgId / "enables.txt"
+        return if (type == "mods" && loaderPkgId != null) {
+            Platform.getData("mods") / loaderPkgId / "enables.txt"
         } else {
             Platform.getData(type) / "enables.txt"
+        }
+    }
+
+    /**
+     * 刷新所有启用的模组数据库
+     * 关闭禁用的，打开启用的
+     */
+    fun refreshModDatabases(modLoaders: List<ModLoaderItem>) {
+        // 检查哪些加载器需要关闭
+        val loadersToClose = mutableListOf<String>()
+
+        modDataBaseList.forEach { (loaderId, db) ->
+            val isEnabled = isAddonEnabled("modloader", loaderId)
+            if (!isEnabled) {
+                loadersToClose.add(loaderId)
+            }
+        }
+
+        // 关闭禁用的加载器
+        loadersToClose.forEach { loaderId ->
+            closeModDatabase(loaderId)
+        }
+
+        // 打开启用的加载器
+        modLoaders.forEach { loader ->
+            val isEnabled = isAddonEnabled("modloader", loader.pkgId)
+            if (isEnabled && !modDataBaseList.containsKey(loader.pkgId)) {
+                getOrCreateModDatabase(loader.pkgId, autoCreate = true)
+            }
         }
     }
 }

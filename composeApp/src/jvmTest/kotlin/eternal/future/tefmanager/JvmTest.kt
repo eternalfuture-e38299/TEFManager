@@ -1,8 +1,10 @@
 package eternal.future.tefmanager
 
+import eternal.future.tefmanager.utils.AddonManager
 import eternal.future.tefmanager.utils.AppLogger
 import eternal.future.tefmanager.utils.LightProtoStore
 import eternal.future.tefmanager.utils.TefPkgReader
+import io.github.vinceglb.filekit.FileKit
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import okio.Path.Companion.toPath
@@ -218,6 +220,29 @@ class JvmTest {
         } finally {
             store.destroy()
             // File(testDir.toString()).deleteRecursively()
+        }
+    }
+
+    @Test
+    fun testAddonManager() : Unit = runBlocking {
+        FileKit.init("tefmanager")
+
+
+        // 在 UI 层调用
+        AddonManager.installOrUpdate("/home/eternalfuture/测试目录/test_mod/压缩文件.zip".toPath()) { progress, error ->
+            when (progress) {
+                AddonManager.InstallProgress.STARTING -> println("Installation started")
+                AddonManager.InstallProgress.READING_MANIFEST -> println("Reading package manifest")
+                AddonManager.InstallProgress.COPYING_FILES -> println("Copying files")
+                AddonManager.InstallProgress.COMPLETED -> println("Installation completed!")
+                AddonManager.InstallProgress.ERROR -> {
+                    println("Installation failed")
+                    error?.printStackTrace()
+                    // 显示错误信息
+                    // showErrorDialog(error?.message ?: "Unknown error")
+                }
+                else -> println("Progress: $progress")
+            }
         }
     }
 }

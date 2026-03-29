@@ -28,7 +28,7 @@ actual object Platform {
     actual val isLinux: Boolean = false
     actual val isWindows: Boolean = false
 
-    actual fun getDirectory(type: String?): Path? {
+    actual fun getDirectory(type: String?): Path {
         return try {
             when (type?.lowercase()) {
                 "documents" -> Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).path.toPath()
@@ -40,7 +40,7 @@ actual object Platform {
             }
         } catch (e: Exception) {
             Logger.e("getDirectory Failed ", e)
-            null
+            "".toPath()
         }
     }
 

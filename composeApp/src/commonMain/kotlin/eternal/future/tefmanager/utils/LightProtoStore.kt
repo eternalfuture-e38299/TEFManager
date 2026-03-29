@@ -645,6 +645,38 @@ class LightProtoStore<T>(
         return query(QueryConfig(offset = offset, limit = limit, filter = filter))
     }
 
+    /**
+     * 获取所有有效的值
+     * @return 所有未删除的值的列表
+     */
+    fun getAllValues(): List<T> {
+        return try {
+            val values = mutableListOf<T>()
+
+            // 处理缓冲区记录
+            writeBuffer.forEach { (_, value) ->
+                values.add(value)
+            }
+
+            // 处理文件记录
+            memoryIndex.forEach { (key, pointer) ->
+                if (!pointer.isDeleted) { // 只包含未删除的
+                    if (pointer.offset != -1L) { // 不在缓冲区中
+                        val value = get(key)
+                        if (value != null) {
+                            values.add(value)
+                        }
+                    }
+                }
+            }
+
+            values
+        } catch (e: Exception) {
+            AppLogger.e("[$storeName] Failed to get all values", e)
+            emptyList()
+        }
+    }
+
     private fun close() {
         try {
             if (writeBuffer.isNotEmpty()) {
