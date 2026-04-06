@@ -12,7 +12,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eternal.future.tefmanager.ui.model.PluginItem
@@ -67,7 +66,7 @@ fun PluginItemCard(
 
         try {
             hasCustomIcon = fileSystem.exists(customIconPath)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             iconLoadError = "图标加载失败"
             hasCustomIcon = false
         }
@@ -118,7 +117,7 @@ fun PluginItemCard(
                                 KamelImage(
                                     resource = { asyncPainterResource(data = customIconPath.toFileUrlString()) },
                                     contentDescription = "自定义图标",
-                                    onFailure = { exception ->
+                                    onFailure = { _ ->
                                         iconLoadError = "图标加载失败"
                                     },
                                     modifier = Modifier

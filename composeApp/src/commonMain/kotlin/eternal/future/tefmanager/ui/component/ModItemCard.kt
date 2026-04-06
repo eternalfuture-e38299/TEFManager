@@ -65,13 +65,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eternal.future.tefmanager.ui.model.ArchitectureSupport
-import eternal.future.tefmanager.ui.model.Dependence
 import eternal.future.tefmanager.ui.model.ModItem
-import eternal.future.tefmanager.ui.model.PlatformSupport
 import eternal.future.tefmanager.utils.openUrl
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
@@ -134,7 +130,7 @@ fun ModItemCard(
 
         try {
             hasCustomIcon = fileSystem.exists(customIconPath)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             iconLoadError = "图标加载失败"
             hasCustomIcon = false
         }
@@ -193,7 +189,7 @@ fun ModItemCard(
                                 KamelImage(
                                     resource = { asyncPainterResource(data = customIconPath.toFileUrlString()) },
                                     contentDescription = "自定义图标",
-                                    onFailure = { exception ->
+                                    onFailure = { _ ->
                                         iconLoadError = "图标加载失败"
                                     },
                                     modifier = Modifier
@@ -873,19 +869,21 @@ fun ModItemCard(
                     }
 
                     // 按钮区域
-                    configureCallback?.let {
-                        OutlinedButton(
-                            onClick = { it(mod) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = MaterialTheme.shapes.medium
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Settings,
-                                contentDescription = "配置",
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("配置")
+                    if (mod.globalConfig.fileType != "null" && mod.globalConfig.fileType.isNotEmpty()) {
+                        configureCallback?.let {
+                            OutlinedButton(
+                                onClick = { it(mod) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = MaterialTheme.shapes.medium
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Settings,
+                                    contentDescription = "配置",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text("配置")
+                            }
                         }
                     }
 

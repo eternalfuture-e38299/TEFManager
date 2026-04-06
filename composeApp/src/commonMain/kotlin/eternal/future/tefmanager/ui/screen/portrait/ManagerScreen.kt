@@ -1,10 +1,7 @@
 package eternal.future.tefmanager.ui.screen.portrait
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -25,49 +22,71 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Bolt
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Extension
-import androidx.compose.material.icons.rounded.Quickreply
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.Badge
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SearchBarDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.snapshots.SnapshotStateMap
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
-import kotlinx.coroutines.CoroutineScope
+import eternal.future.tefmanager.Platform
+import eternal.future.tefmanager.ui.component.ModItemCard
+import eternal.future.tefmanager.ui.component.ModLoaderItemCard
+import eternal.future.tefmanager.ui.component.ModuleItemCard
+import eternal.future.tefmanager.ui.component.PluginItemCard
+import eternal.future.tefmanager.ui.dialogs.AddonInstallOrUpdateDialog
+import eternal.future.tefmanager.ui.dialogs.ConfigManager
+import eternal.future.tefmanager.ui.dialogs.GlobalConfigEditor
+import eternal.future.tefmanager.ui.model.GlobalConfig
+import eternal.future.tefmanager.ui.model.ModItem
+import eternal.future.tefmanager.ui.model.ModLoaderItem
+import eternal.future.tefmanager.ui.model.ModuleItem
+import eternal.future.tefmanager.utils.AddonManager
+import eternal.future.tefmanager.utils.toFileUrlString
+import io.github.vinceglb.filekit.dialogs.FileKitMode
+import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
+import io.github.vinceglb.filekit.nameWithoutExtension
+import io.github.vinceglb.filekit.size
+import io.github.vinceglb.filekit.source
+import io.kamel.image.KamelImage
+import io.kamel.image.asyncPainterResource
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.io.buffered
+import kotlinx.io.files.SystemFileSystem
+import okio.FileSystem
+import okio.Path
+import okio.Path.Companion.toPath
+import okio.SYSTEM
 
 /*******************************************************************************
  * TEFManager - ManagerScreen
@@ -91,267 +110,183 @@ import kotlinx.coroutines.launch
  * Created: 2026/2/4
  *******************************************************************************/
 
-data class ModInfo(
-    val id: String,
-    val name: String,
-    val description: String,
-    val version: String,
-    val author: String,
-    val downloadCount: Int = 0,
-    val rating: Float = 0f,
-    val enabled: Boolean = false,
-    val dependencies: List<String> = emptyList(),
-    val conflicts: List<String> = emptyList(),
-    val modLoader: String = "fabric"
-)
-
-data class ModLoader(
-    val id: String,
-    val name: String,
-    val description: String,
-    val version: String,
-    val enabled: Boolean = true,
-    val icon: ImageVector = Icons.Rounded.Extension,
-    val modCount: Int = 0
-)
-
-data class KernelModule(
-    val id: String,
-    val name: String,
-    val description: String,
-    val version: String,
-    val enabled: Boolean = true,
-    val isEssential: Boolean = true
-)
-
-data class KernelPlugin(
-    val id: String,
-    val name: String,
-    val description: String,
-    val version: String,
-    val enabled: Boolean = true,
-    val providesFunctions: List<String> = emptyList(),
-    val supportedLoaders: List<String> = emptyList()
-)
-
 object ManagerScreen : Screen, MainScreen.TitledScreen {
 
-    // 模拟数据
-    private val kernelModules = listOf(
-        KernelModule(
-            id = "core_optimization",
-            name = "核心优化模块",
-            description = "游戏核心性能优化，提供更好的运行效率",
-            version = "1.0.0"
-        ),
-        KernelModule(
-            id = "memory_manager",
-            name = "内存管理器",
-            description = "高级内存管理，减少内存泄漏和碎片",
-            version = "1.2.1"
-        ),
-        KernelModule(
-            id = "network_enhancement",
-            name = "网络增强",
-            description = "改进网络连接稳定性和速度",
-            version = "1.1.5"
-        ),
-        KernelModule(
-            id = "graphics_optimizer",
-            name = "图形优化器",
-            description = "优化图形渲染，提升帧率和画质",
-            version = "2.0.3"
-        ),
-    )
+    private val kernelModules = AddonManager.modulesDataBase.getAllValues().toMutableStateList()
 
-    private val kernelPlugins = listOf(
-        KernelPlugin(
-            id = "api_provider",
-            name = "API 提供器",
-            description = "为模组加载器提供扩展API接口",
-            version = "1.0.0",
-            providesFunctions = listOf("事件系统", "配置管理", "网络通信"),
-            supportedLoaders = listOf("fabric", "forge", "quilt")
-        ),
-        KernelPlugin(
-            id = "dependency_manager",
-            name = "依赖管理器",
-            description = "管理模组间的依赖关系和版本冲突",
-            version = "1.2.3",
-            providesFunctions = listOf("依赖解析", "版本检查", "冲突检测"),
-            supportedLoaders = listOf("fabric", "forge")
-        ),
-        KernelPlugin(
-            id = "hot_reload",
-            name = "热重载引擎",
-            description = "支持模组热重载，无需重启游戏",
-            version = "0.9.5",
-            providesFunctions = listOf("热重载", "实时更新", "状态保存"),
-            supportedLoaders = listOf("fabric", "quilt")
-        ),
-        KernelPlugin(
-            id = "performance_monitor",
-            name = "性能监控器",
-            description = "监控模组性能，提供优化建议",
-            version = "1.1.0",
-            providesFunctions = listOf("性能分析", "内存监控", "CPU使用率"),
-            supportedLoaders = listOf("fabric", "forge", "quilt", "rift")
-        ),
-    )
+    private val kernelPlugins = AddonManager.pluginsDataBase.getAllValues().toMutableStateList()
 
-    private val modLoaders = listOf(
-        ModLoader(
-            id = "fabric",
-            name = "Fabric",
-            description = "轻量级模组加载器，高性能和兼容性好",
-            version = "1.4.5",
-            icon = Icons.Rounded.Bolt,
-            modCount = 8
-        ),
-        ModLoader(
-            id = "forge",
-            name = "Forge",
-            description = "功能丰富的模组加载器，支持大量模组",
-            version = "1.3.2",
-            icon = Icons.Rounded.Build,
-            modCount = 12
-        ),
-        ModLoader(
-            id = "quilt",
-            name = "Quilt",
-            description = "现代化的模组加载器，Fabric的增强版",
-            version = "1.1.0",
-            icon = Icons.Rounded.Quickreply,
-            modCount = 5
-        ),
-        ModLoader(
-            id = "rift",
-            name = "Rift",
-            description = "精简版加载器，适用于特殊需求",
-            version = "0.8.3",
-            icon = Icons.Rounded.Memory,
-            modCount = 3
-        ),
-    )
+    private val modLoaders = AddonManager.modLoaderDataBase.getAllValues().toMutableStateList()
 
-    // 模拟 Mod 数据
-    private val fabricMods = listOf(
-        ModInfo(
-            id = "sodium",
-            name = "Sodium",
-            description = "高性能渲染引擎，显著提升FPS",
-            version = "1.4.5",
-            author = "jellysquid3",
-            downloadCount = 1500000,
-            rating = 4.8f,
-            enabled = true
-        ),
-        ModInfo(
-            id = "iris",
-            name = "Iris Shaders",
-            description = "支持光影效果，兼容Sodium",
-            version = "1.3.2",
-            author = "coderbot",
-            downloadCount = 800000,
-            rating = 4.5f,
-            enabled = true
-        ),
-        ModInfo(
-            id = "lithium",
-            name = "Lithium",
-            description = "优化游戏逻辑，提升服务器性能",
-            version = "1.1.0",
-            author = "jellysquid3",
-            downloadCount = 600000,
-            rating = 4.6f
-        ),
-    )
+    private val modList = mutableStateMapOf<String, SnapshotStateList<ModItem>>()
 
-    private val forgeMods = listOf(
-        ModInfo(
-            id = "optifine",
-            name = "OptiFine",
-            description = "经典性能优化和画质增强模组",
-            version = "HD_U_H8",
-            author = "sp614x",
-            downloadCount = 2000000,
-            rating = 4.7f,
-            enabled = true
-        ),
-        ModInfo(
-            id = "jei",
-            name = "JEI",
-            description = "物品管理器，显示所有合成配方",
-            version = "7.6.4",
-            author = "mezz",
-            downloadCount = 1200000,
-            rating = 4.9f
-        ),
-    )
+    private var categories = mutableStateListOf<ManagerTab>()
 
     data class ManagerTab(
         val id: String,
         val title: String,
-        val icon: ImageVector,
+        val icon: ImageVector? = null,
         val isKernel: Boolean = false,
         val isKernelPlugin: Boolean = false,
         val isModLoader: Boolean = false,
         val fabText: String = "添加",
-        val fabAction: () -> Unit = {}
+        val fabAction: () -> Unit = {},
+        val iconPath: Path? = null
     )
 
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
     override fun Content() {
-        val categories = remember {
-            listOf(
-                ManagerTab(
-                    id = "kernel",
-                    title = "内核模块",
-                    icon = Icons.Rounded.Memory,
-                    isKernel = true,
-                    fabText = "添加内核模块",
-                    fabAction = { println("添加内核模块") }
-                ),
-                ManagerTab(
-                    id = "kernel_plugins",
-                    title = "内核插件",
-                    icon = Icons.Rounded.Extension,
-                    isKernelPlugin = true,
-                    fabText = "添加内核插件",
-                    fabAction = { println("添加内核插件") }
-                ),
-                ManagerTab(
-                    id = "mod_loaders",
-                    title = "模组加载器",
-                    icon = Icons.Rounded.Dashboard,
-                    isModLoader = true,
-                    fabText = "管理加载器",
-                    fabAction = { println("管理加载器") }
-                )
-            ) + modLoaders.map { loader ->
-                ManagerTab(
-                    id = loader.id,
-                    title = loader.name,
-                    icon = loader.icon,
-                    fabText = "添加${loader.name}模组",
-                    fabAction = { println("添加${loader.name}模组") }
-                )
-            }
-        }
-
         var selectedTab by remember { mutableIntStateOf(0) }
         var searchQuery by remember { mutableStateOf("") }
-        var searchActive by remember { mutableStateOf(false) }
+        var debouncedSearchQuery by remember { mutableStateOf("") }
         val pagerState = rememberPagerState(pageCount = { categories.size })
         val coroutineScope = rememberCoroutineScope()
 
+        val globalConfig = remember { mutableStateOf<GlobalConfig?>(null) }
+        val showAddonInstallOrUpdateDialog = remember { mutableStateOf(false) }
+
+        val installFiles = remember { mutableListOf<Path>() }
+        val filePickerLauncher = rememberFilePickerLauncher(
+            mode = FileKitMode.Multiple(maxItems = 10)
+        ) { files ->
+            installFiles.clear()
+            files?.forEach { file ->
+                val tmp = kotlinx.io.files.Path((Platform.getData("install_tmp") / file.nameWithoutExtension).toString())
+
+                tmp.parent?.let { SystemFileSystem.createDirectories(it) }
+
+                SystemFileSystem.sink(tmp).buffered().use { sink ->
+                    sink.write(file.source(), file.size())
+                    sink.flush()
+                    installFiles.add(tmp.toString().toPath())
+                }
+                showAddonInstallOrUpdateDialog.value = true
+            }
+        }
+
+        categories = (listOf(
+            ManagerTab(
+                id = "kernel",
+                title = "内核模块",
+                icon = Icons.Rounded.Memory,
+                isKernel = true,
+                fabText = "添加模块",
+                fabAction = { filePickerLauncher.launch() }
+            ),
+            ManagerTab(
+                id = "kernel_plugins",
+                title = "内核插件",
+                icon = Icons.Rounded.Extension,
+                isKernelPlugin = true,
+                fabText = "添加插件",
+                fabAction = { filePickerLauncher.launch() }
+            ),
+            ManagerTab(
+                id = "mod_loaders",
+                title = "模组加载器",
+                icon = Icons.Rounded.Dashboard,
+                isModLoader = true,
+                fabText = "添加模组加载器",
+                fabAction = { filePickerLauncher.launch() }
+            )
+        ) + modLoaders.map { loader ->
+            ManagerTab(
+                id = loader.pkgId,
+                title = loader.name,
+                fabText = "添加Mod",
+                fabAction = { filePickerLauncher.launch() },
+                iconPath = Platform.getData("modloader") / "icons" / "${loader.pkgId}.icon"
+            )
+        }).toMutableStateList()
+
+        if (showAddonInstallOrUpdateDialog.value) {
+            AddonInstallOrUpdateDialog(installFiles) {
+                FileSystem.SYSTEM.deleteRecursively(Platform.getData("install_tmp"))
+
+                installFiles.clear()
+                showAddonInstallOrUpdateDialog.value = false
+
+                modLoaders.clear()
+                modLoaders.addAll(AddonManager.modLoaderDataBase.getAllValues())
+
+                kernelModules.clear()
+                kernelModules.addAll(AddonManager.modulesDataBase.getAllValues())
+
+                kernelPlugins.clear()
+                kernelPlugins.addAll(AddonManager.pluginsDataBase.getAllValues())
+
+                modList.forEach {
+                    it.value.clear()
+                    it.value.addAll(AddonManager.getOrCreateModDatabase(it.key)!!.getAllValues())
+                }
+
+                val newCategories = mutableListOf<ManagerTab>()
+
+                // 只添加基础标签
+                newCategories.addAll(categories.filter { tab ->
+                    tab.id == "kernel" || tab.id == "kernel_plugins" || tab.id == "mod_loaders"
+                })
+
+                modLoaders.forEach { loader ->
+                    newCategories.add(ManagerTab(
+                        id = loader.pkgId,
+                        title = loader.name,
+                        fabText = "添加模组",
+                        fabAction = { filePickerLauncher.launch() },
+                        iconPath = Platform.getData("modloader") / "icons" / "${loader.pkgId}.icon"
+                    ))
+                }
+
+                categories.clear()
+                categories.addAll(newCategories)
+            }
+        }
+
+        if (globalConfig.value != null) {
+            GlobalConfigEditor(globalConfig.value!!,
+                ConfigManager.readConfigFile(globalConfig.value!!.generateFile),
+                {
+                    ConfigManager.writeConfigFile(globalConfig.value!!.generateFile, it)
+                },
+                {
+                    globalConfig.value = null
+                }
+            )
+        }
+
         // 使用 mutableStateMapOf 来管理加载器状态
-        val enabledLoaders = remember { mutableStateMapOf<String, Boolean>().apply {
-            modLoaders.forEach { put(it.id, it.enabled) }
-        } }
+        val enabledLoaders = remember {
+            mutableStateMapOf<String, Boolean>()
+        }
 
         val currentCategory = categories[selectedTab]
+
+        LaunchedEffect(modLoaders) {
+            AddonManager.refreshModDatabases(modLoaders)
+            enabledLoaders.apply {
+                modLoaders.forEach {
+                    val enabled = AddonManager.isAddonEnabled("modloader", it.pkgId)
+                    put(
+                        it.pkgId,
+                        enabled
+                    )
+
+                    if (enabled) {
+                        AddonManager.modDataBaseList[it.pkgId]?.getAllValues()?.toMutableStateList()?.let { list ->
+                            modList[it.pkgId] = list
+                        }
+                    }
+                }
+            }
+        }
+
+        // 防抖处理：延迟300ms更新搜索
+        LaunchedEffect(searchQuery) {
+            delay(300)
+            debouncedSearchQuery = searchQuery
+        }
+
 
         // 同步分页状态和标签选择
         LaunchedEffect(pagerState.currentPage) {
@@ -370,40 +305,35 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                 // 搜索栏
                 SearchBar(
                     query = searchQuery,
-                    onQueryChange = { searchQuery = it },
-                    onSearch = { searchQuery = it },
-                    onActiveChange = { searchActive = it },
-                    active = searchActive,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
+                    onQueryChange = { searchQuery = it }
                 )
+
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 if (searchQuery.isEmpty()) {
                     // 正常标签页模式
                     NormalTabView(
-                        tabs = categories,
                         selectedTab = selectedTab,
                         pagerState = pagerState,
-                        coroutineScope = coroutineScope,
                         enabledLoaders = enabledLoaders,
                         onTabSelected = { index ->
                             selectedTab = index
                             coroutineScope.launch {
                                 pagerState.animateScrollToPage(index)
                             }
-                        }
+                        },
+                        globalConfig = globalConfig
                     )
                 } else {
                     // 搜索模式
                     SearchResultsView(
-                        searchQuery = searchQuery,
-                        enabledLoaders = enabledLoaders,
-                        fabricMods = fabricMods,
-                        forgeMods = forgeMods
-                    )
+                        searchQuery = debouncedSearchQuery,
+                        enabledLoaders = enabledLoaders
+                    ) {
+                        if (it.globalConfig.fileType != "null" && it.globalConfig.fileType.isNotEmpty())
+                            globalConfig.value = it.globalConfig
+                    }
                 }
             }
 
@@ -435,231 +365,218 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
     @Composable
     private fun SearchResultsView(
         searchQuery: String,
-        enabledLoaders: Map<String, Boolean>,
-        fabricMods: List<ModInfo>,
-        forgeMods: List<ModInfo>
+        enabledLoaders: SnapshotStateMap<String, Boolean>,
+        configureCallback: ((ModItem) -> Unit)?
     ) {
-        val query = searchQuery.lowercase()
+        val query = searchQuery.trim()
 
-        // 收集所有启用的加载器的模组
-        val allEnabledMods = remember(query, enabledLoaders, fabricMods, forgeMods) {
-            val mods = mutableListOf<Pair<String, ModInfo>>()
-
-            if (enabledLoaders["fabric"] == true) {
-                fabricMods.filter { mod ->
-                    mod.name.lowercase().contains(query) ||
-                            mod.description.lowercase().contains(query) ||
-                            mod.author.lowercase().contains(query) ||
-                            mod.id.lowercase().contains(query)
-                }.forEach { mod ->
-                    mods.add("Fabric" to mod)
-                }
-            }
-
-            if (enabledLoaders["forge"] == true) {
-                forgeMods.filter { mod ->
-                    mod.name.lowercase().contains(query) ||
-                            mod.description.lowercase().contains(query) ||
-                            mod.author.lowercase().contains(query) ||
-                            mod.id.lowercase().contains(query)
-                }.forEach { mod ->
-                    mods.add("Forge" to mod)
-                }
-            }
-
-            mods
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp)
-        ) {
-            if (allEnabledMods.isEmpty()) {
-                // 无搜索结果
-                NoSearchResults()
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // 搜索结果统计
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "搜索结果",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-
-                            Text(
-                                text = "共 ${allEnabledMods.size} 个结果",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    // 搜索结果列表
-                    items(allEnabledMods) { (loaderName, mod) ->
-                        SearchResultModCard(
-                            mod = mod,
-                            loaderName = loaderName
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    @Composable
-    private fun NoSearchResults() {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(40.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.SearchOff,
-                contentDescription = "无结果",
-                modifier = Modifier.size(64.dp),
-                tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "未找到相关模组",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "尝试使用其他关键词搜索，或确保相关加载器已启用",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.outline
-            )
-        }
-    }
-
-    @Composable
-    private fun SearchResultModCard(
-        mod: ModInfo,
-        loaderName: String
-    ) {
-        var enabled by remember { mutableStateOf(mod.enabled) }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium,
-            colors = CardDefaults.cardColors(
-                containerColor = if (enabled) {
-                    MaterialTheme.colorScheme.primaryContainer
+        // 使用 derivedStateOf 优化搜索性能
+        val searchResults = remember(query, enabledLoaders, modList) {
+            derivedStateOf {
+                if (query.isEmpty()) {
+                    emptyList()
                 } else {
-                    MaterialTheme.colorScheme.surface
-                }
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // 图标区域
-                Surface(
-                    shape = CircleShape,
-                    color = if (enabled) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    },
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Rounded.Extension,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = if (enabled) {
-                                MaterialTheme.colorScheme.onPrimary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
+                    val lowerQuery = query.lowercase()
+                    val results = mutableListOf<Pair<ModLoaderItem, ModItem>>()
+
+
+                    modList.forEach {
+                        // 对每个模组进行搜索
+                        it.value.forEach { mod ->
+                            // 安全地检查每个字段是否匹配
+                            val matches = isModMatchingSearch(mod, lowerQuery)
+                            if (matches) {
+                                results.add(modLoaders.find { modLoader -> modLoader.pkgId == it.key }!! to mod)
                             }
-                        )
+                        }
+                    }
+
+                    // 根据相关性排序
+                    results.sortedByDescending { (_, mod) ->
+                        calculateRelevance(mod, lowerQuery)
                     }
                 }
+            }
+        }.value
 
-                // 信息区域
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+            tonalElevation = 2.dp
+        ) {
+            if (searchResults.isEmpty()) {
                 Column(
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(40.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
+                    Icon(
+                        imageVector = Icons.Rounded.SearchOff,
+                        contentDescription = "无结果",
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = mod.name,
+                        text = if (query.isEmpty()) "输入关键词开始搜索" else "未找到相关模组",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = mod.description,
+                        text = if (query.isEmpty()) "在搜索框中输入模组名称、作者、描述等关键词"
+                        else "尝试使用其他关键词搜索，或确保相关加载器已启用",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        color = MaterialTheme.colorScheme.outline
                     )
-
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(20.dp)
+                ) {
+                    // 搜索结果标题
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = loaderName,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Rounded.Search,
+                            contentDescription = "搜索结果",
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
 
                         Text(
-                            text = "作者: ${mod.author}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
+                            text = "搜索结果",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        Text(
+                            text = "${searchResults.size} 个结果",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                }
 
-                // 开关区域
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = { enabled = it }
-                )
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // 搜索结果列表
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(
+                            items = searchResults,
+                            key = { (loaderName, mod) -> "${loaderName}_${mod.pkgId}" }
+                        ) { (loader, mod) ->
+                            ModItemCard(
+                                mod = mod,
+                                enabled = AddonManager.isAddonEnabled("mods", mod.pkgId, loader.pkgId),
+                                customIconPath = Platform.getData("mods") / loader.pkgId / "icons" / "${mod.pkgId}.icon",
+                                onEnableChange = { enable ->
+                                    if (enable) AddonManager.enableAddon("mods", mod.pkgId, loader.pkgId)
+                                    else AddonManager.disableAddon("mods", mod.pkgId, loader.pkgId)
+                                },
+                                onDelete = {
+                                    runBlocking {
+                                        AddonManager.deleteMod(mod.pkgId, loader.pkgId)
+                                        modList[loader.pkgId]?.remove(mod)
+                                    }
+                                },
+                                configureCallback
+                            )
+                        }
+                    }
+                }
             }
         }
     }
+
+    // 辅助函数：检查模组是否匹配搜索条件
+    private fun isModMatchingSearch(mod: ModItem, query: String): Boolean {
+        if (query.isEmpty()) return false
+
+        // 检查 name（非空）
+        if (mod.name.isNotBlank() && mod.name.lowercase().contains(query)) {
+            return true
+        }
+
+        // 检查 pkgId（非空）
+        if (mod.pkgId.isNotBlank() && mod.pkgId.lowercase().contains(query)) {
+            return true
+        }
+
+        // 检查 brieflyDescribe（可能为空或空字符串）
+        if (mod.brieflyDescribe.isNotBlank() && mod.brieflyDescribe.lowercase().contains(query)) {
+            return true
+        }
+
+        // 检查 description（可能为空或空字符串）
+        if (mod.description.isNotBlank() && mod.description.lowercase().contains(query)) {
+            return true
+        }
+
+        // 检查 author（可能为空或空字符串）
+        if (mod.author.isNotBlank() && mod.author.lowercase().contains(query)) {
+            return true
+        }
+
+        return false
+    }
+
+    // 辅助函数：计算搜索相关性分数
+    private fun calculateRelevance(mod: ModItem, query: String): Int {
+        if (query.isEmpty()) return 0
+
+        var relevance = 0
+
+        // name 匹配得分最高
+        if (mod.name.isNotBlank() && mod.name.lowercase().contains(query)) {
+            relevance += 5
+        }
+
+        // pkgId 匹配得分次高
+        if (mod.pkgId.isNotBlank() && mod.pkgId.lowercase().contains(query)) {
+            relevance += 4
+        }
+
+        // brieflyDescribe 匹配
+        if (mod.brieflyDescribe.isNotBlank() && mod.brieflyDescribe.lowercase().contains(query)) {
+            relevance += 3
+        }
+
+        // description 匹配
+        if (mod.description.isNotBlank() && mod.description.lowercase().contains(query)) {
+            relevance += 2
+        }
+
+        // author 匹配
+        if (mod.author.isNotBlank() && mod.author.lowercase().contains(query)) {
+            relevance += 2
+        }
+
+        return relevance
+    }
+
 
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
     private fun NormalTabView(
-        tabs: List<ManagerTab>,
         selectedTab: Int,
         pagerState: PagerState,
-        coroutineScope: CoroutineScope,
         enabledLoaders: MutableMap<String, Boolean>,
-        onTabSelected: (Int) -> Unit
+        onTabSelected: (Int) -> Unit,
+        globalConfig: MutableState<GlobalConfig?>
     ) {
         // 监听 enabledLoaders 的变化
         val loaderStates by remember(enabledLoaders) {
@@ -671,7 +588,6 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         ) {
             // 紧凑型标签栏
             CompactTabRow(
-                tabs = tabs,
                 selectedTab = selectedTab,
                 loaderStates = loaderStates,
                 onTabSelected = onTabSelected
@@ -686,33 +602,35 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                     .fillMaxWidth()
                     .weight(1f)
             ) { page ->
-                val tab = tabs[page]
+                val tab = categories[page]
 
                 when {
-                    tab.isKernel -> KernelModulesSection(
-                        kernelModules = kernelModules
-                    )
-                    tab.isKernelPlugin -> KernelPluginsSection(
-                        plugins = kernelPlugins
-                    )
+                    tab.isKernel -> KernelModulesSection {
+                        globalConfig.value = it.globalConfig
+                    }
+                    tab.isKernelPlugin -> KernelPluginsSection()
                     tab.isModLoader -> ModLoadersSection(
-                        loaders = modLoaders,
                         enabledLoaders = enabledLoaders,
                         onLoaderToggle = { loaderId, enabled ->
                             enabledLoaders[loaderId] = enabled
+                            if (enabled) {
+                                AddonManager.enableAddon("modloader", loaderId)
+                                modList[loaderId] = AddonManager.getOrCreateModDatabase(loaderId, true)!!.getAllValues()
+                                    .toMutableStateList()
+                            } else {
+                                AddonManager.disableAddon("modloader", loaderId)
+                                AddonManager.closeModDatabase(loaderId)
+                                modList.remove(loaderId)
+                            }
                         }
                     )
                     else -> {
-                        val loader = modLoaders.find { it.id == tab.id }
-                        if (loader != null && loaderStates[loader.id] == true) {
-                            ModListSection(
-                                loader = loader,
-                                mods = when (loader.id) {
-                                    "fabric" -> fabricMods
-                                    "forge" -> forgeMods
-                                    else -> emptyList()
-                                }
-                            )
+                        val loader = modLoaders.find { it.pkgId == tab.id }
+                        if (loader != null && loaderStates[loader.pkgId] == true) {
+                            ModListSection(loader = loader)
+                            {
+                                globalConfig.value = it.globalConfig
+                            }
                         } else {
                             DisabledLoaderSection(loader = loader)
                         }
@@ -724,7 +642,6 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
 
     @Composable
     private fun CompactTabRow(
-        tabs: List<ManagerTab>,
         selectedTab: Int,
         loaderStates: Map<String, Boolean>,
         onTabSelected: (Int) -> Unit
@@ -739,8 +656,8 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                     .padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(tabs) { tab ->
-                    val index = tabs.indexOf(tab)
+                items(categories) { tab ->
+                    val index = categories.indexOf(tab)
                     val isSelected = selectedTab == index
 
                     CompactTab(
@@ -769,10 +686,10 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         val animatedColor by animateColorAsState(
             targetValue = if (isSelected) {
                 when {
-                    tab.isKernel -> MaterialTheme.colorScheme.tertiary
-                    tab.isKernelPlugin -> MaterialTheme.colorScheme.secondary
-                    tab.isModLoader -> MaterialTheme.colorScheme.primary
-                    else -> MaterialTheme.colorScheme.primary
+                    tab.isKernel -> MaterialTheme.colorScheme.onTertiaryContainer
+                    tab.isKernelPlugin -> MaterialTheme.colorScheme.onSecondaryContainer
+                    tab.isModLoader -> MaterialTheme.colorScheme.onPrimaryContainer
+                    else -> MaterialTheme.colorScheme.onPrimaryContainer
                 }
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
@@ -810,16 +727,65 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Icon(
-                    imageVector = tab.icon,
-                    contentDescription = tab.title,
-                    modifier = Modifier.size(16.dp),
-                    tint = if (!loaderEnabled) {
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                // 优先显示文件图标
+                tab.iconPath?.let { path ->
+                    if (FileSystem.SYSTEM.exists(path)) {
+                        KamelImage(
+                            resource = { asyncPainterResource(data = path.toFileUrlString()) },
+                            contentDescription = tab.title,
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clip(CircleShape)
+                        )
+                    } else if (tab.icon != null) {
+                        // 其次使用内置图标
+                        Icon(
+                            imageVector = tab.icon,
+                            contentDescription = tab.title,
+                            modifier = Modifier.size(16.dp),
+                            tint = if (!loaderEnabled) {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                            } else {
+                                animatedColor
+                            }
+                        )
                     } else {
-                        animatedColor
+                        // 默认的模组加载器图标
+                        Icon(
+                            imageVector = Icons.Rounded.Dashboard,
+                            contentDescription = tab.title,
+                            modifier = Modifier.size(16.dp),
+                            tint = if (!loaderEnabled) {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                            } else {
+                                animatedColor
+                            }
+                        )
                     }
-                )
+                } ?: run {
+                    // 没有 iconPath 时的处理
+                    tab.icon?.let {
+                        Icon(
+                            imageVector = it,
+                            contentDescription = tab.title,
+                            modifier = Modifier.size(16.dp),
+                            tint = if (!loaderEnabled) {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                            } else {
+                                animatedColor
+                            }
+                        )
+                    } ?: Icon(
+                        imageVector = Icons.Rounded.Dashboard,
+                        contentDescription = tab.title,
+                        modifier = Modifier.size(16.dp),
+                        tint = if (!loaderEnabled) {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                        } else {
+                            animatedColor
+                        }
+                    )
+                }
 
                 Text(
                     text = tab.title,
@@ -838,7 +804,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
 
     @Composable
     private fun KernelModulesSection(
-        kernelModules: List<KernelModule>
+        configureCallback: ((ModuleItem) -> Unit)?
     ) {
         Column(
             modifier = Modifier
@@ -876,16 +842,29 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(kernelModules) { module ->
-                    KernelModuleCard(module = module)
+                    ModuleItemCard(
+                        module = module,
+                        AddonManager.isAddonEnabled("module", module.pkgId),
+                        customIconPath = Platform.getData("module") / "icons" / "${module.pkgId}.icon",
+                        onEnableChange = {
+                            if (it) AddonManager.enableAddon("module", module.pkgId)
+                            else AddonManager.disableAddon("module", module.pkgId)
+                        },
+                        onDelete = {
+                            runBlocking {
+                                AddonManager.deleteModule(module.pkgId)
+                                kernelModules.remove(module)
+                            }
+                        },
+                        onConfigure = configureCallback
+                    )
                 }
             }
         }
     }
 
     @Composable
-    private fun KernelPluginsSection(
-        plugins: List<KernelPlugin>
-    ) {
+    private fun KernelPluginsSection() {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -921,342 +900,15 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(plugins) { plugin ->
-                    KernelPluginCard(plugin = plugin)
-                }
-            }
-        }
-    }
-
-    @Composable
-    private fun KernelPluginCard(plugin: KernelPlugin) {
-        var expanded by remember { mutableStateOf(false) }
-        var enabled by remember { mutableStateOf(plugin.enabled) }
-
-        Card(
-            onClick = { expanded = !expanded },
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium,
-            colors = CardDefaults.cardColors(
-                containerColor = if (enabled) {
-                    MaterialTheme.colorScheme.secondaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surface
-                }
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // 图标区域
-                    Surface(
-                        shape = CircleShape,
-                        color = if (enabled) {
-                            MaterialTheme.colorScheme.secondary
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        },
-                        modifier = Modifier.size(40.dp)
+                items(kernelPlugins) { plugin ->
+                    PluginItemCard(
+                        plugin = plugin,
+                        Platform.getData("plugin") / "icons" / "${plugin.pkgId}.icon"
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Rounded.Extension,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                                tint = if (enabled) {
-                                    MaterialTheme.colorScheme.onSecondary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                            )
+                        runBlocking {
+                            AddonManager.deletePlugin(plugin.pkgId)
+                            kernelPlugins.remove(plugin)
                         }
-                    }
-
-                    // 信息区域
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = plugin.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        Text(
-                            text = plugin.description,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = "v${plugin.version}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-
-                            Text(
-                                text = "${plugin.providesFunctions.size} 个功能",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                        }
-                    }
-
-                    // 操作区域
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Switch(
-                            checked = enabled,
-                            onCheckedChange = { enabled = it }
-                        )
-
-                        Icon(
-                            imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                            contentDescription = if (expanded) "收起" else "展开",
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                // 展开的详细信息
-                AnimatedVisibility(
-                    visible = expanded,
-                    enter = expandVertically(
-                        animationSpec = tween(durationMillis = 300)
-                    ),
-                    exit = shrinkVertically(
-                        animationSpec = tween(durationMillis = 300)
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 16.dp)
-                    ) {
-                        Divider(
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // 提供功能
-                        Text(
-                            text = "提供功能:",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            plugin.providesFunctions.forEach { function ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.CheckCircle,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp),
-                                        tint = MaterialTheme.colorScheme.secondary
-                                    )
-
-                                    Text(
-                                        text = function,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // 支持加载器
-                        Text(
-                            text = "支持加载器: ${plugin.supportedLoaders.joinToString(", ")}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    @Composable
-    private fun KernelModuleCard(module: KernelModule) {
-        var expanded by remember { mutableStateOf(false) }
-        var enabled by remember { mutableStateOf(module.enabled) }
-
-        Card(
-            onClick = { expanded = !expanded },
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium,
-            colors = CardDefaults.cardColors(
-                containerColor = if (enabled) {
-                    MaterialTheme.colorScheme.tertiaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surface
-                }
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // 图标区域
-                    Surface(
-                        shape = CircleShape,
-                        color = if (enabled) {
-                            MaterialTheme.colorScheme.tertiary
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        },
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Rounded.Settings,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                                tint = if (enabled) {
-                                    MaterialTheme.colorScheme.onTertiary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                            )
-                        }
-                    }
-
-                    // 信息区域
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = module.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-
-                            if (module.isEssential) {
-                                Badge(
-                                    containerColor = MaterialTheme.colorScheme.errorContainer
-                                ) {
-                                    Text(
-                                        "核心",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                }
-                            }
-                        }
-
-                        Text(
-                            text = module.description,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        Text(
-                            text = "v${module.version}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
-
-                    // 开关区域
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Switch(
-                            checked = enabled,
-                            onCheckedChange = { enabled = it },
-                            enabled = !module.isEssential
-                        )
-
-                        Icon(
-                            imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                            contentDescription = if (expanded) "收起" else "展开",
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                // 展开的详细信息
-                AnimatedVisibility(
-                    visible = expanded,
-                    enter = expandVertically(
-                        animationSpec = tween(durationMillis = 300)
-                    ),
-                    exit = shrinkVertically(
-                        animationSpec = tween(durationMillis = 300)
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 16.dp)
-                    ) {
-                        Divider(
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        if (module.isEssential) {
-                            Text(
-                                text = "⚠️ 这是核心模块，禁用可能导致系统不稳定",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(bottom = 12.dp)
-                            )
-                        }
-
-                        Text(
-                            text = "内核模块是系统级的优化组件，它们直接与游戏核心交互，提供性能优化、内存管理、网络增强等基础功能。",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
             }
@@ -1265,7 +917,6 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
 
     @Composable
     private fun ModLoadersSection(
-        loaders: List<ModLoader>,
         enabledLoaders: MutableMap<String, Boolean>,
         onLoaderToggle: (String, Boolean) -> Unit
     ) {
@@ -1305,7 +956,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 ) {
                     Text(
-                        "${enabledCount}/${loaders.size} 已启用",
+                        "${enabledCount}/${modLoaders.size} 已启用",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
@@ -1349,120 +1000,37 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(loaders) { loader ->
-                    val enabled = loaderStates[loader.id] ?: loader.enabled
+                items(modLoaders) { loader ->
+                    val enabled = loaderStates[loader.pkgId] ?: AddonManager.isAddonEnabled(
+                        "modloader",
+                        loader.pkgId
+                    )
 
-                    ModLoaderCard(
-                        loader = loader,
+                    ModLoaderItemCard(
+                        modLoader = loader,
                         enabled = enabled,
-                        onToggle = { onLoaderToggle(loader.id, it) }
-                    )
-                }
-            }
-        }
-    }
-
-    @Composable
-    private fun ModLoaderCard(
-        loader: ModLoader,
-        enabled: Boolean,
-        onToggle: (Boolean) -> Unit
-    ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium,
-            colors = CardDefaults.cardColors(
-                containerColor = if (enabled) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surface
-                }
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // 图标区域
-                Surface(
-                    shape = CircleShape,
-                    color = if (enabled) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    },
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = loader.icon,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = if (enabled) {
-                                MaterialTheme.colorScheme.onPrimary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
+                        customIconPath = Platform.getData("modloader") / "icons" / "${loader.pkgId}.icon",
+                        onEnableChange = { onLoaderToggle(loader.pkgId, it) },
+                        onDelete = {
+                            runBlocking {
+                                AddonManager.deleteModLoader(loader.pkgId)
+                                AddonManager.closeModDatabase(loader.pkgId)
+                                modList.remove(loader.pkgId)
+                                modLoaders.remove(loader)
+                                categories.removeAll { it.id == loader.pkgId }
                             }
-                        )
-                    }
-                }
-
-                // 信息区域
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = loader.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        }
                     )
-
-                    Text(
-                        text = loader.description,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "v${loader.version}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-
-                        Text(
-                            text = "${loader.modCount} 个模组",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
                 }
-
-                // 开关区域
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = onToggle
-                )
             }
         }
     }
+
 
     @Composable
     private fun ModListSection(
-        loader: ModLoader,
-        mods: List<ModInfo>
+        loader: ModLoaderItem,
+        configureCallback: ((ModItem) -> Unit)?
     ) {
         Column(
             modifier = Modifier
@@ -1499,183 +1067,24 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(mods) { mod ->
-                    ExpandableModCard(mod = mod)
-                }
-            }
-        }
-    }
-
-    @Composable
-    private fun ExpandableModCard(mod: ModInfo) {
-        var expanded by remember { mutableStateOf(false) }
-        var enabled by remember { mutableStateOf(mod.enabled) }
-
-        Card(
-            onClick = { expanded = !expanded },
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium,
-            colors = CardDefaults.cardColors(
-                containerColor = if (enabled) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surface
-                }
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // 图标区域
-                    Surface(
-                        shape = CircleShape,
-                        color = if (enabled) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        },
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Rounded.Extension,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                                tint = if (enabled) {
-                                    MaterialTheme.colorScheme.onPrimary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
+                modList[loader.pkgId]?.let { currentModList ->
+                    items(currentModList) { mod ->
+                        ModItemCard(
+                            mod = mod,
+                            enabled = AddonManager.isAddonEnabled("mods", mod.pkgId, loader.pkgId),
+                            customIconPath = Platform.getData("mods") / loader.pkgId / "icons" / "${mod.pkgId}.icon",
+                            onEnableChange = { enable ->
+                                if (enable) AddonManager.enableAddon("mods", mod.pkgId, loader.pkgId)
+                                else AddonManager.disableAddon("mods", mod.pkgId, loader.pkgId)
+                            },
+                            onDelete = {
+                                runBlocking {
+                                    AddonManager.deleteMod(mod.pkgId, loader.pkgId)
+                                    modList[loader.pkgId]?.remove(mod)
                                 }
-                            )
-                        }
-                    }
-
-                    // 信息区域
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = mod.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-
-                            if (enabled) {
-                                Badge(
-                                    containerColor = MaterialTheme.colorScheme.tertiary
-                                ) {
-                                    Text(
-                                        "已启用",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onTertiary
-                                    )
-                                }
-                            }
-                        }
-
-                        Text(
-                            text = mod.description,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
+                            },
+                            configureCallback
                         )
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = "v${mod.version}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-
-                            Text(
-                                text = "作者: ${mod.author}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                        }
-                    }
-
-                    // 操作区域
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Switch(
-                            checked = enabled,
-                            onCheckedChange = { enabled = it }
-                        )
-
-                        Icon(
-                            imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                            contentDescription = if (expanded) "收起" else "展开",
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                // 展开的详细信息
-                AnimatedVisibility(
-                    visible = expanded,
-                    enter = expandVertically(
-                        animationSpec = tween(durationMillis = 300)
-                    ),
-                    exit = shrinkVertically(
-                        animationSpec = tween(durationMillis = 300)
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 16.dp)
-                    ) {
-                        Divider(
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // 统计数据
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            StatItem(
-                                icon = Icons.Rounded.Download,
-                                title = "下载量",
-                                value = "${mod.downloadCount}"
-                            )
-
-                            StatItem(
-                                icon = Icons.Rounded.Star,
-                                title = "评分",
-                                value = "${mod.rating}"
-                            )
-
-                            StatItem(
-                                icon = Icons.Rounded.Build,
-                                title = "ID",
-                                value = mod.id
-                            )
-                        }
                     }
                 }
             }
@@ -1683,7 +1092,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
     }
 
     @Composable
-    private fun DisabledLoaderSection(loader: ModLoader?) {
+    private fun DisabledLoaderSection(loader: ModLoaderItem?) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -1716,67 +1125,17 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         }
     }
 
-    @Composable
-    private fun StatItem(
-        icon: ImageVector,
-        title: String,
-        value: String
-    ) {
-        Surface(
-            shape = MaterialTheme.shapes.medium,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = title,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
-    }
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun SearchBar(
         query: String,
-        onQueryChange: (String) -> Unit,
-        onSearch: (String) -> Unit,
-        onActiveChange: (Boolean) -> Unit,
-        active: Boolean,
-        modifier: Modifier = Modifier
+        onQueryChange: (String) -> Unit
     ) {
-        androidx.compose.material3.SearchBar(
-            query = query,
-            onQueryChange = onQueryChange,
-            onSearch = onSearch,
-            active = active,
-            onActiveChange = onActiveChange,
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier.fillMaxWidth().padding(4.dp),
             placeholder = { Text("搜索模组...") },
             leadingIcon = {
                 Icon(
@@ -1796,14 +1155,12 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                     }
                 }
             },
-            modifier = modifier,
-            colors = SearchBarDefaults.colors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                dividerColor = Color.Transparent
-            )
-        ) {
-            // 搜索建议（可选）
-        }
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outline
+            ),
+            singleLine = true
+        )
     }
 
     override val title: String

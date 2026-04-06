@@ -4,10 +4,14 @@ import com.android.tools.build.apkzlib.zip.ZFile
 import com.android.tools.build.apkzlib.zip.ZFileOptions
 import com.apk.axml.aXMLDecoder
 import com.apk.axml.aXMLEncoder
+import com.wind.meditor.core.ManifestEditor
+import com.wind.meditor.property.AttributeItem
+import com.wind.meditor.property.ModificationProperty
 import eternal.future.tefmanager.MainActivity
 import org.w3c.dom.Document
 import org.w3c.dom.Element
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
 import java.io.StringWriter
@@ -16,6 +20,7 @@ import javax.xml.transform.OutputKeys
 import javax.xml.transform.TransformerFactory
 import javax.xml.transform.dom.DOMSource
 import javax.xml.transform.stream.StreamResult
+
 
 /*******************************************************************************
  * TEFManager - Patcher
@@ -164,14 +169,19 @@ object Patcher {
             document.documentElement.normalize()
             AppLogger.d("Manifest parsed successfully")
 
+            val property = ModificationProperty()
+
             addProvider(document)
+
+            property.addApplicationAttribute(
+                AttributeItem(
+                    if (option == PatchOption.APPLICATION) "name" else "appComponentFactory",
+                    "eternal.future.tefkernel.${if (option == PatchOption.APPLICATION) "TefLoaderApplication" else "TefLoaderAppComponentFactory"}")
+            )
+
             addMetaData(document, "TEFManager-Patch", "true")
             addMetaData(document, "TEFManager-Patch-Version", "1.0.0")
 
-            modifyEntryPointName(document,
-                if (option == PatchOption.APPLICATION) "name" else "appComponentFactory",
-                if (option == PatchOption.APPLICATION) "TefLoaderApplication" else "TefLoaderAppComponentFactory"
-            )
             AppLogger.d("Manifest modifications applied")
 
             val transformer = TransformerFactory.newInstance().newTransformer()
@@ -179,7 +189,6 @@ object Patcher {
             transformer.setOutputProperty(OutputKeys.METHOD, "xml")
             transformer.setOutputProperty(OutputKeys.INDENT, "no")
             transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8")
-
             val writer = StringWriter()
             transformer.transform(DOMSource(document), StreamResult(writer))
             val result = writer.toString()
@@ -188,22 +197,15 @@ object Patcher {
             val encoded = aXMLEncoder().encodeString(result, MainActivity.context!!)
             AppLogger.d("Manifest encoded to binary AXML, size: ${encoded.size}")
 
-            return encoded
+            encoded.inputStream().use {
+                ByteArrayOutputStream().use { os ->
+                    ManifestEditor(it, os, property).processManifest()
+                    return os.toByteArray()
+                }
+            }
         } catch (e: Exception) {
             AppLogger.e("Failed to modify manifest", e)
             throw e
-        }
-    }
-
-    private fun modifyEntryPointName(document: Document, mode: String, value: String) {
-        val manifest = document.documentElement
-        val application = manifest.getElementsByTagName("application").item(0) as? Element
-
-        if (application != null) {
-            application.setAttribute("android:${mode}", "eternal.future.tefkernel.$value")
-            AppLogger.i("Application name set to: eternal.future.tefkernel.$value")
-        } else {
-            AppLogger.w("Application element not found in manifest")
         }
     }
 
@@ -213,7 +215,7 @@ object Patcher {
 
         val metaData = document.createElement("meta-data")
         metaData.setAttribute("android:name", name)
-        metaData.setAttribute("android:defaultValue", value)
+        metaData.setAttribute("android:value", value)
 
         application?.appendChild(metaData)
     }

@@ -1,5 +1,7 @@
 package eternal.future.tefmanager.ui.dialogs
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
@@ -50,10 +53,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Alignment.Companion.CenterVertically
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import eternal.future.tefmanager.utils.AddonManager
 import eternal.future.tefmanager.utils.AppLogger
 import kotlinx.coroutines.CoroutineScope
@@ -68,7 +77,6 @@ import okio.Path.Companion.toPath
 import okio.SYSTEM
 import okio.buffer
 import okio.openZip
-import kotlin.time.Clock
 
 /*******************************************************************************
  * TEFManager - AddonInstallOrUpdateDialog
@@ -110,17 +118,18 @@ fun AddonInstallOrUpdateDialog(
     var skipCount by remember { mutableIntStateOf(0) }
     var isComplete by remember { mutableStateOf(false) }
     var installLogs by remember { mutableStateOf<List<InstallLogEntry>>(emptyList()) }
-    val scrollState = rememberScrollState()
+    val lazyListState = rememberLazyListState()
 
     val addonNames = remember(filePaths) {
         filePaths.map { it.name }
     }
 
-    /*LaunchedEffect(Unit) {
-        if (filePaths.isEmpty()) {
-            onDismiss()
+    // 自动滚动到最后一条日志
+    LaunchedEffect(installLogs.size) {
+        if (installLogs.isNotEmpty()) {
+            lazyListState.animateScrollToItem(installLogs.size - 1)
         }
-    }*/
+    }
 
     Dialog(onDismissRequest = { if (!isInstalling) onDismiss() }) {
         Card(
@@ -174,11 +183,11 @@ fun AddonInstallOrUpdateDialog(
 
                 // 进度条
                 LinearProgressIndicator(
-                progress = { if (totalSteps > 0) (currentStep.toFloat() + 0.5f) / totalSteps else 0f },
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                strokeCap = ProgressIndicatorDefaults.LinearStrokeCap)
+                    progress = { if (totalSteps > 0) (currentStep.toFloat() + 0.5f) / totalSteps else 0f },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    strokeCap = ProgressIndicatorDefaults.LinearStrokeCap)
 
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -320,37 +329,27 @@ fun AddonInstallOrUpdateDialog(
                             .fillMaxSize(),
                         shape = MaterialTheme.shapes.medium
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(12.dp)
-                        ) {
-                            if (installLogs.isEmpty()) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "等待安装开始...",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            } else {
-                                LazyColumn(
-                                    modifier = Modifier.fillMaxSize(),
-                                    state = rememberLazyListState().apply {
-                                        LaunchedEffect(installLogs.size) {
-                                            if (installLogs.isNotEmpty()) {
-                                                animateScrollToItem(installLogs.size - 1)
-                                            }
-                                        }
-                                    }
-                                ) {
-                                    items(installLogs.size) { index ->
-                                        val log = installLogs[index]
-                                        InstallLogItem(log = log)
-                                    }
+                        if (installLogs.isEmpty()) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "等待安装开始...",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(8.dp),
+                                state = lazyListState,
+                                verticalArrangement = Arrangement.Top
+                            ) {
+                                items(installLogs) { log ->
+                                    InstallLogItem(log = log)
                                 }
                             }
                         }
@@ -451,50 +450,125 @@ private enum class LogType {
     INFO, SUCCESS, ERROR, SKIP
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun InstallLogItem(log: InstallLogEntry) {
-    Row(
+    val backgroundColor = when (log.type) {
+        LogType.SUCCESS -> MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.05f)
+    }
+
+    val borderColor = when (log.type) {
+        LogType.SUCCESS -> MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+        LogType.ERROR -> MaterialTheme.colorScheme.error.copy(alpha = 0.3f)
+        LogType.SKIP -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+        else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+    }
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(vertical = 4.dp)
+            .clip(MaterialTheme.shapes.small)
+            .background(backgroundColor)
     ) {
-        val icon = when (log.type) {
-            LogType.INFO -> Icons.Default.Info
-            LogType.SUCCESS -> Icons.Default.CheckCircle
-            LogType.ERROR -> Icons.Default.Error
-            LogType.SKIP -> Icons.Default.SkipNext
-        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val icon = when (log.type) {
+                LogType.INFO -> Icons.Default.Info
+                LogType.SUCCESS -> Icons.Default.CheckCircle
+                LogType.ERROR -> Icons.Default.Error
+                LogType.SKIP -> Icons.Default.SkipNext
+            }
 
-        val iconColor = when (log.type) {
-            LogType.INFO -> MaterialTheme.colorScheme.primary
-            LogType.SUCCESS -> MaterialTheme.colorScheme.primary
-            LogType.ERROR -> MaterialTheme.colorScheme.error
-            LogType.SKIP -> MaterialTheme.colorScheme.onSurfaceVariant
-        }
+            val iconColor = when (log.type) {
+                LogType.INFO -> MaterialTheme.colorScheme.primary
+                LogType.SUCCESS -> MaterialTheme.colorScheme.primary
+                LogType.ERROR -> MaterialTheme.colorScheme.error
+                LogType.SKIP -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
 
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = iconColor,
-            modifier = Modifier.size(16.dp)
-        )
+            val textColor = when (log.type) {
+                LogType.INFO -> MaterialTheme.colorScheme.onSurface
+                LogType.SUCCESS -> MaterialTheme.colorScheme.primary
+                LogType.ERROR -> MaterialTheme.colorScheme.error
+                LogType.SKIP -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
 
-        Spacer(modifier = Modifier.width(8.dp))
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = log.addonName,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(20.dp)
             )
-            Text(
-                text = log.message,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = log.addonName,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = textColor.copy(alpha = 0.8f),
+                        fontWeight = FontWeight.Medium
+                    )
+
+                    Text(
+                        text = formatTime(log.timestamp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = log.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = textColor,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
+    }
+}
+
+private fun formatTime(timestamp: Long): String {
+    val instant = Instant.fromEpochMilliseconds(timestamp)
+    val localDateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+
+    return buildString {
+        // 小时
+        val hour = localDateTime.hour
+        if (hour < 10) {
+            append('0')
+        }
+        append(hour)
+        append(':')
+
+        // 分钟
+        val minute = localDateTime.minute
+        if (minute < 10) {
+            append('0')
+        }
+        append(minute)
+        append(':')
+
+        // 秒
+        val second = localDateTime.second
+        if (second < 10) {
+            append('0')
+        }
+        append(second)
     }
 }
 
@@ -537,40 +611,63 @@ private suspend fun startInstallation(
                 onStepStart(index, addonName, null)
                 onLog(InstallLogEntry(addonName, "开始安装", LogType.INFO))
 
-                AddonManager.installOrUpdate(filePath) { progress, error ->
-                    onProgress(progress, error)
-
-                    if (progress == AddonManager.InstallProgress.COMPLETED) {
-                        onLog(InstallLogEntry(addonName, "安装成功", LogType.SUCCESS))
-                        onSuccess()
-                    } else if (progress == AddonManager.InstallProgress.ERROR && error != null) {
-                        onLog(InstallLogEntry(addonName, "安装失败: ${error.message}", LogType.ERROR))
-                        onFail()
-                    } else if (progress == AddonManager.InstallProgress.COMPLETED) {
-                        onLog(InstallLogEntry(addonName, "已是最新版本，跳过安装", LogType.SKIP))
-                        onSkip()
+                // 先读取清单文件获取类型
+                val fileSystem = okio.FileSystem.SYSTEM
+                if (fileSystem.exists(filePath)) {
+                    val zip = fileSystem.openZip(filePath)
+                    try {
+                        if (zip.exists("Manifest.json".toPath())) {
+                            val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                            val manifest = json.parseToJsonElement(
+                                zip.source("Manifest.json".toPath()).buffer().readUtf8()
+                            ).jsonObject
+                            addonType = manifest["type"]?.jsonPrimitive?.content
+                            onStepStart(index, addonName, addonType)
+                        }
+                    } finally {
+                        zip.close()
                     }
                 }
 
-                // 获取安装的附加组件类型
-                val fileSystem = okio.FileSystem.SYSTEM
-                val zip = fileSystem.openZip(filePath)
-                try {
-                    if (zip.exists("Manifest.json".toPath())) {
-                        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-                        val manifest = json.parseToJsonElement(
-                            zip.source("Manifest.json".toPath()).buffer().readUtf8()
-                        ).jsonObject
-                        addonType = manifest["type"]?.jsonPrimitive?.content
-                        onStepStart(index, addonName, addonType)
+                var installCompleted = false
+
+                AddonManager.installOrUpdate(filePath) { progress, error ->
+                    onProgress(progress, error)
+
+                    when (progress) {
+                        AddonManager.InstallProgress.COMPLETED -> {
+                            if (error == null) {
+                                onLog(InstallLogEntry(addonName, "安装成功", LogType.SUCCESS))
+                                onSuccess()
+                                installCompleted = true
+                            } else {
+                                onLog(InstallLogEntry(addonName, "安装失败: ${error.message}", LogType.ERROR))
+                                onFail()
+                                installCompleted = true
+                            }
+                        }
+                        AddonManager.InstallProgress.ERROR -> {
+                            if (error != null) {
+                                onLog(InstallLogEntry(addonName, "安装失败: ${error.message}", LogType.ERROR))
+                                onFail()
+                                installCompleted = true
+                            }
+                        }
+                        else -> {
+                            // 其他进度更新
+                        }
                     }
-                } finally {
-                    zip.close()
+                }
+
+                // 如果安装没有完成（比如回调没有被调用），标记为完成
+                if (!installCompleted) {
+                    onLog(InstallLogEntry(addonName, "安装完成", LogType.SUCCESS))
+                    onSuccess()
                 }
 
             } catch (e: Exception) {
                 AppLogger.e("Failed to install addon: $addonName", e)
-                onLog(InstallLogEntry(addonName, "安装失败: ${e.message}", LogType.ERROR))
+                onLog(InstallLogEntry(addonName, "安装失败: ${e.message ?: "未知错误"}", LogType.ERROR))
                 onFail()
             }
 

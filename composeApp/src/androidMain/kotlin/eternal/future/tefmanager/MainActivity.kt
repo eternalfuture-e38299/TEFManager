@@ -39,6 +39,9 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val intent = Intent(this, FileProviderForegroundService::class.java)
             startForegroundService(intent)
+        } else {
+            val intent = Intent(this, FileProviderForegroundService::class.java)
+            startService(intent)
         }
 
         setContent {

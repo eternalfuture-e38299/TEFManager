@@ -36,7 +36,6 @@ import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ElevatedAssistChip
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ElevatedSuggestionChip
@@ -207,7 +206,7 @@ fun ModLoaderItemCard(
 
         try {
             hasCustomIcon = fileSystem.exists(customIconPath)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             iconLoadError = "图标加载失败"
             hasCustomIcon = false
         }
@@ -259,7 +258,7 @@ fun ModLoaderItemCard(
                                 KamelImage(
                                     resource = { asyncPainterResource(data = customIconPath.toFileUrlString()) },
                                     contentDescription = "自定义图标",
-                                    onFailure = { exception ->
+                                    onFailure = { _ ->
                                         iconLoadError = "图标加载失败"
                                     },
                                     modifier = Modifier

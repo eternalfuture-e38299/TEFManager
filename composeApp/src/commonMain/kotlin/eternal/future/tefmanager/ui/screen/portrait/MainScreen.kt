@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -37,7 +38,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -185,8 +185,7 @@ object MainScreen : Screen {
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun ModernBottomNavigation(navigator: Navigator) {
-        val navigationItems = remember {
-            listOf(
+        val navigationItems = listOf(
                 NavigationItem(
                     screen = HomeScreen,
                     selectedIcon = Icons.Rounded.Home,
@@ -213,37 +212,22 @@ object MainScreen : Screen {
                     label = Strings.settings.title
                 )
             )
-        }
+
 
         val currentScreen = navigator.lastItem
 
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(80.dp),
-            tonalElevation = 3.dp,
-            shadowElevation = 4.dp
+        BottomAppBar(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            tonalElevation = 3.dp
         ) {
-            BottomAppBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                tonalElevation = 0.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    navigationItems.forEach { item ->
-                        ModernBottomNavigationItem(
-                            item = item,
-                            isSelected = currentScreen::class == item.screen::class,
-                            onClick = { navigator.push(item.screen) }
-                        )
-                    }
-                }
+            navigationItems.forEach { item ->
+                ModernBottomNavigationItem(
+                    item = item,
+                    isSelected = currentScreen::class == item.screen::class,
+                    onClick = { navigator.push(item.screen) },
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }
@@ -252,7 +236,8 @@ object MainScreen : Screen {
     private fun ModernBottomNavigationItem(
         item: NavigationItem,
         isSelected: Boolean,
-        onClick: () -> Unit
+        onClick: () -> Unit,
+        modifier: Modifier = Modifier
     ) {
         val indicatorHeight by animateDpAsState(
             targetValue = if (isSelected) 3.dp else 0.dp,
@@ -261,14 +246,15 @@ object MainScreen : Screen {
         )
 
         Column(
-            modifier = Modifier,
+            modifier = modifier
+                .fillMaxHeight()
+                .padding(vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
             // 图标容器
             Surface(
-                modifier = Modifier
-                    .size(48.dp),
+                modifier = Modifier.size(48.dp),
                 shape = if (isSelected) RoundedCornerShape(12.dp) else CircleShape,
                 color = if (isSelected) {
                     MaterialTheme.colorScheme.primaryContainer

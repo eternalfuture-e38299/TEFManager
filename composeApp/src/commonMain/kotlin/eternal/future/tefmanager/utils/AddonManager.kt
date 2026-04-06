@@ -514,7 +514,7 @@ object AddonManager {
         }
 
         val config = manifest["config"]?.jsonPrimitive?.content?.toPath()?.let { configPath ->
-            json.decodeFromString<GlobalConfig>(zip.source(configPath).buffer().readUtf8())
+            return@let json.decodeFromString<GlobalConfig>(zip.source(configPath).buffer().readUtf8())
         } ?: GlobalConfig.empty
 
         val modItem = json.decodeFromString<ModItem>(

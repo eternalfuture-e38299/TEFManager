@@ -228,7 +228,7 @@ fun ModuleItemCard(
 
         try {
             hasCustomIcon = fileSystem.exists(customIconPath)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             iconLoadError = "图标加载失败"
             hasCustomIcon = false
         }
@@ -297,7 +297,7 @@ fun ModuleItemCard(
                                             strokeCap = ProgressIndicatorDefaults.CircularDeterminateStrokeCap,
                                         )
                                     },
-                                    onFailure = { exception ->
+                                    onFailure = { _ ->
                                         iconLoadError = "图标加载失败"
                                     },
                                     modifier = Modifier
@@ -724,19 +724,21 @@ fun ModuleItemCard(
                     // 按钮区域
 
                     // 配置按钮（条件显示）
-                    onConfigure?.let { configureCallback ->
-                        OutlinedButton(
-                            onClick = { configureCallback(module) },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = MaterialTheme.shapes.medium
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Settings,
-                                contentDescription = "配置",
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("配置")
+                    if (module.globalConfig.fileType != "null" && module.globalConfig.fileType.isNotEmpty()) {
+                        onConfigure?.let { configureCallback ->
+                            OutlinedButton(
+                                onClick = { configureCallback(module) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = MaterialTheme.shapes.medium
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Settings,
+                                    contentDescription = "配置",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text("配置")
+                            }
                         }
                     }
 
