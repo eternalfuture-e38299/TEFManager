@@ -21,7 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import eternal.future.tefmanager.strings.StringsResource.Strings
-import eternal.future.tefmanager.ui.data.GameManager
+import eternal.future.tefmanager.utils.GameManager
 import eternal.future.tefmanager.ui.dialogs.AddGameDialog
 import eternal.future.tefmanager.ui.model.GameItem
 import eternal.future.tefmanager.utils.GameLauncher

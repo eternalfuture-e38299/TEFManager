@@ -1,14 +1,16 @@
-package eternal.future.tefmanager.ui.data
+package eternal.future.tefmanager.utils
 
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import eternal.future.tefmanager.MainActivity
+import eternal.future.tefmanager.Platform
 import eternal.future.tefmanager.ui.model.GameItem
-import eternal.future.tefmanager.utils.AppLogger
+import java.io.File
 import java.security.MessageDigest
 
 actual object GameManager {
@@ -32,22 +34,43 @@ actual object GameManager {
     }
 
     /**
-     * 加载具有特定元数据的游戏
+     * 加载游戏列表
+     * 根据模块激活状态决定是否需要检查元数据
      */
     fun loadGamesWithMetaData(): MutableList<GameItem> {
         try {
             val packageManager = MainActivity.context!!.packageManager
             val filteredGames = mutableListOf<GameItem>()
 
+            // 检查模块激活状态
+            val moduleActive = checkModuleActiveState()
+            AppLogger.i("Module active state: $moduleActive")
+
             targetPackages.forEach { packageName ->
                 try {
-                    val packageInfo = packageManager.getPackageInfo(packageName, PackageManager.GET_META_DATA)
+                    val packageInfo = packageManager.getPackageInfo(packageName,
+                        PackageManager.GET_META_DATA or PackageManager.GET_ACTIVITIES)
 
-                    // 检查是否包含指定的元数据
-                    if (hasRequiredMetaData(packageInfo.applicationInfo)) {
+                    val shouldInclude: Boolean
+
+                    if (moduleActive) {
+                        // 模块已激活，不需要检查元数据，直接包含
+                        shouldInclude = true
+                        AppLogger.d("Module active, auto-include: $packageName")
+                    } else {
+                        // 模块未激活，需要检查元数据
+                        shouldInclude = hasRequiredMetaData(packageInfo.applicationInfo)
+                        if (shouldInclude) {
+                            AppLogger.d("Module inactive, but has metadata: $packageName")
+                        } else {
+                            AppLogger.d("Module inactive, no metadata: $packageName")
+                        }
+                    }
+
+                    if (shouldInclude) {
                         createGameItemFromPackageInfo(packageInfo)?.let {
                             filteredGames.add(it)
-                            AppLogger.i("Find games that meet the criteria: ${packageInfo.packageName}")
+                            AppLogger.i("Found game: ${packageInfo.packageName} (module active: $moduleActive)")
                         }
                     }
 
@@ -58,15 +81,37 @@ actual object GameManager {
                 }
             }
 
-            // 更新列表
-
-            AppLogger.i("Loaded ${_games.size} games containing TEFManager-Patch metadata")
+            AppLogger.i("Loaded ${filteredGames.size} games. Module active: $moduleActive")
             return filteredGames
+
         } catch (e: Exception) {
-            AppLogger.e("Failed to load game", e)
+            AppLogger.e("Failed to load games", e)
         }
 
         return mutableStateListOf()
+    }
+
+    /**
+     * 检查模块激活状态
+     * 先检查字段，再检查方法
+     */
+    private fun checkModuleActiveState(): Boolean {
+        return try {
+            // 回退到字段检查
+            val isActive = Platform.isAndroidModuleActive
+
+            if (isActive) {
+                AppLogger.d("Module is active (via isAndroidModuleActive field)")
+            } else {
+                AppLogger.d("Module is not active")
+            }
+
+            isActive
+
+        } catch (e: Exception) {
+            AppLogger.e("Failed to check module activation state", e)
+            false
+        }
     }
 
     /**
@@ -74,8 +119,7 @@ actual object GameManager {
      */
     private fun hasRequiredMetaData(applicationInfo: ApplicationInfo?): Boolean {
         val metaData = applicationInfo?.metaData
-        return metaData?.
-        getBoolean(META_DATA_KEY, false) ?: false
+        return metaData?.getBoolean(META_DATA_KEY, false) ?: false
     }
 
     /**
@@ -90,12 +134,12 @@ actual object GameManager {
 
         // 获取版本信息
         val versionName = packageInfo.versionName ?: "1.0"
-        val versionCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P)
+        val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
             packageInfo.longVersionCode.toInt() else packageInfo.versionCode
 
         // 只提取关键信息，不计算整个APK大小
         val apkPath = applicationInfo.sourceDir
-        val file = java.io.File(apkPath)
+        val file = File(apkPath)
 
         // 获取文件基本信息（快速）
         val fileSize = file.length()
@@ -104,7 +148,11 @@ actual object GameManager {
         // 生成基于关键信息的哈希（更快）
         val hash = generateQuickHash(packageInfo.packageName, versionName, versionCode, lastModified, fileSize)
 
-        AppLogger.d("Create GameItem: $appName (${packageInfo.packageName}) v$versionName, size: ${fileSize / 1024}KB")
+        // 检查模块激活状态来决定是否显示额外信息
+        val moduleActive = checkModuleActiveState()
+
+        AppLogger.d("Create GameItem: $appName (${packageInfo.packageName}) v$versionName, " +
+                "size: ${fileSize / 1024}KB, module active: $moduleActive")
 
         return GameItem(
             apkPackName = packageInfo.packageName,
@@ -164,5 +212,10 @@ actual object GameManager {
         AppLogger.d("Refresh game list")
         _games.clear()
         _games.addAll(loadGamesWithMetaData())
+
+        // 记录当前模块状态
+        val moduleActive = checkModuleActiveState()
+        AppLogger.i("Game list refreshed. Module active: $moduleActive, Total games: ${_games.size}")
     }
+
 }

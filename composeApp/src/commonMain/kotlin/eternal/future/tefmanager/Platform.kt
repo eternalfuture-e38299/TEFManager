@@ -5,6 +5,7 @@ import okio.Path
 expect object Platform {
 
     val isAndroid: Boolean
+    var isAndroidModuleActive: Boolean
     val isDesktop: Boolean
     val isIos: Boolean
     val isWeb: Boolean

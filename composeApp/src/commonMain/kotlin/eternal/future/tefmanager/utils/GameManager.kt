@@ -1,8 +1,7 @@
-package eternal.future.tefmanager.ui.data
+package eternal.future.tefmanager.utils
 
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import eternal.future.tefmanager.ui.model.GameItem
-import kotlinx.coroutines.flow.StateFlow
 
 /*******************************************************************************
  * TEFManager - GameManager

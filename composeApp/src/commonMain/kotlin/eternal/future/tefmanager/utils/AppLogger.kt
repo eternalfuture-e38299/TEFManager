@@ -12,8 +12,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
@@ -24,7 +22,9 @@ import okio.Path.Companion.toPath
 import okio.SYSTEM
 import okio.buffer
 import okio.use
+import kotlin.concurrent.Volatile
 import kotlin.time.Clock.System.now
+import kotlin.time.Duration.Companion.milliseconds
 
 /*******************************************************************************
  * TEFManager - AppLogger
@@ -49,22 +49,20 @@ import kotlin.time.Clock.System.now
  *******************************************************************************/
 
 object AppLogger {
-
     private const val TAG = "TEFManager"
-
+    @Volatile
     private var isInitialized = false
-
-    private var enableFileLogging = false
+    @Volatile private var enableFileLogging = false
 
     private var logDirectory: String? = null
     private var kernelLogDirectory: String? = null
 
-    private var currentLogFile: Path? = null
+    // 使用 @Volatile 保证可见性，替代 Mutex 的部分功能
+    @Volatile private var currentLogFile: Path? = null
 
     private lateinit var logger: Logger
     private val fileSystem = FileSystem.SYSTEM
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val fileCheckLock = Mutex()
 
     // 同步初始化（适用于应用启动时）
     fun initializeSync(
@@ -77,17 +75,14 @@ object AppLogger {
 
         enableFileLogging = enableFileLog
         logDirectory = logDir
-        kernelLogDirectory = "${logDir}_kernel" // 内核日志目录
+        kernelLogDirectory = "${logDir}_kernel"
 
-        // 配置 Kermit Logger
         val config = StaticConfig(
             minSeverity = Severity.Verbose,
             logWriterList = listOf(platformLogWriter())
         )
-
         logger = Logger(config, TAG)
 
-        // 同步初始化文件日志目录
         if (enableFileLogging) {
             runBlocking {
                 initLogDirectories()
@@ -98,329 +93,174 @@ object AppLogger {
 
         isInitialized = true
         println("Logger initialized synchronously - FileLog: $enableFileLog")
-
-        // 记录初始化完成
         logInternal("I", "Logger initialized - FileLog: $enableFileLog")
     }
 
     private suspend fun initLogDirectories() = withContext(Dispatchers.IO) {
         try {
-            // 初始化应用日志目录
             val appDir = logDirectory?.toPath() ?: "logs".toPath()
             if (!fileSystem.exists(appDir)) {
                 fileSystem.createDirectories(appDir)
-                println("Created app log directory: $appDir")
             }
-
-            // 测试写入权限
             val testFile = appDir / "test.log"
             fileSystem.sink(testFile).use { sink ->
                 sink.buffer().writeUtf8("Test log entry\n").flush()
             }
             fileSystem.delete(testFile)
-            println("Log directory test passed")
         } catch (e: Exception) {
             println("Log directory initialization failed: ${e.message}")
-            e.printStackTrace()
         }
     }
 
     private suspend fun initializeLogFile() = withContext(Dispatchers.IO) {
         if (!enableFileLogging) return@withContext
-
         try {
             val dir = logDirectory?.toPath() ?: "logs".toPath()
-            if (!fileSystem.exists(dir)) {
-                return@withContext
-            }
+            if (!fileSystem.exists(dir)) return@withContext
 
-            val now = now()
-            val localDateTime = now.toLocalDateTime(TimeZone.currentSystemDefault())
-
-            // 固定文件名（应用启动时间）
+            val time = now().toLocalDateTime(TimeZone.currentSystemDefault())
+            // 使用 StringBuilder 拼接文件名，避免格式化函数和冒号
             val dateString = buildString {
-                append("${localDateTime.year}-")
-                append(localDateTime.month.number.toString().padStart(2, '0'))
-                append("-")
-                append(localDateTime.day.toString().padStart(2, '0'))
-                append("-")
-                append(localDateTime.hour.toString().padStart(2, '0'))
-                append(":")
-                append(localDateTime.minute.toString().padStart(2, '0'))
-                append(":")
-                append(localDateTime.second.toString().padStart(2, '0'))
+                append(time.year).append('-')
+                append(time.month.number.toString().padStart(2, '0')).append('-')
+                append(time.day.toString().padStart(2, '0')).append('_')
+                append(time.hour.toString().padStart(2, '0')).append('-')
+                append(time.minute.toString().padStart(2, '0')).append('-')
+                append(time.second.toString().padStart(2, '0'))
             }
 
-            currentLogFile = dir / "app_${dateString}.log"
-            println("Log file initialized: $currentLogFile")
+            currentLogFile = dir / "app_$dateString.log"
         } catch (e: Exception) {
             println("Error initializing log file: ${e.message}")
         }
     }
 
-    private suspend fun getCurrentLogFile(): Path? = withContext(Dispatchers.IO) {
-        if (!enableFileLogging) return@withContext null
-        return@withContext currentLogFile
-    }
-
     private fun getCurrentTime(): String {
-        try {
-            val now = now()
-            val time = now.toLocalDateTime(TimeZone.currentSystemDefault())
-
-            val month = time.month.number.toString().padStart(2, '0')
-            val day = time.day.toString().padStart(2, '0')
-            val hour = time.hour.toString().padStart(2, '0')
-            val minute = time.minute.toString().padStart(2, '0')
-            val second = time.second.toString().padStart(2, '0')
-            val millis = (time.nanosecond / 1_000_000).toString().padStart(3, '0')
-
-            return "$month-$day $hour:$minute:$second.$millis"
-        } catch (_: Exception) {
-            return "00-00 00:00:00.000"
+        val time = now().toLocalDateTime(TimeZone.currentSystemDefault())
+        return buildString {
+            append(time.month.number.toString().padStart(2, '0')).append('-')
+            append(time.day.toString().padStart(2, '0')).append(' ')
+            append(time.hour.toString().padStart(2, '0')).append(':')
+            append(time.minute.toString().padStart(2, '0')).append(':')
+            append(time.second.toString().padStart(2, '0')).append('.')
+            append((time.nanosecond / 1_000_000).toString().padStart(3, '0'))
         }
     }
 
-    private suspend fun writeToFile(level: String, tag: String, message: String, throwable: Throwable? = null) {
+    private suspend fun writeToFile(level: String, tag: String, message: String, throwable: Throwable?) {
         if (!enableFileLogging || !isInitialized) return
-
-        // 检查日志内容是否为空
         if (message.isBlank() && throwable == null) return
 
-        try {
-            // 每次写入时都重新获取当前日志文件路径
-            val logFile = getCurrentLogFile() ?: return
+        val file = currentLogFile ?: return
 
-            val timeStr = getCurrentTime()
-            var logLine = "$timeStr $level/$tag: $message"
-
-            throwable?.let {
-                logLine += "\n${it.stackTraceToString()}"
+        val logLine = buildString {
+            append(getCurrentTime()).append(' ')
+            append(level).append('/').append(tag).append(": ")
+            append(message)
+            if (throwable != null) {
+                append('\n').append(throwable.stackTraceToString())
             }
-            logLine += "\n"
+            append('\n')
+        }
 
-            // 使用 FileHandle 实现追加写入
-            fileSystem.openReadWrite(logFile).use { handle ->
-                handle.appendingSink().use { sink ->
-                    sink.buffer().writeUtf8(logLine).flush()
+        try {
+            fileSystem.openReadWrite(file).use { handle ->
+                handle.appendingSink().buffer().use { sink ->
+                    sink.writeUtf8(logLine).flush()
                 }
             }
-
-            // 检查日志文件大小限制
+            // 无锁检查大小
             checkLogFileSize()
-
         } catch (e: Exception) {
+            // 防止刷屏，仅打印一次
             println("Write Log To File Failed: ${e.message}")
         }
     }
 
     private fun logInternal(level: String, message: String, throwable: Throwable? = null) {
         if (!isInitialized) {
-            println("[$level] Logger not initialized yet: $message: $throwable")
+            println("[$level] Logger not initialized yet: $message")
             return
         }
+        if (message.isBlank() && throwable == null) return
 
-        // 检查日志内容是否为空
-        if (message.isBlank() && throwable == null) {
-            return
-        }
-
-        // 调用 Kermit logger
         when (level) {
             "V" -> logger.v { message }
             "D" -> logger.d { message }
             "I" -> logger.i { message }
-            "W" -> logger.w { message }
+            "W" -> logger.w(throwable) { message }
             "E" -> logger.e(throwable) { message }
         }
-
-        // 写入文件
-        scope.launch {
-            writeToFile(level, TAG, message, throwable)
-        }
+        scope.launch { writeToFile(level, TAG, message, throwable) }
     }
 
-    fun v(message: String, throwable: Throwable? = null) {
-        logInternal("V", message, throwable)
-    }
+    fun v(message: String) = logInternal("V", message)
+    fun d(message: String) = logInternal("D", message)
+    fun i(message: String) = logInternal("I", message)
+    fun w(message: String, throwable: Throwable? = null) = logInternal("W", message, throwable)
+    fun e(message: String, throwable: Throwable? = null) = logInternal("E", message, throwable)
 
-    fun d(message: String, throwable: Throwable? = null) {
-        logInternal("D", message, throwable)
-    }
-
-    fun i(message: String, throwable: Throwable? = null) {
-        logInternal("I", message, throwable)
-    }
-
-    fun w(message: String, throwable: Throwable? = null) {
-        logInternal("W", message, throwable)
-    }
-
-    fun e(message: String, throwable: Throwable? = null) {
-        logInternal("E", message, throwable)
-    }
-
-    // 日志管理功能
-    suspend fun cleanupOldLogs() = withContext(Dispatchers.IO) {
-        try {
-            val cleanTimeMinutes = ConfigurationState.autoCleanTime
-
-            // 计算截止时间的时间戳（毫秒）
-            val cutoffTimestamp = now().toEpochMilliseconds() -
-                    (cleanTimeMinutes * 60 * 1000L)
-
-            // 清理应用日志
-            logDirectory?.toPath()?.let { dir ->
-                if (fileSystem.exists(dir)) {
-                    fileSystem.list(dir).forEach { file ->
-                        val fileMetadata = fileSystem.metadata(file)
-                        val fileTime = fileMetadata.lastModifiedAtMillis
-
-                        if (fileTime != null) {
-                            if (fileTime < cutoffTimestamp) {
-                                fileSystem.delete(file)
-                                d("Deleted old app log file: $file")
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 清理内核日志
-            kernelLogDirectory?.toPath()?.let { dir ->
-                if (fileSystem.exists(dir)) {
-                    fileSystem.list(dir).forEach { file ->
-                        val fileMetadata = fileSystem.metadata(file)
-                        val fileTime = fileMetadata.lastModifiedAtMillis
-                        if (fileTime != null) {
-                            if (fileTime < cutoffTimestamp) {
-                                fileSystem.delete(file)
-                                d("Deleted old kernel log file: $file")
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            e("Failed to cleanup old logs", e)
-        }
-    }
-
+    // 无锁清理：通过过滤 currentLogFile 实现
     private suspend fun checkLogFileSize() = withContext(Dispatchers.IO) {
-        fileCheckLock.withLock {  // 添加互斥锁
-            try {
-                val maxFiles = ConfigurationState.maxAppLogFiles
-                val maxSizeMB = ConfigurationState.maxAppLogSizeMB
-                val maxSizeBytes = maxSizeMB * 1024 * 1024L
+        val dir = logDirectory?.toPath() ?: return@withContext
+        if (!fileSystem.exists(dir)) return@withContext
 
-                logDirectory?.toPath()?.let { dir ->
-                    if (fileSystem.exists(dir)) {
-                        // 先获取所有文件列表
-                        val files = fileSystem.list(dir).sortedBy {
-                            try {
-                                fileSystem.metadata(it).lastModifiedAtMillis
-                            } catch (e: Exception) {
-                                Long.MAX_VALUE  // 文件不存在时排到最后
-                            }
-                        }
+        val maxFiles = ConfigurationState.maxAppLogFiles
+        val maxSizeBytes = ConfigurationState.maxAppLogSizeMB * 1024 * 1024L
+        val current = currentLogFile // 取快照，避免并发修改
 
-                        // 检查文件数量限制
-                        if (files.size > maxFiles) {
-                            val filesToDelete = files.take(files.size - maxFiles)
-                            filesToDelete.forEach { file ->
-                                try {
-                                    if (fileSystem.exists(file)) {  // 再次检查文件是否存在
-                                        fileSystem.delete(file)
-                                        d("Deleted app log file due to count limit: $file")
-                                    }
-                                } catch (e: Exception) {
-                                    w("Failed to delete file $file: ${e.message}")
-                                }
-                            }
-                        }
+        val files = fileSystem.list(dir)
+            .filter { it != current } // 核心：排除正在写的文件
+            .sortedByDescending { fileSystem.metadata(it).lastModifiedAtMillis ?: 0L }
 
-                        // 检查总大小限制
-                        var totalSize = 0L
-                        val validFiles = mutableListOf<Path>()
+        // 数量控制
+        if (files.size > maxFiles) {
+            files.drop(maxFiles).forEach { file ->
+                runCatching { fileSystem.delete(file) }
+            }
+        }
 
-                        files.forEach { file ->
-                            try {
-                                if (fileSystem.exists(file)) {  // 检查文件是否存在
-                                    val metadata = fileSystem.metadata(file)
-                                    totalSize += metadata.size ?: 0
-                                    validFiles.add(file)
-                                }
-                            } catch (e: Exception) {
-                                w("Failed to get metadata for $file: ${e.message}")
-                            }
-                        }
-
-                        if (totalSize > maxSizeBytes) {
-                            var sizeToRemove = totalSize - maxSizeBytes
-                            validFiles.forEach { file ->
-                                if (sizeToRemove > 0) {
-                                    try {
-                                        if (fileSystem.exists(file)) {
-                                            val fileSize = fileSystem.metadata(file).size ?: 0
-                                            fileSystem.delete(file)
-                                            sizeToRemove -= fileSize
-                                            d("Deleted app log file due to size limit: $file")
-                                        }
-                                    } catch (e: Exception) {
-                                        w("Failed to delete file $file: ${e.message}")
-                                    }
-                                }
-                            }
-                        }
-                    }
+        // 大小控制
+        var totalSize = files.sumOf { fileSystem.metadata(it).size ?: 0L }
+        if (totalSize > maxSizeBytes) {
+            var remainingFiles = files
+            while (totalSize > maxSizeBytes && remainingFiles.isNotEmpty()) {
+                val file = remainingFiles.last()
+                val size = fileSystem.metadata(file).size ?: 0L
+                if (runCatching { fileSystem.delete(file) }.isSuccess) {
+                    totalSize -= size
                 }
-            } catch (e: Exception) {
-                e("Failed to check log file size", e)
+                remainingFiles = remainingFiles.dropLast(1)
             }
         }
     }
 
     fun clearAllLogs() {
         try {
-            // 清除应用日志
-            logDirectory?.toPath()?.let { dir ->
-                if (fileSystem.exists(dir)) {
-                    fileSystem.deleteRecursively(dir)
-                    fileSystem.createDirectories(dir)
-                    i("Cleared all app logs")
-                }
+            logDirectory?.toPath()?.let {
+                if (fileSystem.exists(it)) fileSystem.deleteRecursively(it)
+                fileSystem.createDirectories(it)
             }
-
-            // 清除内核日志
-            kernelLogDirectory?.toPath()?.let { dir ->
-                if (fileSystem.exists(dir)) {
-                    fileSystem.deleteRecursively(dir)
-                    if (ConfigurationState.kernelLogEnabled) {
-                        fileSystem.createDirectories(dir)
-                    }
-                    i("Cleared all kernel logs")
-                }
+            kernelLogDirectory?.toPath()?.let {
+                if (fileSystem.exists(it)) fileSystem.deleteRecursively(it)
+                if (ConfigurationState.kernelLogEnabled) fileSystem.createDirectories(it)
             }
         } catch (e: Exception) {
-            e("Failed to clear logs", e)
+            println("Failed to clear logs: ${e.message}")
         }
     }
 
     private fun setupLogCleanup() {
-        // 定期清理旧日志
         scope.launch {
-            while (true) {
-                kotlinx.coroutines.delay(60 * 60 * 1000L) // 每小时检查一次
-                if (ConfigurationState.autoCleanLogs) {
-                    cleanupOldLogs()
-                }
+            kotlinx.coroutines.delay((60 * 60 * 1000L).milliseconds)
+            if (ConfigurationState.autoCleanLogs) {
+                runCatching { checkLogFileSize() }
             }
         }
     }
 
     fun close() {
         try {
-            i("Closing logger...")
             scope.cancel()
             isInitialized = false
         } catch (e: Exception) {

@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
@@ -37,13 +36,13 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Translate
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -52,6 +51,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,7 +65,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
-import kotlinx.coroutines.CoroutineScope
+import eternal.future.tefmanager.ui.screen.shared.*
 import kotlinx.coroutines.launch
 
 /*******************************************************************************
@@ -100,39 +100,12 @@ data class ResourcePack(
 )
 
 object ResourcePackScreen : Screen, MainScreen.TitledScreen {
-
-    // 模拟数据
-    private val languagePacks = listOf(
-        ResourcePack("zh_cn", "简体中文", "官方中文语言包", "1.0.0", "language", true),
-        ResourcePack("en_us", "English", "Default English", "1.0.0", "language", true),
-        ResourcePack("ja_jp", "日本語", "Japanese localization", "1.0.0", "language"),
-        ResourcePack("ko_kr", "한국어", "Korean localization", "1.0.0", "language"),
-    )
-
-    private val texturePacks = listOf(
-        ResourcePack("default", "默认材质", "原始游戏材质", "1.0.0", "texture", true),
-        ResourcePack("faithful", "Faithful 32x", "高清忠实材质", "1.0.0", "texture"),
-        ResourcePack("soartex", "Soartex Fanver", "粉丝制作的Soartex", "1.0.0", "texture"),
-    )
-
-    private val fontPacks = listOf(
-        ResourcePack("microsoft", "微软雅黑", "清晰的中文字体", "1.0.0", "font", true),
-        ResourcePack("noto", "Noto Sans", "谷歌字体", "1.0.0", "font"),
-        ResourcePack("minecraft", "Minecraft Font", "原版字体", "1.0.0", "font"),
-    )
-
-    private val musicPacks = listOf(
-        ResourcePack("vanilla", "原版音乐", "默认游戏音乐", "1.0.0", "music", true),
-        ResourcePack("c418", "C418全集", "所有C418曲目", "1.0.0", "music"),
-        ResourcePack("custom", "自定义音乐", "玩家自制音乐", "1.0.0", "music"),
-    )
-
     data class ResourceCategory(
         val id: String,
         val title: String,
         val icon: ImageVector,
         val iconFilled: ImageVector,
-        val packs: List<ResourcePack>
+        val screen: Screen
     )
 
     @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
@@ -145,28 +118,28 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
                     title = "语言包",
                     icon = Icons.Outlined.Translate,
                     iconFilled = Icons.Rounded.Translate,
-                    packs = languagePacks
+                    screen = LanguagePackScreen
                 ),
                 ResourceCategory(
                     id = "texture",
                     title = "材质包",
                     icon = Icons.Outlined.Palette,
                     iconFilled = Icons.Rounded.Palette,
-                    packs = texturePacks
+                    screen = TexturePackScreen
                 ),
                 ResourceCategory(
                     id = "font",
                     title = "字体包",
                     icon = Icons.Outlined.TextFields,
                     iconFilled = Icons.Rounded.TextFields,
-                    packs = fontPacks
+                    screen = FontPackScreen
                 ),
                 ResourceCategory(
                     id = "music",
                     title = "音乐包",
                     icon = Icons.Outlined.MusicNote,
                     iconFilled = Icons.Rounded.MusicNote,
-                    packs = musicPacks
+                    screen = MusicPackScreen
                 )
             )
         }
@@ -182,74 +155,50 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
             selectedTab = pagerState.currentPage
         }
 
-        // 所有资源包
-        val allPacks = categories.flatMap { it.packs }
+        Scaffold(
+            modifier = Modifier.fillMaxSize()
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                // 搜索栏
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 20.dp)
+                ) {
+                    SearchBar(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        onSearch = { query ->
+                            searchQuery = query
+                        },
+                        onActiveChange = { searchActive = it },
+                        active = searchActive,
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
-        // 计算搜索结果
-        val searchResults = remember(searchQuery, selectedTab, categories) {
-            if (searchQuery.isEmpty()) {
-                SearchResult(emptyList(), emptyList())
-            } else {
-                val query = searchQuery.lowercase()
-                val currentCategory = categories[selectedTab]
+                    Spacer(modifier = Modifier.height(20.dp))
 
-                // 在当前分类中搜索
-                val categoryResults = currentCategory.packs.filter { pack ->
-                    pack.name.lowercase().contains(query) ||
-                            pack.description.lowercase().contains(query) ||
-                            pack.id.lowercase().contains(query)
-                }
-
-                // 在所有分类中搜索
-                val allResults = allPacks.filter { pack ->
-                    pack.name.lowercase().contains(query) ||
-                            pack.description.lowercase().contains(query) ||
-                            pack.id.lowercase().contains(query)
-                }.distinctBy { it.id }
-
-                SearchResult(categoryResults, allResults)
-            }
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp)
-        ) {
-            // 搜索栏
-            SearchBar(
-                query = searchQuery,
-                onQueryChange = { searchQuery = it },
-                onSearch = { query ->
-                    searchQuery = query
-                },
-                onActiveChange = { searchActive = it },
-                active = searchActive,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            if (searchQuery.isEmpty()) {
-                // 正常标签页模式
-                NormalTabView(
-                    categories = categories,
-                    selectedTab = selectedTab,
-                    pagerState = pagerState,
-                    coroutineScope = coroutineScope,
-                    onTabSelected = { index ->
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(index)
-                        }
+                    if (searchQuery.isEmpty()) {
+                        // 正常标签页模式
+                        NormalTabView(
+                            categories = categories,
+                            selectedTab = selectedTab,
+                            pagerState = pagerState,
+                            onTabSelected = { index ->
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(index)
+                                }
+                            }
+                        )
+                    } else {
+                        // 搜索模式
+                        SearchResultsView()
                     }
-                )
-            } else {
-                // 搜索模式
-                SearchResultsView(
-                    categories = categories,
-                    selectedTab = selectedTab,
-                    searchResults = searchResults
-                )
+                }
             }
         }
     }
@@ -265,7 +214,6 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
         categories: List<ResourceCategory>,
         selectedTab: Int,
         pagerState: PagerState,
-        coroutineScope: CoroutineScope,
         onTabSelected: (Int) -> Unit
     ) {
         Column(
@@ -341,8 +289,6 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
-
             // 水平分页器
             HorizontalPager(
                 state = pagerState,
@@ -351,63 +297,85 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
                     .weight(1f)
             ) { page ->
                 val category = categories[page]
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp, vertical = 20.dp)
+                ) {
+                    // 分类标题和添加按钮
+                    CategoryHeader(
+                        category = category,
+                        selectedTab = page
+                    )
 
-                ResourcePackList(
-                    category = category,
-                    packs = category.packs
-                )
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // 资源包列表
+                    categories[page].screen.Content()
+                }
             }
         }
     }
 
     @Composable
-    private fun SearchResultsView(
-        categories: List<ResourceCategory>,
-        selectedTab: Int,
-        searchResults: SearchResult
+    private fun CategoryHeader(
+        category: ResourceCategory,
+        selectedTab: Int
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = category.iconFilled,
+                contentDescription = null,
+                modifier = Modifier.size(28.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+
+            Text(
+                text = category.title,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // 添加按钮
+            FilledTonalButton(
+                onClick = {
+                    // 根据当前分类执行不同的添加逻辑
+                    when (selectedTab) {
+                        0 -> { /* 添加语言包 */ }
+                        1 -> { /* 添加材质包 */ }
+                        2 -> { /* 添加字体包 */ }
+                        3 -> { /* 添加音乐包 */ }
+                    }
+                },
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("添加${category.title}")
+            }
+        }
+    }
+
+    @Composable
+    private fun SearchResultsView() {
         Surface(
             modifier = Modifier.fillMaxSize(),
             shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surfaceContainerLowest,
             tonalElevation = 2.dp
         ) {
-            if (searchResults.allResults.isEmpty() && searchResults.categoryResults.isEmpty()) {
-                // 无搜索结果
-                NoSearchResults()
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp)
-                ) {
-                    // 当前分类搜索结果
-                    if (searchResults.categoryResults.isNotEmpty()) {
-                        item {
-                            SearchResultSection(
-                                title = "在当前分类中 (${categories[selectedTab].title})",
-                                icon = categories[selectedTab].iconFilled,
-                                packs = searchResults.categoryResults,
-                                categories = categories
-                            )
-                        }
-                    }
-
-                    // 所有分类搜索结果
-                    if (searchResults.allResults.isNotEmpty() &&
-                        searchResults.allResults != searchResults.categoryResults) {
-                        item {
-                            SearchResultSection(
-                                title = "在所有分类中",
-                                icon = Icons.Rounded.Search,
-                                packs = searchResults.allResults,
-                                categories = categories
-                            )
-                        }
-                    }
-                }
-            }
+            NoSearchResults()
         }
     }
 
@@ -441,286 +409,6 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
         }
     }
 
-    @Composable
-    private fun ResourcePackList(
-        category: ResourceCategory,
-        packs: List<ResourcePack>
-    ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 8.dp),
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surfaceContainerLowest,
-            tonalElevation = 2.dp
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(20.dp)
-            ) {
-                // 分类标题
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Icon(
-                        imageVector = category.iconFilled,
-                        contentDescription = null,
-                        modifier = Modifier.size(28.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-
-                    Text(
-                        text = category.title,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    Text(
-                        text = "${packs.size} 个项目",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    // 添加按钮
-                    FilledTonalButton(
-                        onClick = { /* 添加资源包 */ },
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Add,
-                            contentDescription = "添加",
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("添加")
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // 资源包列表
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(packs) { pack ->
-                        ResourcePackCard(
-                            pack = pack,
-                            category = category,
-                            onToggle = { /* 切换启用状态 */ },
-                            onDelete = { /* 删除资源包 */ }
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    @Composable
-    private fun SearchResultSection(
-        title: String,
-        icon: ImageVector,
-        packs: List<ResourcePack>,
-        categories: List<ResourceCategory>
-    ) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // 标题
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Spacer(Modifier.weight(1f))
-
-                Text(
-                    text = "${packs.size} 个结果",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // 搜索结果列表
-            Column(
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                packs.forEach { pack ->
-                    val category = categories.find { it.id == pack.category }
-                        ?: categories.first()
-
-                    ResourcePackCard(
-                        pack = pack,
-                        category = category,
-                        onToggle = { /* 切换启用状态 */ },
-                        onDelete = { /* 删除资源包 */ }
-                    )
-                }
-            }
-        }
-    }
-
-    @OptIn(ExperimentalMaterial3Api::class)
-    @Composable
-    private fun ResourcePackCard(
-        pack: ResourcePack,
-        category: ResourceCategory,
-        onToggle: (ResourcePack) -> Unit,
-        onDelete: (ResourcePack) -> Unit
-    ) {
-        Card(
-            onClick = { /* 查看详情 */ },
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium,
-            colors = CardDefaults.cardColors(
-                containerColor = if (pack.enabled) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surface
-                }
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // 图标区域
-                Surface(
-                    shape = CircleShape,
-                    color = if (pack.enabled) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    },
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = category.iconFilled,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp),
-                            tint = if (pack.enabled) {
-                                MaterialTheme.colorScheme.onPrimary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                        )
-                    }
-                }
-
-                // 信息区域
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = pack.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-
-                        if (pack.enabled) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.tertiary,
-                                modifier = Modifier.size(6.dp)
-                            ) {}
-                        }
-                    }
-
-                    Text(
-                        text = pack.description,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = "版本 ${pack.version}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-
-                        Text(
-                            text = "ID: ${pack.id}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = category.title,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                }
-
-                // 操作按钮区域
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // 开关按钮
-                    Switch(
-                        checked = pack.enabled,
-                        onCheckedChange = { onToggle(pack) }
-                    )
-
-                    // 删除按钮
-                    IconButton(
-                        onClick = { onDelete(pack) },
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Delete,
-                            contentDescription = "删除",
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-            }
-        }
-    }
-
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun SearchBar(
@@ -737,7 +425,7 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
             color = MaterialTheme.colorScheme.surfaceContainerLowest,
             tonalElevation = 2.dp
         ) {
-            androidx.compose.material3.SearchBar(
+            SearchBar(
                 query = query,
                 onQueryChange = onQueryChange,
                 onSearch = onSearch,
@@ -771,6 +459,7 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
             }
         }
     }
+
 
     @Composable
     private fun ScrollableTabRow(

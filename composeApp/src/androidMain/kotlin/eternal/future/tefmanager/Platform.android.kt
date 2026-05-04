@@ -10,6 +10,8 @@ import java.util.Locale
 
 actual object Platform {
     actual val isAndroid: Boolean = true
+    @JvmStatic
+    actual var isAndroidModuleActive: Boolean = false
     actual val isDesktop: Boolean = false
     actual val isIos: Boolean = false
     actual val isWeb: Boolean = false

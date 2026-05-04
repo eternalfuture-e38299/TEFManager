@@ -1,21 +1,14 @@
 package eternal.future.tefmanager.ui.screen.portrait
 
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Palette
@@ -26,11 +19,13 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.Widgets
-import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -45,7 +40,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.annotation.InternalVoyagerApi
 import cafe.adriel.voyager.core.screen.Screen
@@ -163,11 +157,9 @@ object MainScreen : Screen {
                     }
                 },
                 bottomBar = {
-                    // 竖屏版本使用底部导航栏
                     ModernBottomNavigation(navigator = navigator)
                 }
             ) { paddingValues ->
-                // 主内容区域 - 竖屏版本全屏显示
                 Surface(
                     modifier = Modifier
                         .fillMaxSize()
@@ -175,133 +167,84 @@ object MainScreen : Screen {
                     color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 0.dp
                 ) {
-                    // 使用 SlideTransition 添加页面切换动画
                     SlideTransition(navigator = navigator)
                 }
             }
         }
     }
 
-    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun ModernBottomNavigation(navigator: Navigator) {
         val navigationItems = listOf(
-                NavigationItem(
-                    screen = HomeScreen,
-                    selectedIcon = Icons.Rounded.Home,
-                    unselectedIcon = Icons.Outlined.Home,
-                    label = Strings.home.title,
-                    isPrimary = true
-                ),
-                NavigationItem(
-                    screen = ResourcePackScreen,
-                    selectedIcon = Icons.Rounded.Palette,
-                    unselectedIcon = Icons.Outlined.Palette,
-                    label = "资源包"
-                ),
-                NavigationItem(
-                    screen = ManagerScreen,
-                    selectedIcon = Icons.Rounded.Widgets,
-                    unselectedIcon = Icons.Outlined.Widgets,
-                    label = "管理"
-                ),
-                NavigationItem(
-                    screen = SettingsScreen,
-                    selectedIcon = Icons.Rounded.Settings,
-                    unselectedIcon = Icons.Outlined.Settings,
-                    label = Strings.settings.title
-                )
+            NavigationItem(
+                screen = HomeScreen,
+                selectedIcon = Icons.Rounded.Home,
+                unselectedIcon = Icons.Outlined.Home,
+                label = Strings.home.title,
+                isPrimary = true
+            ),
+            NavigationItem(
+                screen = ResourcePackScreen,
+                selectedIcon = Icons.Rounded.Palette,
+                unselectedIcon = Icons.Outlined.Palette,
+                label = "资源包"
+            ),
+            NavigationItem(
+                screen = ManagerScreen,
+                selectedIcon = Icons.Rounded.Widgets,
+                unselectedIcon = Icons.Outlined.Widgets,
+                label = "管理"
+            ),
+            NavigationItem(
+                screen = SettingsScreen,
+                selectedIcon = Icons.Rounded.Settings,
+                unselectedIcon = Icons.Outlined.Settings,
+                label = Strings.settings.title
             )
-
+        )
 
         val currentScreen = navigator.lastItem
+        val selectedIndex = navigationItems.indexOfFirst { it.screen::class == currentScreen::class }
+            .coerceAtLeast(0)
 
-        BottomAppBar(
+        NavigationBar(
             containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.onSurface,
             tonalElevation = 3.dp
         ) {
-            navigationItems.forEach { item ->
-                ModernBottomNavigationItem(
-                    item = item,
-                    isSelected = currentScreen::class == item.screen::class,
-                    onClick = { navigator.push(item.screen) },
+            navigationItems.forEachIndexed { index, item ->
+                val selected = index == selectedIndex
+
+                NavigationBarItem(
+                    selected = selected,
+                    onClick = {
+                        if (!selected) {
+                            navigator.push(item.screen)
+                        }
+                    },
+                    icon = {
+                        Icon(
+                            imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
+                            contentDescription = item.label,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    },
+                    label = {
+                        Text(
+                            text = item.label,
+                            maxLines = 1,
+                            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal
+                        )
+                    },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        indicatorColor = MaterialTheme.colorScheme.primaryContainer
+                    ),
                     modifier = Modifier.weight(1f)
                 )
             }
-        }
-    }
-
-    @Composable
-    private fun ModernBottomNavigationItem(
-        item: NavigationItem,
-        isSelected: Boolean,
-        onClick: () -> Unit,
-        modifier: Modifier = Modifier
-    ) {
-        val indicatorHeight by animateDpAsState(
-            targetValue = if (isSelected) 3.dp else 0.dp,
-            animationSpec = tween(durationMillis = 200),
-            label = "indicatorAnimation"
-        )
-
-        Column(
-            modifier = modifier
-                .fillMaxHeight()
-                .padding(vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            // 图标容器
-            Surface(
-                modifier = Modifier.size(48.dp),
-                shape = if (isSelected) RoundedCornerShape(12.dp) else CircleShape,
-                color = if (isSelected) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    Color.Transparent
-                },
-                onClick = onClick,
-                tonalElevation = if (isSelected) 1.dp else 0.dp
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
-                        contentDescription = item.label,
-                        modifier = Modifier.size(24.dp),
-                        tint = if (isSelected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    )
-                }
-            }
-
-            // 标签文字
-            Text(
-                text = item.label,
-                style = MaterialTheme.typography.labelSmall,
-                color = if (isSelected) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                textAlign = TextAlign.Center,
-                maxLines = 1
-            )
-
-            // 底部指示器
-            Surface(
-                modifier = Modifier
-                    .width(24.dp)
-                    .height(indicatorHeight),
-                shape = CircleShape,
-                color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
-            ) {}
         }
     }
 }

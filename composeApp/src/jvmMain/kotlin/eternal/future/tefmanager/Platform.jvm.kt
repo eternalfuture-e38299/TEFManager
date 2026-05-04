@@ -136,4 +136,6 @@ actual object Platform {
 
     actual val systemLocale: String
         get() = "${Locale.getDefault().language}-${Locale.getDefault().country}"
+
+    actual var isAndroidModuleActive: Boolean = false
 }

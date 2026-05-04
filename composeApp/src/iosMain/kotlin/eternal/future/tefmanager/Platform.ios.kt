@@ -135,4 +135,5 @@ actual object Platform {
 
     actual val systemLocale: String
         get() = "$systemLanguage-$systemRegion"
+    actual var isAndroidModuleActive: Boolean = false
 }

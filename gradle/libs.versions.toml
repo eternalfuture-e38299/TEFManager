@@ -1,41 +1,41 @@
 [versions]
 agp = "9.1.0"
-android-compileSdk = "36"
+android-compileSdk = "37"
 android-minSdk = "24"
-android-targetSdk = "36"
-androidx-activity = "1.12.4"
+android-targetSdk = "37"
+androidx-activity = "1.13.0"
 androidx-appcompat = "1.7.1"
-androidx-core = "1.17.0"
+androidx-core = "1.18.0"
 androidx-espresso = "3.7.0"
-androidx-lifecycle = "2.9.6"
+androidx-lifecycle = "2.10.0"
 androidx-testExt = "1.3.0"
 apksig = "9.1.0"
-bcprovJdk18on = "1.83"
-bcpkixJdk18on = "1.83"
-colorpickerCompose = "1.1.3"
-composeHotReload = "1.0.0"
-composeMultiplatform = "1.10.2"
-filekitCore = "0.13.0"
-filekitDialogsCompose = "0.13.0"
-filekitCoil = "0.13.0"
+bcprovJdk18on = "1.84"
+bcpkixJdk18on = "1.84"
+colorpickerCompose = "1.1.4"
+composeHotReload = "1.1.0"
+composeMultiplatform = "1.10.3"
+filekitCore = "0.14.0"
+filekitDialogsCompose = "0.14.0"
+filekitCoil = "0.14.0"
 junit = "4.13.2"
 kamelImageDefault = "1.0.9"
 kermit = "2.1.0"
-kotlin = "2.3.10"
+kotlin = "2.3.21"
 kotlinx-coroutines = "1.10.2"
 kotlinxDatetime = "0.7.1"
 kotlinxIoCore = "0.9.0"
-kotlinxSerializationJson = "1.10.0"
-ktorClientCore = "3.4.1"
+kotlinxSerializationJson = "1.11.0"
+ktorClientCore = "3.4.3"
 material3 = "1.10.0-alpha05"
 materialIconsExtended = "1.7.3"
 materialKolor = "4.1.1"
-okio = "3.16.4"
-okioFakefilesystem = "3.16.4"
-protobufKotlin = "4.33.5"
+okio = "3.17.0"
+okioFakefilesystem = "3.17.0"
 voyagerNavigator = "1.0.1"
-jetbrainsKotlinJvm = "2.3.0"
-material = "1.10.0"
+jetbrainsKotlinJvm = "2.3.21"
+material = "1.12.0"
+versionCatalogUpdate = "1.1.0"
 
 [libraries]
 apksig = { module = "com.android.tools.build:apksig", version.ref = "apksig" }
@@ -74,15 +74,15 @@ ktor-client-android = { module = "io.ktor:ktor-client-android", version.ref = "k
 ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktorClientCore" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktorClientCore" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktorClientCore" }
-ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktorClientCore" }
 material-icons-extended = { module = "org.jetbrains.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }
 material-kolor = { module = "com.materialkolor:material-kolor", version.ref = "materialKolor" }
 okio-fakefilesystem = { module = "com.squareup.okio:okio-fakefilesystem", version.ref = "okioFakefilesystem" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
-protobuf-kotlin = { module = "com.google.protobuf:protobuf-kotlin", version.ref = "protobufKotlin" }
 voyager-navigator = { module = "cafe.adriel.voyager:voyager-navigator", version.ref = "voyagerNavigator" }
 voyager-transitions = { module = "cafe.adriel.voyager:voyager-transitions", version.ref = "voyagerNavigator" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+xposed-api = { module = "de.robv.android.xposed:api", version = "82" }
+
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
@@ -93,3 +93,4 @@ composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "k
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 jetbrains-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "jetbrainsKotlinJvm" }
+version-catalog-update = { id = "nl.littlerobots.version-catalog-update", version.ref = "versionCatalogUpdate" }

@@ -1,3 +1,4 @@
+import com.android.build.api.dsl.ApplicationExtension
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -8,6 +9,17 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.composeHotReload)
     alias(libs.plugins.kotlin.serialization)
+}
+
+val generateStrings by tasks.registering {
+    description = "generated strings code"
+    val out = layout.buildDirectory.dir("generated/strings")
+    outputs.dir(out)
+
+    StringsGenerator.generateForModule(
+        moduleDir = layout.projectDirectory.asFile,
+        packageName = "eternal.future.tefmanager.strings.generated"
+    )
 }
 
 kotlin {
@@ -48,6 +60,8 @@ kotlin {
                 implementation(libs.apksig)
                 implementation(libs.bcprov.jdk18on)
                 implementation(libs.bcpkix.jdk18on)
+                implementation(libs.material)
+                compileOnly(libs.xposed.api)
                 // implementation(fileTree(mapOf("dir" to "libs/android", "include" to listOf("*.jar", "*.aar"))))
                 implementation(project(":composeApp:libs:android:aXML"))
                 implementation(files("libs/android/ManifestEditor-2.0.jar"))
@@ -55,7 +69,7 @@ kotlin {
         }
         commonMain {
             kotlin {
-                srcDir("build/generated/strings")
+                srcDir(generateStrings.map { it.outputs })
             }
             dependencies {
                 implementation(libs.kamel.image.default)
@@ -101,20 +115,8 @@ kotlin {
     }
 }
 
-tasks.register("generateStrings") {
-    doLast {
-        StringsGenerator.generateForModule(
-            moduleDir = projectDir,
-            packageName = "eternal.future.tefmanager.strings.generated"
-        )
-    }
-}
-
-tasks.matching { it.name.startsWith("composeApp") }.configureEach {
-    dependsOn("generateStrings")
-}
-
-android {
+val androidApp = extensions.getByType(ApplicationExtension::class)
+androidApp.apply {
     namespace = "eternal.future.tefmanager"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
@@ -125,40 +127,23 @@ android {
         versionCode = 1
         versionName = "1.0.0"
     }
-    packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
-    }
+
     buildTypes {
-        getByName("release") {
+        release {
             isMinifyEnabled = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"),
-                file("proguard-rules.pro"))
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                file("proguard-rules.pro")
+            )
         }
     }
 
-    signingConfigs {
-        create("release") {
-            storeFile = file("tefmanager.p12")
-            storePassword = "EternalFuture@2026"
-            keyAlias = "TEFManager"
-            keyPassword = "EternalFuture@2026"
-            storeType = "PKCS12"
-        }
-
-        getByName("debug") {
-            storeFile = file("tefmanager.p12")
-            storePassword = "EternalFuture@2026"
-            keyAlias = "TEFManager"
-            keyPassword = "EternalFuture@2026"
-            storeType = "PKCS12"
-        }
-    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
+
     buildFeatures {
         compose = true
         buildConfig = true

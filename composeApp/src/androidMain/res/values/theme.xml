@@ -3,11 +3,14 @@
     <style name="Theme.TEFManager" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionBar">false</item>
-        <item name="android:windowFullscreen">true</item>
-        <item name="android:windowContentOverlay">@null</item>
+
+        <!-- 关键：不要 fullscreen -->
+        <item name="android:windowFullscreen">false</item>
+
+        <!-- 沉浸式但不破坏 insets -->
+        <item name="android:windowTranslucentStatus">true</item>
+        <item name="android:windowTranslucentNavigation">true</item>
+
         <item name="android:windowBackground">?android:colorBackground</item>
-        <!--  隐藏状态栏  -->
-        <item name="android:windowTranslucentStatus">false</item>
-        <item name="android:windowTranslucentNavigation">false</item>
     </style>
 </resources>

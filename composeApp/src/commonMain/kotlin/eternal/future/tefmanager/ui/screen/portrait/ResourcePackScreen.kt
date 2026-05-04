@@ -65,7 +65,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
-import eternal.future.tefmanager.ui.screen.landscape.ResourcePack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
