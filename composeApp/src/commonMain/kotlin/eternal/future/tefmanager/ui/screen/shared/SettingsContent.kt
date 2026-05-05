@@ -81,8 +81,14 @@ import eternal.future.tefmanager.utils.AppLogger
 import eternal.future.tefmanager.utils.NetworkService
 import eternal.future.tefmanager.utils.openUrl
 import io.github.vinceglb.filekit.dialogs.FileKitDialogSettings
+import io.github.vinceglb.filekit.dialogs.FileKitMode
+import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
 import io.github.vinceglb.filekit.dialogs.compose.rememberFileSaverLauncher
+import io.github.vinceglb.filekit.name
+import io.github.vinceglb.filekit.nameWithoutExtension
 import io.github.vinceglb.filekit.sink
+import io.github.vinceglb.filekit.size
+import io.github.vinceglb.filekit.source
 import io.ktor.utils.io.core.readAvailable
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
@@ -94,8 +100,11 @@ import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.writeString
 import kotlinx.serialization.json.Json
+import okio.Path.Companion.toPath
 import okio.SYSTEM
 import okio.buffer
+import okio.openZip
+import okio.use
 import org.jetbrains.compose.resources.painterResource
 import tefmanager.composeapp.generated.resources.Res
 import tefmanager.composeapp.generated.resources.icon
@@ -741,6 +750,58 @@ object SettingsContent {
         val showUpdateDialog = remember { mutableStateOf(false) }
         var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
 
+        val filePickerLauncher = rememberFilePickerLauncher(
+            mode = FileKitMode.Single
+        ) { file ->
+            if (file == null) return@rememberFilePickerLauncher
+
+            val tmp = kotlinx.io.files.Path((Platform.getDirectory("tmp") / file.name).toString())
+            tmp.parent?.let { SystemFileSystem.createDirectories(it) }
+
+            SystemFileSystem.sink(tmp).buffered().use { sink ->
+                sink.write(file.source(), file.size())
+                sink.flush()
+            }
+
+            tmp.toString().toPath().let { zipPath ->
+                okio.FileSystem.SYSTEM.openZip(zipPath).let { zipFs ->
+                    val outDir = Platform.getData("tefkernel")
+
+                    val files = if (Platform.isAndroid) listOf(
+                            "libtefkernel.android.arm64-v8a.so",
+                            "libtefkernel.android.armeabi-v7a.so"
+                        )
+                    else if(Platform.isWindows) listOf(
+                            "libtefkernel.windows.x64.dll",
+                            "libtefkernel.windows.x86.dll"
+                        ) else if (Platform.isLinux)
+                        listOf(
+                            "libtefkernel.linux.x86.so",
+                            "libtefkernel.linux.x64.so"
+                        ) else listOf()
+
+                    files.forEach { name ->
+                        val src = name.toPath()
+                        if (!zipFs.exists(src)) return@forEach
+
+                        zipFs.source(src).buffer().use { input ->
+                            okio.FileSystem.SYSTEM
+                                .sink(outDir / name)
+                                .buffer()
+                                .use { output ->
+                                    output.write(
+                                        input,
+                                        zipFs.metadata(src).size!!
+                                    )
+                                }
+                        }
+                    }
+                }
+            }
+
+            SystemFileSystem.delete(tmp)
+        }
+
         // 检查更新函数
         fun checkForUpdates() {
             scope.launch {
@@ -893,6 +954,19 @@ object SettingsContent {
                         Spacer(Modifier.width(8.dp))
                         Text(Strings.settings.about.about)
                     }
+                }
+
+                OutlinedButton(
+                    onClick = { filePickerLauncher.launch() },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Memory,
+                        contentDescription = null
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("导入内核")
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))

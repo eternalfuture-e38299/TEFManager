@@ -16,6 +16,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okio.FileSystem
+import okio.IOException
 import okio.Path
 import okio.Path.Companion.toPath
 import okio.SYSTEM
@@ -86,7 +87,6 @@ object AddonManager {
 
     /**
      * 进度回调函数类型
-     * @param error 如果发生错误，包含异常信息（可为null）
      */
     typealias ProgressCallback = (progress: InstallProgress, error: Throwable?) -> Unit
 
@@ -378,6 +378,7 @@ object AddonManager {
 
             progressCallback?.invoke(InstallProgress.INSTALLING_DEPENDENCIES, null)
             installDependence(zip, manifest, progressCallback)
+            extractResources(zip, manifest, Platform.getData("module") / moduleItem.pkgId / "private", progressCallback)
 
             logger.i("Module ${moduleItem.pkgId} installed successfully")
         }
@@ -576,9 +577,150 @@ object AddonManager {
 
             progressCallback?.invoke(InstallProgress.EXTRACTING_ICON, null)
             releaseIcon(Platform.getData("mods") / parentLoader / "icons" / "${modItem.pkgId}.icon", zip, manifest)
+            extractResources(zip, manifest, Platform.getData("mods") / parentLoader /"private" / modItem.pkgId, progressCallback)
 
             logger.i("Mod ${modItem.pkgId} installed successfully")
         }
+    }
+
+
+    /**
+     * 解压ZIP中的资源目录到指定路径
+     * @param zip 文件系统实例
+     * @param manifest JSON清单对象
+     * @param targetDir 目标解压目录
+     * @param progressCallback 进度回调（可选）
+     * @return 是否成功解压了资源（true表示有资源且解压成功，false表示没有resources字段）
+     * @throws IOException 当解压过程中发生IO错误时抛出
+     */
+    private fun extractResources(
+        zip: FileSystem,
+        manifest: JsonObject,
+        targetDir: Path,
+        progressCallback: ProgressCallback? = null
+    ): Boolean {
+        // 检查是否存在resources字段
+        val resourcesPathStr = manifest["resources"]?.jsonPrimitive?.content
+        if (resourcesPathStr.isNullOrBlank()) {
+            logger.d("No 'resources' field in manifest, skipping resource extraction")
+            return false
+        }
+
+        val resourcesPath = resourcesPathStr.toPath()
+        logger.d("Extracting resources from: $resourcesPath to: $targetDir")
+
+        progressCallback?.invoke(InstallProgress.PARSING_METADATA, null)
+
+        // 检查资源目录是否存在
+        try {
+            // 使用Okio的FileSystem遍历ZIP中的目录
+            val resourceFiles = mutableListOf<Path>()
+
+            // 递归收集所有需要解压的文件
+            fun collectFiles(currentPath: Path) {
+                val entries = zip.listOrNull(currentPath) ?: return
+                entries.forEach { entry ->
+                    val fullPath = currentPath / entry.name
+                    if (zip.metadataOrNull(fullPath)?.isDirectory == true) {
+                        collectFiles(fullPath)
+                    } else {
+                        resourceFiles.add(fullPath)
+                    }
+                }
+            }
+
+            // 如果路径是文件而不是目录，直接添加
+            if (zip.metadataOrNull(resourcesPath)?.isDirectory == true) {
+                collectFiles(resourcesPath)
+            } else if (zip.exists(resourcesPath)) {
+                resourceFiles.add(resourcesPath)
+            } else {
+                logger.w("Resources path does not exist in zip: $resourcesPath")
+                return false
+            }
+
+            if (resourceFiles.isEmpty()) {
+                logger.w("No files found in resources path: $resourcesPath")
+                return false
+            }
+
+            logger.d("Found ${resourceFiles.size} files to extract")
+
+            var extractedCount = 0
+            val totalFiles = resourceFiles.size
+
+            resourceFiles.forEach { sourcePath ->
+                // 计算相对路径 - 修正这部分逻辑
+                val relativePath = calculateRelativePath(sourcePath, resourcesPath)
+
+                // 目标文件路径
+                val destPath = if (relativePath.name.isEmpty()) {
+                    targetDir / sourcePath.name
+                } else {
+                    targetDir / relativePath
+                }
+
+                // 创建父目录
+                destPath.parent?.let { parent ->
+                    if (!fileSystem.exists(parent)) {
+                        fileSystem.createDirectories(parent)
+                    }
+                }
+
+                progressCallback?.invoke(
+                    InstallProgress.COPYING_FILES,
+                    null
+                )
+
+                // 解压文件
+                zip.source(sourcePath).use { source ->
+                    fileSystem.sink(destPath).buffer().use { sink ->
+                        sink.writeAll(source)
+                        sink.flush()
+                    }
+                }
+
+                extractedCount++
+                if (extractedCount % 10 == 0) {
+                    logger.d("Extracted $extractedCount/$totalFiles files")
+                }
+            }
+
+            logger.i("Successfully extracted $extractedCount resources to $targetDir")
+            progressCallback?.invoke(InstallProgress.COMPLETED, null)
+
+            return true
+
+        } catch (e: Exception) {
+            logger.e("Failed to extract resources from $resourcesPath", e)
+            progressCallback?.invoke(InstallProgress.ERROR, e)
+            throw IOException("Failed to extract resources: ${e.message}", e)
+        }
+    }
+
+    /**
+     * 计算相对路径（处理 okio.Path 类型）
+     */
+    private fun calculateRelativePath(fullPath: Path, basePath: Path): Path {
+        // 将路径转换为字符串进行比较
+        val fullPathStr = fullPath.toString()
+        val basePathStr = basePath.toString()
+
+        // 如果完整路径以基础路径开头，则计算相对部分
+        val relativeStr = if (fullPathStr.startsWith(basePathStr)) {
+            // 去掉基础路径部分
+            var relative = fullPathStr.substring(basePathStr.length)
+            // 移除开头的路径分隔符
+            while (relative.startsWith("/") || relative.startsWith("\\")) {
+                relative = relative.substring(1)
+            }
+            relative
+        } else {
+            // 如果不是以基础路径开头，返回完整路径的名称
+            fullPath.name
+        }
+
+        return relativeStr.toPath()
     }
 
     /**
@@ -629,9 +771,8 @@ object AddonManager {
     /**
      * 安全地关闭模组数据库
      * @param loaderPkgId 模组加载器包ID
-     * @param force 是否强制关闭（即使有正在进行的操作）
      */
-    fun closeModDatabase(loaderPkgId: String, force: Boolean = false) {
+    fun closeModDatabase(loaderPkgId: String) {
         val db = modDataBaseList.remove(loaderPkgId)
         if (db != null) {
             try {

@@ -200,13 +200,13 @@ object MainScreen : Screen {
                     unselectedIcon = Icons.Outlined.Home,
                     label = Strings.home.title,
                     isPrimary = true
-                ),
+                ),/*
                 NavigationItem(
                     screen = ResourcePackScreen,
                     selectedIcon = Icons.Rounded.Palette,
                     unselectedIcon = Icons.Outlined.Palette,
                     label = "资源包"
-                ),
+                ),*/
                 NavigationItem(
                     screen = ManagerScreen,
                     selectedIcon = Icons.Rounded.Widgets,

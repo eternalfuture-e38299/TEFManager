@@ -7,6 +7,4 @@
 -keep class * implements java.lang.reflect.ParameterizedType
 -keep class * extends java.lang.reflect.Type
 -keep class eternal.future.tefmanager.MainHook { *; }
--keepclassmembers class eternal.future.tefmanager.Platform {
-    public static isAndroidModuleActive();
-}
+-keep class eternal.future.tefmanager.Platform { *; }

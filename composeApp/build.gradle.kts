@@ -139,6 +139,15 @@ androidApp.apply {
         }
     }
 
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("tefmanager.p12")
+            keyAlias = "TEFManager"
+            storePassword = "EternalFuture@2026"
+            keyPassword = "EternalFuture@2026"
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21

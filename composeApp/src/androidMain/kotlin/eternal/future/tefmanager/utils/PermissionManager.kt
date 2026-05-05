@@ -26,60 +26,48 @@ import java.io.File
  * Created: 2026/4/26
  *******************************************************************************/
 
+
 object PermissionManager {
 
-    /**
-     * 授予指定包名对 TEFManager 目录的读写权限
-     *
-     * @param context Android 上下文
-     * @param targetPackage 目标应用包名
-     * @throws Exception 任意一步失败直接抛异常
-     */
     fun grantReadWriteAccess(context: Context, targetPackage: String) {
         val dirToShare = getTefManagerDirectory(context)
 
-        if (!dirToShare.exists() && !dirToShare.mkdirs()) {
-            throw Exception("Failed to create TEFManager directory")
+        if (!dirToShare.exists()) {
+            dirToShare.mkdirs()
         }
 
+        // 获取目标应用信息
         val pm = context.packageManager
-        val appInfo = pm.getApplicationInfo(targetPackage, PackageManager.GET_META_DATA)
+        val appInfo = pm.getApplicationInfo(targetPackage, 0)
         val targetUid = appInfo.uid
         val targetAppName = pm.getApplicationLabel(appInfo).toString()
 
-        grantAccessWithRoot(dirToShare.absolutePath, targetUid)
+        // 执行root权限命令修改权限
+        grantAccessWithRoot(dirToShare, targetUid)
 
-        AppLogger.i(
-            "Granted RW access to $targetAppName ($targetPackage), UID=$targetUid"
-        )
+        AppLogger.i("Successfully granted permissions to the application: $targetAppName ($targetPackage) UID: $targetUid")
     }
 
     private fun getTefManagerDirectory(context: Context): File {
         return File(
-            context.getExternalFilesDir(null)
-                ?.parentFile
-                ?.parentFile,
+            context.getExternalFilesDir(null)?.parentFile?.parentFile,
             "eternal.future.tefmanager"
         )
     }
 
-    /**
-     * 使用 root + ACL 授权，不修改 owner
-     */
-    private fun grantAccessWithRoot(dirPath: String, targetUid: Int) {
-        // 确保目录存在
-        executeRootCommand("mkdir -p \"$dirPath\"")
-
-        // 使用 ACL 精确授权目标 UID
-        executeRootCommand("setfacl -m u:$targetUid:rwx \"$dirPath\"")
-        executeRootCommand("find \"$dirPath\" -exec setfacl -m u:$targetUid:rwx {} \\;")
-    }
-
-    private fun executeRootCommand(cmd: String) {
+    private fun executeRootCommand(cmd: String): Boolean {
         val process = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
         val exitCode = process.waitFor()
         if (exitCode != 0) {
-            throw Exception("Root command failed (code=$exitCode): $cmd")
+            throw Exception("Root command execution failed (exit code: $exitCode): $cmd")
         }
+        return true
+    }
+
+    private fun grantAccessWithRoot(dir: File, targetUid: Int) {
+        val dirPath = dir.absolutePath
+
+        executeRootCommand("chown -R :$targetUid \"$dirPath\"")
+        executeRootCommand("chmod -R 2770 \"$dirPath\"")  // owner:rwx group:rwx other:---
     }
 }
