@@ -1,35 +1,19 @@
 package eternal.future.tefmanager.ui.dialogs
 
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Animation
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.QuestionMark
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -40,43 +24,29 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Alignment.Companion.CenterVertically
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 import eternal.future.tefmanager.utils.AddonManager
 import eternal.future.tefmanager.utils.AppLogger
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import okio.Path
-import okio.Path.Companion.toPath
-import okio.SYSTEM
-import okio.buffer
-import okio.openZip
+import kotlin.time.Duration.Companion.milliseconds
 
 /*******************************************************************************
  * TEFManager - AddonInstallOrUpdateDialog
@@ -105,71 +75,50 @@ fun AddonInstallOrUpdateDialog(
     filePaths: List<Path>,
     onDismiss: () -> Unit
 ) {
-    var currentStep by remember { mutableStateOf(0) }
-    val totalSteps = filePaths.size
-    val scope = rememberCoroutineScope()
     var isInstalling by remember { mutableStateOf(false) }
-    var currentAddonName by remember { mutableStateOf<String?>(null) }
-    var currentAddonType by remember { mutableStateOf<String?>(null) }
-    var currentProgress by remember { mutableStateOf<AddonManager.InstallProgress?>(null) }
-    var error by remember { mutableStateOf<Throwable?>(null) }
-    var successCount by remember { mutableIntStateOf(0) }
-    var failCount by remember { mutableIntStateOf(0) }
-    var skipCount by remember { mutableIntStateOf(0) }
     var isComplete by remember { mutableStateOf(false) }
-    var installLogs by remember { mutableStateOf<List<InstallLogEntry>>(emptyList()) }
-    val lazyListState = rememberLazyListState()
+    var hasError by remember { mutableStateOf(false) }
+    var currentIndex by remember { mutableIntStateOf(0) }
+    var currentProgress by remember { mutableFloatStateOf(0f) }
+    var currentStatus by remember { mutableStateOf("准备安装") }
+    val scope = rememberCoroutineScope()
 
-    val addonNames = remember(filePaths) {
-        filePaths.map { it.name }
-    }
-
-    // 自动滚动到最后一条日志
-    LaunchedEffect(installLogs.size) {
-        if (installLogs.isNotEmpty()) {
-            lazyListState.animateScrollToItem(installLogs.size - 1)
-        }
-    }
+    // 计算进度
+    val progressValue = if (filePaths.isEmpty()) 0f else currentProgress
 
     Dialog(onDismissRequest = { if (!isInstalling) onDismiss() }) {
         Card(
             modifier = Modifier
-                .fillMaxWidth(0.9f)
-                .fillMaxHeight(0.85f),
-            shape = MaterialTheme.shapes.extraLarge,
+                .fillMaxWidth(0.85f)
+                .height(220.dp),
+            shape = MaterialTheme.shapes.large,
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                containerColor = MaterialTheme.colorScheme.surface
+            )
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp)
+                    .fillMaxWidth()
+                    .padding(20.dp)
             ) {
-                // 标题区域
+                // 标题栏
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text(
-                            text = if (isComplete) "安装完成" else "正在安装附加组件",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "${currentStep + 1}/$totalSteps",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        text = if (isComplete) {
+                            if (hasError) "安装失败" else "安装完成"
+                        } else {
+                            "安装附加组件"
+                        },
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Medium
+                    )
 
                     IconButton(
-                        onClick = { if (!isInstalling) onDismiss() },
+                        onClick = onDismiss,
                         enabled = !isInstalling
                     ) {
                         Icon(
@@ -179,181 +128,47 @@ fun AddonInstallOrUpdateDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // 进度条
                 LinearProgressIndicator(
-                    progress = { if (totalSteps > 0) (currentStep.toFloat() + 0.5f) / totalSteps else 0f },
+                    progress = { progressValue },
                     modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    strokeCap = ProgressIndicatorDefaults.LinearStrokeCap)
+                    color = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // 当前安装信息
-                if (currentAddonName != null) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                val icon = when (currentAddonType?.lowercase()) {
-                                    "plugin" -> Icons.Default.Extension
-                                    "module" -> Icons.Default.Widgets
-                                    "modloader" -> Icons.Default.Build
-                                    "mod" -> Icons.Default.Animation
-                                    else -> Icons.Default.QuestionMark
-                                }
-
-                                Icon(
-                                    imageVector = icon,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-
-                                Spacer(modifier = Modifier.width(12.dp))
-
-                                Column {
-                                    Text(
-                                        text = currentAddonName ?: "",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-
-                                    if (currentAddonType != null) {
-                                        Text(
-                                            text = "类型: $currentAddonType",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            if (currentProgress != null) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp
-                                    )
-
-                                    Spacer(modifier = Modifier.width(8.dp))
-
-                                    Text(
-                                        text = getProgressText(currentProgress!!),
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-
-                // 安装日志
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
+                // 状态信息
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = CenterVertically
-                    ) {
-                        Text(
-                            text = "安装日志",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium
+                    if (isInstalling && !isComplete) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
                         )
-
-                        Row {
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = " $successCount",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-
-                            Spacer(modifier = Modifier.width(8.dp))
-
-                            Icon(
-                                imageVector = Icons.Default.SkipNext,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = " $skipCount",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-
-                            Spacer(modifier = Modifier.width(8.dp))
-
-                            Icon(
-                                imageVector = Icons.Default.Error,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = " $failCount",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                    } else if (isComplete) {
+                        val icon = if (hasError) Icons.Default.Error else Icons.Default.CheckCircle
+                        val iconColor = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = iconColor,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxSize(),
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        if (installLogs.isEmpty()) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "等待安装开始...",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(8.dp),
-                                state = lazyListState,
-                                verticalArrangement = Arrangement.Top
-                            ) {
-                                items(installLogs) { log ->
-                                    InstallLogItem(log = log)
-                                }
-                            }
-                        }
-                    }
+                    Text(
+                        text = currentStatus,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -361,24 +176,30 @@ fun AddonInstallOrUpdateDialog(
                 // 按钮区域
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (isComplete) {
                         Button(
                             onClick = onDismiss,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
+                                containerColor = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
                             )
                         ) {
-                            Text("完成")
+                            Text("确定")
                         }
                     } else if (!isInstalling) {
                         OutlinedButton(
                             onClick = onDismiss,
-                            modifier = Modifier.padding(end = 8.dp)
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            )
                         ) {
                             Text("取消")
                         }
+
+                        Spacer(modifier = Modifier.width(8.dp))
 
                         Button(
                             onClick = {
@@ -386,33 +207,24 @@ fun AddonInstallOrUpdateDialog(
                                 scope.launch {
                                     startInstallation(
                                         filePaths = filePaths,
-                                        scope = scope,
-                                        onProgress = { progress, e ->
-                                            currentProgress = progress
-                                            if (e != null) {
-                                                error = e
-                                            }
+                                        onProgress = { index, status, error ->
+                                            currentIndex = index
+                                            currentProgress = (index + 1).toFloat() / filePaths.size
+                                            currentStatus = status
+                                            hasError = error
                                         },
-                                        onStepStart = { step, addonName, addonType ->
-                                            currentStep = step
-                                            currentAddonName = addonName
-                                            currentAddonType = addonType
-                                        },
-                                        onLog = { log ->
-                                            installLogs = installLogs + log
-                                        },
-                                        onSuccess = { successCount++ },
-                                        onSkip = { skipCount++ },
-                                        onFail = { failCount++ },
-                                        onComplete = {
+                                        onComplete = { success ->
                                             isComplete = true
                                             isInstalling = false
+                                            hasError = !success
+                                            currentProgress = 1f
                                         }
                                     )
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
                             )
                         ) {
                             Icon(
@@ -421,260 +233,98 @@ fun AddonInstallOrUpdateDialog(
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("开始安装")
+                            Text("安装")
                         }
                     } else {
-                        OutlinedButton(
-                            onClick = {
-                                // 这里可以添加取消安装的逻辑
-                            },
-                            enabled = false
+                        Button(
+                            onClick = {},
+                            enabled = false,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                contentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.5f)
+                            )
                         ) {
-                            Text("正在安装...")
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("安装中...")
                         }
                     }
                 }
             }
         }
-    }
-}
-
-private data class InstallLogEntry(
-    val addonName: String,
-    val message: String,
-    val type: LogType,
-    val timestamp: Long = Clock.System.now().toEpochMilliseconds()
-)
-
-private enum class LogType {
-    INFO, SUCCESS, ERROR, SKIP
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun InstallLogItem(log: InstallLogEntry) {
-    val backgroundColor = when (log.type) {
-        LogType.SUCCESS -> MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.05f)
-    }
-
-    val borderColor = when (log.type) {
-        LogType.SUCCESS -> MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-        LogType.ERROR -> MaterialTheme.colorScheme.error.copy(alpha = 0.3f)
-        LogType.SKIP -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-        else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .clip(MaterialTheme.shapes.small)
-            .background(backgroundColor)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val icon = when (log.type) {
-                LogType.INFO -> Icons.Default.Info
-                LogType.SUCCESS -> Icons.Default.CheckCircle
-                LogType.ERROR -> Icons.Default.Error
-                LogType.SKIP -> Icons.Default.SkipNext
-            }
-
-            val iconColor = when (log.type) {
-                LogType.INFO -> MaterialTheme.colorScheme.primary
-                LogType.SUCCESS -> MaterialTheme.colorScheme.primary
-                LogType.ERROR -> MaterialTheme.colorScheme.error
-                LogType.SKIP -> MaterialTheme.colorScheme.onSurfaceVariant
-            }
-
-            val textColor = when (log.type) {
-                LogType.INFO -> MaterialTheme.colorScheme.onSurface
-                LogType.SUCCESS -> MaterialTheme.colorScheme.primary
-                LogType.ERROR -> MaterialTheme.colorScheme.error
-                LogType.SKIP -> MaterialTheme.colorScheme.onSurfaceVariant
-            }
-
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = iconColor,
-                modifier = Modifier.size(20.dp)
-            )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = log.addonName,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = textColor.copy(alpha = 0.8f),
-                        fontWeight = FontWeight.Medium
-                    )
-
-                    Text(
-                        text = formatTime(log.timestamp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = log.message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = textColor,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-private fun formatTime(timestamp: Long): String {
-    val instant = Instant.fromEpochMilliseconds(timestamp)
-    val localDateTime = instant.toLocalDateTime(TimeZone.currentSystemDefault())
-
-    return buildString {
-        // 小时
-        val hour = localDateTime.hour
-        if (hour < 10) {
-            append('0')
-        }
-        append(hour)
-        append(':')
-
-        // 分钟
-        val minute = localDateTime.minute
-        if (minute < 10) {
-            append('0')
-        }
-        append(minute)
-        append(':')
-
-        // 秒
-        val second = localDateTime.second
-        if (second < 10) {
-            append('0')
-        }
-        append(second)
-    }
-}
-
-private fun getProgressText(progress: AddonManager.InstallProgress): String {
-    return when (progress) {
-        AddonManager.InstallProgress.STARTING -> "正在开始"
-        AddonManager.InstallProgress.OPENING_PACKAGE -> "正在打开包文件"
-        AddonManager.InstallProgress.READING_MANIFEST -> "正在读取清单文件"
-        AddonManager.InstallProgress.PARSING_METADATA -> "正在解析元数据"
-        AddonManager.InstallProgress.CHECKING_EXISTING -> "正在检查现有版本"
-        AddonManager.InstallProgress.COPYING_FILES -> "正在复制文件"
-        AddonManager.InstallProgress.EXTRACTING_ICON -> "正在提取图标"
-        AddonManager.InstallProgress.UPDATING_DATABASE -> "正在更新数据库"
-        AddonManager.InstallProgress.INSTALLING_DEPENDENCIES -> "正在安装依赖"
-        AddonManager.InstallProgress.PROCESSING_DEPENDENCY -> "正在处理依赖项"
-        AddonManager.InstallProgress.FINISHING -> "正在完成安装"
-        AddonManager.InstallProgress.COMPLETED -> "安装完成"
-        AddonManager.InstallProgress.ERROR -> "安装失败"
     }
 }
 
 private suspend fun startInstallation(
     filePaths: List<Path>,
-    scope: CoroutineScope,
-    onProgress: (AddonManager.InstallProgress, Throwable?) -> Unit,
-    onStepStart: (Int, String, String?) -> Unit,
-    onLog: (InstallLogEntry) -> Unit,
-    onSuccess: () -> Unit,
-    onSkip: () -> Unit,
-    onFail: () -> Unit,
-    onComplete: () -> Unit
+    onProgress: (Int, String, Boolean) -> Unit,
+    onComplete: (Boolean) -> Unit
 ) {
     withContext(Dispatchers.IO) {
+        var allSuccess = true
+
         for ((index, filePath) in filePaths.withIndex()) {
             val addonName = filePath.name
-            var addonType: String? = null
+            // 更新进度 - 开始安装当前文件
+            onProgress(index, "正在安装: $addonName", false)
 
             try {
-                // 开始安装当前文件
-                onStepStart(index, addonName, null)
-                onLog(InstallLogEntry(addonName, "开始安装", LogType.INFO))
-
-                // 先读取清单文件获取类型
-                val fileSystem = okio.FileSystem.SYSTEM
-                if (fileSystem.exists(filePath)) {
-                    val zip = fileSystem.openZip(filePath)
-                    try {
-                        if (zip.exists("Manifest.json".toPath())) {
-                            val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-                            val manifest = json.parseToJsonElement(
-                                zip.source("Manifest.json".toPath()).buffer().readUtf8()
-                            ).jsonObject
-                            addonType = manifest["type"]?.jsonPrimitive?.content
-                            onStepStart(index, addonName, addonType)
-                        }
-                    } finally {
-                        zip.close()
-                    }
-                }
-
+                var hasInstallError = false
                 var installCompleted = false
 
                 AddonManager.installOrUpdate(filePath) { progress, error ->
-                    onProgress(progress, error)
-
                     when (progress) {
                         AddonManager.InstallProgress.COMPLETED -> {
-                            if (error == null) {
-                                onLog(InstallLogEntry(addonName, "安装成功", LogType.SUCCESS))
-                                onSuccess()
+                            if (error == null && !installCompleted) {
                                 installCompleted = true
-                            } else {
-                                onLog(InstallLogEntry(addonName, "安装失败: ${error.message}", LogType.ERROR))
-                                onFail()
-                                installCompleted = true
+                                onProgress(index, "安装成功: $addonName", false)
+                            } else if (error != null) {
+                                hasInstallError = true
+                                allSuccess = false
+                                onProgress(index, "安装失败: ${error.message}", true)
                             }
                         }
                         AddonManager.InstallProgress.ERROR -> {
-                            if (error != null) {
-                                onLog(InstallLogEntry(addonName, "安装失败: ${error.message}", LogType.ERROR))
-                                onFail()
-                                installCompleted = true
+                            if (error != null && !hasInstallError) {
+                                hasInstallError = true
+                                allSuccess = false
+                                onProgress(index, "安装失败: ${error.message}", true)
                             }
                         }
-                        else -> {
-                            // 其他进度更新
+                        AddonManager.InstallProgress.COPYING_FILES -> {
+                            onProgress(index, "复制文件: $addonName", false)
                         }
+                        AddonManager.InstallProgress.EXTRACTING_ICON -> {
+                            onProgress(index, "提取图标: $addonName", false)
+                        }
+                        AddonManager.InstallProgress.UPDATING_DATABASE -> {
+                            onProgress(index, "更新数据库: $addonName", false)
+                        }
+                        else -> { }
                     }
                 }
 
-                // 如果安装没有完成（比如回调没有被调用），标记为完成
-                if (!installCompleted) {
-                    onLog(InstallLogEntry(addonName, "安装完成", LogType.SUCCESS))
-                    onSuccess()
+                // 确保进度更新
+                if (!installCompleted && !hasInstallError) {
+                    onProgress(index, "安装完成: $addonName", false)
                 }
 
             } catch (e: Exception) {
                 AppLogger.e("Failed to install addon: $addonName", e)
-                onLog(InstallLogEntry(addonName, "安装失败: ${e.message ?: "未知错误"}", LogType.ERROR))
-                onFail()
+                onProgress(index, "安装失败: ${e.message ?: "未知错误"}", true)
+                allSuccess = false
+
             }
 
             // 短暂延迟，让用户能看到进度
-            kotlinx.coroutines.delay(100)
+            delay(100.milliseconds)
         }
 
-        onComplete()
+        if (allSuccess) onProgress(filePaths.size - 1, "所有附加组件安装完成", !allSuccess)
+        onComplete(allSuccess)
     }
 }

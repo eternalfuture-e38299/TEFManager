@@ -51,7 +51,7 @@ import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.annotation.InternalVoyagerApi
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.Navigator
-import cafe.adriel.voyager.transitions.SlideTransition
+import cafe.adriel.voyager.transitions.FadeTransition
 import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.ui.component.RefreshIconButton
 import org.jetbrains.compose.resources.painterResource
@@ -174,7 +174,7 @@ object MainScreen : Screen {
                     // 现代化的侧边导航栏
                     ModernNavigationRail(navigator = navigator)
 
-                    // 主内容区域
+                    // 主内容区域 - 使用淡入淡出动画，适合侧边栏导航
                     Surface(
                         modifier = Modifier
                             .weight(1f)
@@ -182,8 +182,12 @@ object MainScreen : Screen {
                         color = MaterialTheme.colorScheme.background,
                         tonalElevation = 0.dp
                     ) {
-                        // 使用 SlideTransition 添加页面切换动画
-                        SlideTransition(navigator = navigator)
+                        // 使用 FadeTransition 替代 SlideTransition
+                        // 淡入淡出动画在侧边栏导航中更加自然，不会产生方向冲突
+                        FadeTransition(
+                            navigator = navigator,
+                            animationSpec = tween(durationMillis = 200)
+                        )
                     }
                 }
             }
@@ -194,32 +198,32 @@ object MainScreen : Screen {
     @Composable
     private fun ModernNavigationRail(navigator: Navigator) {
         val navigationItems = mutableListOf(
-                NavigationItem(
-                    screen = HomeScreen,
-                    selectedIcon = Icons.Rounded.Home,
-                    unselectedIcon = Icons.Outlined.Home,
-                    label = Strings.home.title,
-                    isPrimary = true
-                ),/*
-                NavigationItem(
+            NavigationItem(
+                screen = HomeScreen,
+                selectedIcon = Icons.Rounded.Home,
+                unselectedIcon = Icons.Outlined.Home,
+                label = Strings.home.title,
+                isPrimary = true
+            ),
+            NavigationItem(
                     screen = ResourcePackScreen,
                     selectedIcon = Icons.Rounded.Palette,
                     unselectedIcon = Icons.Outlined.Palette,
                     label = "资源包"
-                ),*/
-                NavigationItem(
-                    screen = ManagerScreen,
-                    selectedIcon = Icons.Rounded.Widgets,
-                    unselectedIcon = Icons.Outlined.Widgets,
-                    label = "管理"
-                ),
-                NavigationItem(
-                    screen = SettingsScreen,
-                    selectedIcon = Icons.Rounded.Settings,
-                    unselectedIcon = Icons.Outlined.Settings,
-                    label = Strings.settings.title
-                )
+            ),
+            NavigationItem(
+                screen = ManagerScreen,
+                selectedIcon = Icons.Rounded.Widgets,
+                unselectedIcon = Icons.Outlined.Widgets,
+                label = "管理"
+            ),
+            NavigationItem(
+                screen = SettingsScreen,
+                selectedIcon = Icons.Rounded.Settings,
+                unselectedIcon = Icons.Outlined.Settings,
+                label = Strings.settings.title
             )
+        )
 
 
         val currentScreen = navigator.lastItem
@@ -239,7 +243,12 @@ object MainScreen : Screen {
                     ModernNavigationItem(
                         item = item,
                         isSelected = currentScreen::class == item.screen::class,
-                        onClick = { navigator.push(item.screen) }
+                        onClick = {
+                            // 只有当不是当前页面时才进行导航
+                            if (currentScreen::class != item.screen::class) {
+                                navigator.push(item.screen)
+                            }
+                        }
                     )
 
                     if (item.screen == HomeScreen) {

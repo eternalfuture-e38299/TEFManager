@@ -28,7 +28,9 @@ import kotlinx.serialization.Serializable
 data class GameItem(
     val apkPackName : String = "",
     val filePath: String = "",
+    val tefloaderPath: String = "",
     val version: String = "",
     val versionCode : Int = 0,
-    val hash: String = ""
+    val hash: String = "",
+    val architecture: String = ""  // 例如: "arm64-v8a", "armeabi-v7a", "x86", "x86_64"
 )

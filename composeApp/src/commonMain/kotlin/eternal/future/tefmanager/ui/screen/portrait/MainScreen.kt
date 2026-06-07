@@ -1,5 +1,6 @@
 package eternal.future.tefmanager.ui.screen.portrait
 
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,7 +45,7 @@ import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.annotation.InternalVoyagerApi
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.Navigator
-import cafe.adriel.voyager.transitions.SlideTransition
+import cafe.adriel.voyager.transitions.FadeTransition
 import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.ui.component.RefreshIconButton
 
@@ -167,7 +168,11 @@ object MainScreen : Screen {
                     color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 0.dp
                 ) {
-                    SlideTransition(navigator = navigator)
+                    // 使用淡入淡出动画，过渡更自然
+                    FadeTransition(
+                        navigator = navigator,
+                        animationSpec = tween(durationMillis = 200)
+                    )
                 }
             }
         }
@@ -182,13 +187,13 @@ object MainScreen : Screen {
                 unselectedIcon = Icons.Outlined.Home,
                 label = Strings.home.title,
                 isPrimary = true
-            ),/*
+            ),
             NavigationItem(
                 screen = ResourcePackScreen,
                 selectedIcon = Icons.Rounded.Palette,
                 unselectedIcon = Icons.Outlined.Palette,
                 label = "资源包"
-            ),*/
+            ),
             NavigationItem(
                 screen = ManagerScreen,
                 selectedIcon = Icons.Rounded.Widgets,

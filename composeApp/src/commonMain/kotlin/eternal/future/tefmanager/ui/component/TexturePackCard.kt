@@ -1,15 +1,24 @@
 package eternal.future.tefmanager.ui.component
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -30,6 +39,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -40,6 +50,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import eternal.future.tefmanager.ui.model.TexturePackItem
 import eternal.future.tefmanager.utils.toFileUrlString
@@ -71,6 +82,125 @@ import okio.SYSTEM
  * Created: 2026/4/19
  *******************************************************************************/
 
+
+@Preview(showBackground = true, widthDp = 400, heightDp = 800)
+@Composable
+fun PreviewTexturePackCard() {
+    MaterialTheme {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            // 创建一个可变的材质包列表用于演示交互
+            val packs = remember {
+                mutableStateListOf(
+                    TexturePackItem(
+                        name = "官方材质包",
+                        author = "Re-Logic",
+                        description = "Terraria官方高清材质包，提升游戏画质",
+                        version = "1.4.4",
+                        fileName = "OfficialTexturePack.zip",
+                        iconPath = "",
+                        type = TexturePackItem.Type.Terraria
+                    ),
+                    TexturePackItem(
+                        name = "光影增强包",
+                        author = "LightMaster",
+                        description = "增强游戏光影效果，让画面更真实",
+                        version = "2.1.0",
+                        fileName = "LightingBoost.zip",
+                        iconPath = "",
+                        type = TexturePackItem.Type.TLPro
+                    ),
+                    TexturePackItem(
+                        name = "复古像素风格",
+                        author = "PixelArtisan",
+                        description = "将游戏画面转换为复古像素风格，怀旧体验",
+                        version = "1.0.3",
+                        fileName = "RetroPixel.zip",
+                        iconPath = "",
+                        type = TexturePackItem.Type.Terraria
+                    ),
+                    TexturePackItem(
+                        name = "高清武器纹理",
+                        author = "WeaponMaster",
+                        description = "所有武器高清重制，细节更丰富",
+                        version = "3.0.0",
+                        fileName = "HDWeapons.zip",
+                        iconPath = "",
+                        type = TexturePackItem.Type.TLPro
+                    )
+                )
+            }
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(packs.size) { index ->
+                    val pack = packs[index]
+                    var isEnabled by remember { mutableStateOf(index < 2) } // 前两个默认启用
+
+                    TexturePackCard(
+                        pack = pack,
+                        index = index,
+                        totalItems = packs.size,
+                        isEnabled = isEnabled,
+                        onEnableChange = { enabled ->
+                            isEnabled = enabled
+                        },
+                        onMoveUp = {
+                            if (index > 0) {
+                                val temp = packs[index]
+                                packs[index] = packs[index - 1]
+                                packs[index - 1] = temp
+                            }
+                        },
+                        onMoveDown = {
+                            if (index < packs.size - 1) {
+                                val temp = packs[index]
+                                packs[index] = packs[index + 1]
+                                packs[index + 1] = temp
+                            }
+                        },
+                        onDelete = {
+                            packs.removeAt(index)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                // 添加一个包含自定义图标的示例
+                item {
+                    val customIconPack = TexturePackItem(
+                        name = "自定义图标材质包",
+                        author = "Designer",
+                        description = "展示自定义图标功能的材质包",
+                        version = "1.0.0",
+                        fileName = "CustomIcon.zip",
+                        iconPath = "/path/to/icon.png", // 实际使用时替换为真实路径
+                        type = TexturePackItem.Type.Terraria
+                    )
+                    var isEnabled by remember { mutableStateOf(false) }
+
+                    TexturePackCard(
+                        pack = customIconPack,
+                        index = packs.size,
+                        totalItems = packs.size + 1,
+                        isEnabled = isEnabled,
+                        onEnableChange = { enabled -> isEnabled = enabled },
+                        onMoveUp = {},
+                        onMoveDown = {},
+                        onDelete = {},
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun TexturePackCard(
     pack: TexturePackItem,
@@ -87,7 +217,11 @@ fun TexturePackCard(
     var iconLoadError by remember { mutableStateOf<String?>(null) }
 
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .animateContentSize(
+                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
+            ),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isEnabled)
@@ -215,8 +349,20 @@ fun TexturePackCard(
                 }
             }
 
-            // 展开后的详细信息
-            if (expanded) {
+            // 展开后的详细信息（带动画）
+            androidx.compose.animation.AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn(animationSpec = tween(300)) +
+                        slideInVertically(
+                            initialOffsetY = { -it / 2 },
+                            animationSpec = tween(300, easing = FastOutSlowInEasing)
+                        ),
+                exit = fadeOut(animationSpec = tween(200)) +
+                        slideOutVertically(
+                            targetOffsetY = { -it / 2 },
+                            animationSpec = tween(200, easing = FastOutSlowInEasing)
+                        )
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -286,17 +432,17 @@ fun TexturePackCard(
 
                         // 操作按钮
                         Row {
-                            // 顺序调整按钮
+                            // 顺序调整按钮（只有启用时才能修改顺序）
                             IconButton(
                                 onClick = onMoveUp,
-                                enabled = index > 0,
+                                enabled = isEnabled && index > 0,
                                 modifier = Modifier.size(36.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.ArrowUpward,
                                     contentDescription = "上移",
                                     modifier = Modifier.size(20.dp),
-                                    tint = if (index > 0)
+                                    tint = if (isEnabled && index > 0)
                                         MaterialTheme.colorScheme.primary
                                     else
                                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
@@ -305,14 +451,14 @@ fun TexturePackCard(
 
                             IconButton(
                                 onClick = onMoveDown,
-                                enabled = index < totalItems - 1,
+                                enabled = isEnabled && index < totalItems - 1,
                                 modifier = Modifier.size(36.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.ArrowDownward,
                                     contentDescription = "下移",
                                     modifier = Modifier.size(20.dp),
-                                    tint = if (index < totalItems - 1)
+                                    tint = if (isEnabled && index < totalItems - 1)
                                         MaterialTheme.colorScheme.primary
                                     else
                                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
@@ -334,7 +480,7 @@ fun TexturePackCard(
                         }
                     }
 
-                    // 顺序说明文字
+                    // 顺序说明文字（只有启用时显示）
                     if (isEnabled) {
                         Text(
                             text = "提示：材质包按顺序从上到下加载，下方的会覆盖上方的同名资源",

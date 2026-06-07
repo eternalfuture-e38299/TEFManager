@@ -33,19 +33,6 @@ import java.io.File
  *******************************************************************************/
 
 object GamePatcher {
-
-    private val json = Json {
-        prettyPrint = true // 保存时格式化，便于阅读
-        ignoreUnknownKeys = true // 忽略 JSON 中未知的键，提高兼容性
-    }
-
-    @Serializable
-    data class tefloaderConfig(
-        val kernelLibPath: String,
-        val loadersPath: String,
-        val modsPath: String
-    )
-
     private val files = FileSystem.SYSTEM;
 
     fun patchViaDotNetGrafting(filePath: Path, addLoader: Boolean = true, architecture: String = Platform.getArchitecture()) {
@@ -53,14 +40,6 @@ object GamePatcher {
         val tefloader = files.openZip(kernelDir / "tefloader.zip")
 
         try {
-            val config = tefloaderConfig(
-                (kernelDir / Platform.getDynamicLibraryName(
-                    "tefkernel.${architecture.lowercase()}"
-                )).toString(),
-                Platform.getData("loaders").toString(),
-                Platform.getData("mods").toString()
-            )
-
             val targetDir = filePath.parent
             AppLogger.i("Starting .NET grafting patch process")
             AppLogger.d("Target directory: $targetDir")
@@ -145,14 +124,6 @@ object GamePatcher {
                     }
                 }
             }
-
-            // 生成配置文件
-            val configFile = targetDir!! / "tefloader-config.json"
-            files.sink(configFile).buffer().use { sink ->
-                sink.writeUtf8(json.encodeToString(config))
-            }
-            AppLogger.i("Config file generated: $configFile")
-
         } catch (e: Exception) {
             AppLogger.e("Error in patchViaDotNetGrafting", e)
             throw e
@@ -164,16 +135,5 @@ object GamePatcher {
                 AppLogger.e("Error closing zip file", e)
             }
         }
-    }
-
-    fun findBin(dirPath: Path, name: String): Path {
-        AppLogger.i("Processing binary files for non-Windows platform")
-        return (files.list(dirPath).filter { file ->
-            file.name.startsWith("$name.bin.")
-        }).first()
-    }
-
-    fun patchMonoNative(filePath : Path) {
-        throw NotImplementedError("Mono native patch is not implemented yet")
     }
 }

@@ -24,29 +24,12 @@ actual object Platform {
     actual val isMobile: Boolean = false
     actual val osName: String = when {
         isMacOS -> "macOS"
-        isLinux -> detectLinuxDistribution() ?: "Linux"
+        isLinux -> "Linux"
         isWindows -> "Windows"
         else -> osNameRaw
     }
     actual val osVersion: String? = getProperty("os.version")
     actual val deviceModel: String? = getProperty("user.name")?.let { "$it's PC" }
-
-    private fun detectLinuxDistribution(): String? {
-        return try {
-            val osRelease = java.io.File("/etc/os-release")
-            if (osRelease.exists()) {
-                osRelease.useLines { lines ->
-                    lines.find { it.startsWith("PRETTY_NAME=") }
-                        ?.substringAfter("=")
-                        ?.trim('"')
-                }
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            null
-        }
-    }
 
     actual fun getDirectory(type: String?): Path {
         return try {

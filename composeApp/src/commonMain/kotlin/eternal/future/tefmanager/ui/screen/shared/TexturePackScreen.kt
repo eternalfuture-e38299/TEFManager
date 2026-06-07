@@ -2,69 +2,97 @@ package eternal.future.tefmanager.ui.screen.shared
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Translate
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
-
-/*******************************************************************************
- * TEFManager - TexturePackScreen
- * Copyright (C) 2026 eternalfuture-e38299
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <https://www.gnu.org/licenses/>.
- *
- * Author: eternalfuture-e38299
- * GitHub: https://github.com/eternalfuture-e38299
- * Created: 2026/4/19
- *******************************************************************************/
+import eternal.future.tefmanager.ui.component.TexturePackCard
+import eternal.future.tefmanager.utils.resourcepack.TexturePackManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 object TexturePackScreen : Screen {
     @Composable
     override fun Content() {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Translate,
-                    contentDescription = "材质包",
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                )
-                Text(
-                    text = "材质包管理",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "功能开发中...",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.outline
-                )
+        var isLoading by remember { mutableStateOf(true) }
+
+        LaunchedEffect(Unit) {
+            withContext(Dispatchers.IO) {
+                TexturePackManager.initialize()
+                isLoading = false
+            }
+        }
+
+        Surface(modifier = Modifier.fillMaxSize()) {
+            if (isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("正在加载材质包...")
+                }
+            } else {
+                if (TexturePackManager.texturePacks.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("暂无材质包\n\n请点击右上角按钮安装材质包")
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(
+                            count = TexturePackManager.texturePacks.size,
+                            key = { index -> TexturePackManager.texturePacks[index].fileName }
+                        ) { index ->
+                            val pack = TexturePackManager.texturePacks[index]
+                            var isEnabled by remember(pack.fileName) {
+                                mutableStateOf(TexturePackManager.isPackEnabled(pack.fileName))
+                            }
+
+                            TexturePackCard(
+                                pack = pack,
+                                index = index,
+                                totalItems = TexturePackManager.texturePacks.size,
+                                isEnabled = isEnabled,
+                                onEnableChange = { enabled ->
+                                    isEnabled = enabled
+                                    TexturePackManager.setPackEnabled(pack.fileName, enabled)
+                                },
+                                onMoveUp = {
+                                    TexturePackManager.movePackPriority(pack.fileName, moveUp = true)
+                                },
+                                onMoveDown = {
+                                    TexturePackManager.movePackPriority(pack.fileName, moveUp = false)
+                                },
+                                onDelete = {
+                                    kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                                        TexturePackManager.deleteTexturePack(pack.fileName)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
             }
         }
     }
