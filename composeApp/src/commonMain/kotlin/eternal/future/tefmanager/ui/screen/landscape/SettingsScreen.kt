@@ -1,13 +1,19 @@
 package eternal.future.tefmanager.ui.screen.landscape
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Info
@@ -19,12 +25,23 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SportsEsports
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import eternal.future.tefmanager.strings.StringsResource.Strings
@@ -100,109 +117,52 @@ object SettingsScreen : Screen, MainScreen.TitledScreen {
         val pagerState = rememberPagerState(pageCount = { settingCategories.size })
         val coroutineScope = rememberCoroutineScope()
 
-        // 同步分页状态和标签选择
         LaunchedEffect(pagerState.currentPage) {
             selectedTab = pagerState.currentPage
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp)
+        Surface(
+            modifier = Modifier.fillMaxSize()
         ) {
-            // 标签栏
-            ScrollableTabRow(
-                modifier = Modifier.fillMaxWidth(),
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                settingCategories.forEachIndexed { index, category ->
-                    val isSelected = selectedTab == index
-                    val animatedColor by animateColorAsState(
-                        targetValue = if (isSelected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        animationSpec = tween(durationMillis = 300),
-                        label = "tabColor"
-                    )
-
-                    Tab(
-                        selected = isSelected,
-                        onClick = {
-                            coroutineScope.launch {
-                                pagerState.animateScrollToPage(index)
-                            }
-                        },
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp)
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = if (isSelected) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                },
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = if (isSelected) category.iconFilled else category.icon,
-                                        contentDescription = category.title,
-                                        modifier = Modifier.size(24.dp),
-                                        tint = animatedColor
-                                    )
-                                }
-                            }
-
-                            Text(
-                                text = category.title,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                                color = animatedColor
-                            )
-
-                            if (isSelected) {
-                                Surface(
-                                    modifier = Modifier
-                                        .width(20.dp)
-                                        .height(3.dp),
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.primary
-                                ) {}
-                            }
+                // M3E 标签栏
+                M3ETabRow(
+                    categories = settingCategories,
+                    selectedTab = selectedTab,
+                    onTabSelected = { index ->
+                        selectedTab = index
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(index)
                         }
                     }
-                }
-            }
+                )
 
-            Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-            // 水平分页器
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) { page ->
-                Surface(
+                // 水平分页器
+                HorizontalPager(
+                    state = pagerState,
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 8.dp),
-                    shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                    tonalElevation = 2.dp
-                ) {
-                    when (page) {
-                        0 -> GeneralSettings()
-                        1 -> AppearanceSettings()
-                        2 -> AdvancedSettings()
-                        3 -> GameSettings()
-                        4 -> AboutSettings()
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) { page ->
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 4.dp),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        when (page) {
+                            0 -> GeneralSettings()
+                            1 -> AppearanceSettings()
+                            2 -> AdvancedSettings()
+                            3 -> GameSettings()
+                            4 -> AboutSettings()
+                        }
                     }
                 }
             }
@@ -210,25 +170,79 @@ object SettingsScreen : Screen, MainScreen.TitledScreen {
     }
 
     @Composable
-    private fun ScrollableTabRow(
-        modifier: Modifier = Modifier,
-        containerColor: Color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        content: @Composable () -> Unit
+    private fun M3ETabRow(
+        categories: List<SettingCategory>,
+        selectedTab: Int,
+        onTabSelected: (Int) -> Unit
     ) {
         Surface(
-            modifier = modifier,
-            shape = MaterialTheme.shapes.medium,
-            color = containerColor,
-            tonalElevation = 1.dp
+            modifier = Modifier.fillMaxWidth()
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                content()
+                categories.forEachIndexed { index, category ->
+                    val isSelected = selectedTab == index
+
+                    M3ETab(
+                        category = category,
+                        isSelected = isSelected,
+                        onClick = { onTabSelected(index) }
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun M3ETab(
+        category: SettingCategory,
+        isSelected: Boolean,
+        onClick: () -> Unit
+    ) {
+        val containerColor = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            Color.Transparent
+        }
+
+        val contentColor = if (isSelected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
+
+        Surface(
+            onClick = onClick,
+            shape = RoundedCornerShape(12.dp),
+            color = containerColor,
+            modifier = Modifier
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = if (isSelected) category.iconFilled else category.icon,
+                    contentDescription = category.title,
+                    modifier = Modifier.size(18.dp),
+                    tint = contentColor
+                )
+
+                Text(
+                    text = category.title,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }

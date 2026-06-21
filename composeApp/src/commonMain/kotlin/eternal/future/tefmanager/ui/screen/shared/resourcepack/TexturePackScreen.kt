@@ -1,10 +1,9 @@
-package eternal.future.tefmanager.utils.resourcepack
+package eternal.future.tefmanager.ui.screen.shared.resourcepack
 
-import eternal.future.tefmanager.Platform
-import eternal.future.tefmanager.ui.model.ResourcesPackItem
+import eternal.future.tefmanager.utils.resourcepack.TexturePackManager
 
 /*******************************************************************************
- * TEFManager - TexturePackManager
+ * TEFManager - TexturePackScreen
  * Copyright (C) 2026 eternalfuture-e38299
  *
  * This program is free software: you can redistribute it and/or modify
@@ -22,16 +21,12 @@ import eternal.future.tefmanager.ui.model.ResourcesPackItem
  *
  * Author: eternalfuture-e38299
  * GitHub: https://github.com/eternalfuture-e38299
- * Created: 2026/6/7
+ * Created: 2026/4/19
  *******************************************************************************/
 
-
-object TexturePackManager : BasePackManager(
-    PackManagerConfig(
-        name = "texture_packs",
-        packType = ResourcesPackItem.PackType.TexturePack,
-        dbPath = Platform.getData("resource_pack") / "texture_packs" / "db",
-        configPath = Platform.getData("module") / "private" / "eternal.future.texturepack" / "config.json",
-        packSubDir = "texture_packs"
-    )
+object TexturePackScreen : BasePackScreen(
+    manager = TexturePackManager,
+    title = "材质包管理",
+    emptyMessage = "暂无材质包",
+    emptyActionText = "请点击按钮安装材质包"
 )

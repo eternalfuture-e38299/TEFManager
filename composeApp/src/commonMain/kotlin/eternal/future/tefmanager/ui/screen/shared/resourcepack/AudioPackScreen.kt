@@ -1,9 +1,9 @@
-package eternal.future.tefmanager.ui.model
+package eternal.future.tefmanager.ui.screen.shared.resourcepack
 
-import kotlinx.serialization.Serializable
+import eternal.future.tefmanager.utils.resourcepack.AudioManager
 
 /*******************************************************************************
- * TEFManager - TexturePackItem
+ * TEFManager - AudioPackScreen
  * Copyright (C) 2026 eternalfuture-e38299
  *
  * This program is free software: you can redistribute it and/or modify
@@ -24,25 +24,9 @@ import kotlinx.serialization.Serializable
  * Created: 2026/4/19
  *******************************************************************************/
 
-@Serializable
-data class TexturePackItem(
-    val name: String = "UNKNOWN",
-    val author: String = "UNKNOWN",
-    val description: String = "",
-    val version: String = "",
-    val fileName: String = "",
-    val iconPath: String = "",
-    val type: Type = Type.Terraria
-) {
-    enum class Type {
-        Terraria,
-        TLPro;
-
-        fun getText(): String {
-            return when(this) {
-                Terraria -> "Terraria"
-                TLPro -> "TL Pro"
-            }
-        }
-    }
-}
+object AudioPackScreen : BasePackScreen(
+    manager = AudioManager,
+    title = "音乐包管理",
+    emptyMessage = "暂无音乐包",
+    emptyActionText = "请点击按钮安装音乐包"
+)

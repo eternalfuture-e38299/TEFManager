@@ -40,7 +40,6 @@ kotlin {
     }
 
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64()
     ).forEach { iosTarget ->
@@ -96,6 +95,8 @@ kotlin {
                 implementation(libs.filekit.core)
                 implementation(libs.filekit.dialogs.compose)
                 implementation(libs.filekit.coil)
+                implementation(libs.kmp.zip)
+                implementation(libs.kmp.zip.okio)
             }
         }
         commonTest.dependencies {
@@ -118,12 +119,12 @@ kotlin {
 val androidApp = extensions.getByType(ApplicationExtension::class)
 androidApp.apply {
     namespace = "eternal.future.tefmanager"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "eternal.future.tefmanager"
-        minSdk = libs.versions.android.minSdk.get().toInt()
-        targetSdk = libs.versions.android.targetSdk.get().toInt()
+        minSdk = 24
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0.0"
     }

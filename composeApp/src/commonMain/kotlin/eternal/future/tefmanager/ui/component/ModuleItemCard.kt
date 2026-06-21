@@ -4,13 +4,14 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.expandVertically
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,8 +24,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Error
@@ -40,19 +43,15 @@ import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedAssistChip
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ElevatedSuggestionChip
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.ProgressIndicatorDefaults
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -68,6 +67,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -213,12 +213,10 @@ fun ModuleItemCard(
     var hasCustomIcon by remember { mutableStateOf(false) }
     var iconLoadError by remember { mutableStateOf<String?>(null) }
 
-    // 监听外部enabled状态变化
     LaunchedEffect(enabled) {
         internalEnabled = enabled
     }
 
-    // 检查并加载自定义图标
     LaunchedEffect(customIconPath) {
         if (customIconPath == null) {
             hasCustomIcon = false
@@ -234,49 +232,47 @@ fun ModuleItemCard(
         }
     }
 
-    // MD3E增强的卡片设计
-    ElevatedCard(
-        onClick = { expanded = !expanded },
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize()
+            .animateContentSize(
+                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
+            )
             .padding(4.dp),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.elevatedCardColors(
-            contentColor = if (internalEnabled) {
-                MaterialTheme.colorScheme.primaryContainer
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (internalEnabled) {
+                MaterialTheme.colorScheme.surfaceContainerHigh
             } else {
-                MaterialTheme.colorScheme.surfaceVariant
+                MaterialTheme.colorScheme.surfaceContainerLow
             }
         ),
-        elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = 3.dp,
-            pressedElevation = 8.dp,
-            focusedElevation = 6.dp,
-            hoveredElevation = 4.dp
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 0.dp,
+            pressedElevation = 0.dp,
+            focusedElevation = 0.dp,
+            hoveredElevation = 0.dp
         )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp)
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            // 主内容区域
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                // 图标区域
                 Surface(
-                    shape = CircleShape,
-                    tonalElevation = 2.dp,
-                    shadowElevation = 2.dp,
+                    shape = RoundedCornerShape(8.dp),
                     color = if (internalEnabled) {
-                        MaterialTheme.colorScheme.primary
+                        MaterialTheme.colorScheme.primaryContainer
                     } else {
-                        MaterialTheme.colorScheme.surfaceVariant
+                        MaterialTheme.colorScheme.surfaceContainerHighest
                     },
-                    modifier = Modifier.size(56.dp)
+                    modifier = Modifier.size(40.dp)
                 ) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -291,24 +287,22 @@ fun ModuleItemCard(
                                         CircularProgressIndicator(
                                             progress = { progress },
                                             modifier = Modifier.size(20.dp),
-                                            color = ProgressIndicatorDefaults.circularColor,
-                                            strokeWidth = 2.dp,
-                                            trackColor = ProgressIndicatorDefaults.circularIndeterminateTrackColor,
-                                            strokeCap = ProgressIndicatorDefaults.CircularDeterminateStrokeCap,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            strokeWidth = 2.dp
                                         )
                                     },
                                     onFailure = { _ ->
                                         iconLoadError = "图标加载失败"
                                     },
                                     modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
+                                        .size(24.dp)
+                                        .clip(RoundedCornerShape(4.dp))
                                 )
                             } else {
                                 Icon(
                                     imageVector = Icons.Rounded.Error,
                                     contentDescription = "图标不存在",
-                                    modifier = Modifier.size(28.dp),
+                                    modifier = Modifier.size(20.dp),
                                     tint = MaterialTheme.colorScheme.error
                                 )
                             }
@@ -316,9 +310,9 @@ fun ModuleItemCard(
                             Icon(
                                 imageVector = Icons.Rounded.Settings,
                                 contentDescription = "模块图标",
-                                modifier = Modifier.size(28.dp),
+                                modifier = Modifier.size(20.dp),
                                 tint = if (internalEnabled) {
-                                    MaterialTheme.colorScheme.onPrimary
+                                    MaterialTheme.colorScheme.onPrimaryContainer
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 }
@@ -327,124 +321,109 @@ fun ModuleItemCard(
                     }
                 }
 
-                // 信息区域
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        // 名称和ID区域
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    text = module.name,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1
-                                )
-                            }
+                        Text(
+                            text = module.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = if (internalEnabled) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
 
-                            // ID和版本信息
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        if (isEssential) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.errorContainer
                             ) {
-                                // ID标签
-                                Text(
-                                    text = module.pkgId,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    fontSize = 10.sp,
-                                    maxLines = 1
-                                )
-                                // 自定义图标标记
-                                if (hasCustomIcon) {
-                                    AssistChip(
-                                        onClick = {},
-                                        label = {
-                                            Text(
-                                                "自定义",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontSize = 10.sp
-                                            )
-                                        },
-                                        colors = AssistChipDefaults.assistChipColors(
-                                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                                        )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Star,
+                                        contentDescription = "核心",
+                                        modifier = Modifier.size(10.dp),
+                                        tint = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                    Text(
+                                        text = "核心",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 9.sp,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
                                     )
                                 }
                             }
                         }
 
-                        // 操作区域
-                        Row(
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // 启用开关
-                            Switch(
-                                checked = internalEnabled,
-                                onCheckedChange = { newValue ->
-                                    internalEnabled = newValue
-                                    onEnableChange(newValue)
-                                },
-                                enabled = !isEssential,
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                    checkedTrackColor = MaterialTheme.colorScheme.primary,
-                                    checkedBorderColor = MaterialTheme.colorScheme.primary,
-                                    uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    uncheckedBorderColor = MaterialTheme.colorScheme.outline
-                                )
-                            )
-
-                            // 展开/收起图标按钮
-                            IconButton(
-                                onClick = { expanded = !expanded },
-                                modifier = Modifier.size(40.dp)
+                        if (hasCustomIcon) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.tertiaryContainer
                             ) {
-                                AnimatedContent(
-                                    targetState = expanded,
-                                    transitionSpec = {
-                                        (fadeIn() + slideInVertically()).togetherWith(fadeOut() + slideOutVertically())
-                                    },
-                                    label = "Expand Icon Animation"
-                                ) { isExpanded ->
-                                    Icon(
-                                        imageVector = if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                                        contentDescription = if (isExpanded) "收起" else "展开",
-                                        modifier = Modifier.size(24.dp),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
+                                Text(
+                                    text = "自定义",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 9.sp,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                )
                             }
                         }
                     }
 
-                    // 简述
-                    if (module.brieflyDescribe.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Text(
-                            text = module.brieflyDescribe,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            lineHeight = 20.sp
+                            text = module.pkgId,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            fontSize = 10.sp,
+                            maxLines = 1
                         )
                     }
 
-                    // 作者信息
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Text(
+                            text = "v${module.version}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 9.sp,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
+
+                    if (module.brieflyDescribe.isNotEmpty()) {
+                        Text(
+                            text = module.brieflyDescribe,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (internalEnabled) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -459,87 +438,117 @@ fun ModuleItemCard(
                             text = module.author,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.outline,
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             maxLines = 1
                         )
                     }
+                }
 
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-
-                        if (isEssential) {
-                            AssistChip(
-                                onClick = {},
-                                label = {
-                                    Text(
-                                        "核心",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontSize = 10.sp
-                                    )
+                Row(
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Switch(
+                        checked = internalEnabled,
+                        onCheckedChange = { newValue ->
+                            internalEnabled = newValue
+                            onEnableChange(newValue)
+                        },
+                        enabled = !isEssential,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = MaterialTheme.colorScheme.primary,
+                            checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
+                            uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                            disabledCheckedThumbColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                            disabledCheckedTrackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            disabledUncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            disabledUncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ),
+                        thumbContent = {
+                            Icon(
+                                imageVector = if (internalEnabled) {
+                                    Icons.Rounded.Check
+                                } else {
+                                    Icons.Rounded.Close
                                 },
-                                colors = AssistChipDefaults.assistChipColors(
-                                    containerColor = MaterialTheme.colorScheme.errorContainer
-                                ),
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Rounded.Star,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(12.dp)
-                                    )
+                                contentDescription = if (internalEnabled) "已启用" else "已禁用",
+                                modifier = Modifier.size(14.dp),
+                                tint = if (internalEnabled) {
+                                    MaterialTheme.colorScheme.onPrimary
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
                                 }
                             )
                         }
+                    )
 
-                        // 版本标签
-                        FilterChip(
-                            selected = true,
-                            onClick = {},
-                            label = {
-                                Text(
-                                    "v${module.version}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 10.sp
+                    IconButton(
+                        onClick = { expanded = !expanded },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        AnimatedContent(
+                            targetState = expanded,
+                            transitionSpec = {
+                                (fadeIn() + slideInVertically()).togetherWith(
+                                    fadeOut() + slideOutVertically()
                                 )
                             },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer
+                            label = "Expand Icon Animation"
+                        ) { isExpanded ->
+                            Icon(
+                                imageVector = if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                                contentDescription = if (isExpanded) "收起" else "展开",
+                                modifier = Modifier.size(24.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                        )
+                        }
                     }
                 }
             }
 
-            // 展开的详细信息区域
             AnimatedVisibility(
                 visible = expanded,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
+                enter = fadeIn(animationSpec = tween(200)) +
+                        slideInVertically(
+                            initialOffsetY = { -it / 2 },
+                            animationSpec = tween(200, easing = FastOutSlowInEasing)
+                        ),
+                exit = fadeOut(animationSpec = tween(150)) +
+                        slideOutVertically(
+                            targetOffsetY = { -it / 2 },
+                            animationSpec = tween(150, easing = FastOutSlowInEasing)
+                        )
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 16.dp)
+                        .padding(top = 12.dp)
                 ) {
-                    // 分隔线
                     HorizontalDivider(
-                        Modifier,
-                        thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // 依赖信息
+                    if (module.description.isNotEmpty()) {
+                        Text(
+                            text = module.description,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 20.sp,
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        )
+                    }
+
                     if (module.dependence.isNotEmpty()) {
                         Column(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Icon(
                                     Icons.Rounded.Link,
@@ -548,22 +557,20 @@ fun ModuleItemCard(
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "依赖项",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
+                                    text = "依赖项 (${module.dependence.size})",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
 
-                            // 依赖项列表
                             Column(
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 module.dependence.forEach { dep ->
                                     Surface(
-                                        tonalElevation = 1.dp,
-                                        shape = MaterialTheme.shapes.small,
-                                        color = MaterialTheme.colorScheme.surfaceVariant
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.surfaceContainerHighest
                                     ) {
                                         Row(
                                             modifier = Modifier
@@ -604,14 +611,13 @@ fun ModuleItemCard(
                         Spacer(modifier = Modifier.height(12.dp))
                     }
 
-                    // 平台兼容性信息
                     if (module.support.getSupportedPlatforms().isNotEmpty()) {
                         Column(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Icon(
                                     Icons.Rounded.Devices,
@@ -621,32 +627,28 @@ fun ModuleItemCard(
                                 )
                                 Text(
                                     text = "支持平台",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
 
-                            // 平台标签
                             FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 module.support.getSupportedPlatforms().forEach { platform ->
-                                    ElevatedSuggestionChip(
+                                    SuggestionChip(
                                         onClick = {},
                                         label = {
                                             Text(
                                                 platform,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontSize = 10.sp
+                                                style = MaterialTheme.typography.labelSmall
                                             )
                                         },
                                         colors = SuggestionChipDefaults.suggestionChipColors(
-                                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                                        ),
-                                        elevation = SuggestionChipDefaults.suggestionChipElevation(
-                                            elevation = 1.dp
+                                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                            labelColor = MaterialTheme.colorScheme.onSecondaryContainer
                                         )
                                     )
                                 }
@@ -656,20 +658,15 @@ fun ModuleItemCard(
                         Spacer(modifier = Modifier.height(12.dp))
                     }
 
-                    // 图标加载错误信息
                     iconLoadError?.let { error ->
-                        ElevatedAssistChip(
+                        AssistChip(
                             onClick = {},
                             label = {
                                 Text(
                                     error,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 10.sp
+                                    style = MaterialTheme.typography.labelSmall
                                 )
                             },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            ),
                             leadingIcon = {
                                 Icon(
                                     Icons.Rounded.Error,
@@ -677,25 +674,25 @@ fun ModuleItemCard(
                                     modifier = Modifier.size(14.dp)
                                 )
                             },
-                            elevation = AssistChipDefaults.assistChipElevation(elevation = 1.dp)
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                labelColor = MaterialTheme.colorScheme.onErrorContainer
+                            ),
+                            border = null,
+                            elevation = null,
+                            modifier = Modifier.padding(bottom = 12.dp)
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    // 核心模块警告
                     if (isEssential && !internalEnabled) {
-                        ElevatedAssistChip(
+                        AssistChip(
                             onClick = {},
                             label = {
                                 Text(
                                     "核心模块，禁用可能导致系统不稳定",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 10.sp
+                                    style = MaterialTheme.typography.labelSmall
                                 )
                             },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer
-                            ),
                             leadingIcon = {
                                 Icon(
                                     Icons.Rounded.Warning,
@@ -703,55 +700,43 @@ fun ModuleItemCard(
                                     modifier = Modifier.size(14.dp)
                                 )
                             },
-                            elevation = AssistChipDefaults.assistChipElevation(elevation = 1.dp)
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                labelColor = MaterialTheme.colorScheme.onErrorContainer
+                            ),
+                            border = null,
+                            elevation = null,
+                            modifier = Modifier.padding(bottom = 12.dp)
                         )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
-
-                    // 描述信息
-                    if (module.description.isNotEmpty()) {
-                        Text(
-                            text = module.description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            lineHeight = 18.sp
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                    }
-
-                    // 按钮区域
-
-                    // 配置按钮（条件显示）
-                    if (module.globalConfig.fileType != "null" && module.globalConfig.fileType.isNotEmpty()) {
-                        onConfigure?.let { configureCallback ->
-                            OutlinedButton(
-                                onClick = { configureCallback(module) },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = MaterialTheme.shapes.medium
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.Settings,
-                                    contentDescription = "配置",
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text("配置")
-                            }
-                        }
                     }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        if (module.globalConfig.fileType != "null" && module.globalConfig.fileType.isNotEmpty()) {
+                            onConfigure?.let { configureCallback ->
+                                OutlinedButton(
+                                    onClick = { configureCallback(module) },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Settings,
+                                        contentDescription = "配置",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("配置")
+                                }
+                            }
+                        }
+
                         if (module.detailsURL.isNotEmpty()) {
-                            // 详细信息按钮
                             OutlinedButton(
                                 onClick = { openUrl(module.detailsURL) },
                                 modifier = Modifier.weight(1f),
-                                shape = MaterialTheme.shapes.medium
+                                shape = RoundedCornerShape(8.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.Info,
@@ -763,13 +748,12 @@ fun ModuleItemCard(
                             }
                         }
 
-                        // 删除按钮
                         OutlinedButton(
                             onClick = onDelete,
                             modifier = Modifier.weight(1f),
-                            shape = MaterialTheme.shapes.medium,
+                            shape = RoundedCornerShape(8.dp),
                             colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f),
+                                containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f),
                                 contentColor = MaterialTheme.colorScheme.error
                             )
                         ) {

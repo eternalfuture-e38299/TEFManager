@@ -1,5 +1,6 @@
 package eternal.future.tefmanager.ui.component
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -7,29 +8,34 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Texture
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Error
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,13 +52,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import eternal.future.tefmanager.ui.model.TexturePackItem
+import androidx.compose.ui.unit.sp
+import eternal.future.tefmanager.ui.model.ResourcesPackItem
 import eternal.future.tefmanager.utils.toFileUrlString
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
@@ -61,7 +66,7 @@ import okio.Path.Companion.toPath
 import okio.SYSTEM
 
 /*******************************************************************************
- * TEFManager - TexturePackCard
+ * TEFManager - ResourcesPackCard
  * Copyright (C) 2026 eternalfuture-e38299
  *
  * This program is free software: you can redistribute it and/or modify
@@ -85,7 +90,7 @@ import okio.SYSTEM
 
 @Preview(showBackground = true, widthDp = 400, heightDp = 800)
 @Composable
-fun PreviewTexturePackCard() {
+fun PreviewResourcesPackCard() {
     MaterialTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -94,41 +99,41 @@ fun PreviewTexturePackCard() {
             // 创建一个可变的材质包列表用于演示交互
             val packs = remember {
                 mutableStateListOf(
-                    TexturePackItem(
+                    ResourcesPackItem(
                         name = "官方材质包",
                         author = "Re-Logic",
                         description = "Terraria官方高清材质包，提升游戏画质",
                         version = "1.4.4",
                         fileName = "OfficialTexturePack.zip",
                         iconPath = "",
-                        type = TexturePackItem.Type.Terraria
+                        type = ResourcesPackItem.Type.Terraria
                     ),
-                    TexturePackItem(
+                    ResourcesPackItem(
                         name = "光影增强包",
                         author = "LightMaster",
                         description = "增强游戏光影效果，让画面更真实",
                         version = "2.1.0",
                         fileName = "LightingBoost.zip",
                         iconPath = "",
-                        type = TexturePackItem.Type.TLPro
+                        type = ResourcesPackItem.Type.TLPro
                     ),
-                    TexturePackItem(
+                    ResourcesPackItem(
                         name = "复古像素风格",
                         author = "PixelArtisan",
                         description = "将游戏画面转换为复古像素风格，怀旧体验",
                         version = "1.0.3",
                         fileName = "RetroPixel.zip",
                         iconPath = "",
-                        type = TexturePackItem.Type.Terraria
+                        type = ResourcesPackItem.Type.Terraria
                     ),
-                    TexturePackItem(
+                    ResourcesPackItem(
                         name = "高清武器纹理",
                         author = "WeaponMaster",
                         description = "所有武器高清重制，细节更丰富",
                         version = "3.0.0",
                         fileName = "HDWeapons.zip",
                         iconPath = "",
-                        type = TexturePackItem.Type.TLPro
+                        type = ResourcesPackItem.Type.TLPro
                     )
                 )
             }
@@ -142,7 +147,7 @@ fun PreviewTexturePackCard() {
                     val pack = packs[index]
                     var isEnabled by remember { mutableStateOf(index < 2) } // 前两个默认启用
 
-                    TexturePackCard(
+                    ResourcesPackCard(
                         pack = pack,
                         index = index,
                         totalItems = packs.size,
@@ -173,25 +178,23 @@ fun PreviewTexturePackCard() {
 
                 // 添加一个包含自定义图标的示例
                 item {
-                    val customIconPack = TexturePackItem(
+                    val customIconPack = ResourcesPackItem(
                         name = "自定义图标材质包",
                         author = "Designer",
                         description = "展示自定义图标功能的材质包",
                         version = "1.0.0",
                         fileName = "CustomIcon.zip",
                         iconPath = "/path/to/icon.png", // 实际使用时替换为真实路径
-                        type = TexturePackItem.Type.Terraria
+                        type = ResourcesPackItem.Type.TEFManager
                     )
                     var isEnabled by remember { mutableStateOf(false) }
 
-                    TexturePackCard(
+                    ResourcesPackCard(
                         pack = customIconPack,
                         index = packs.size,
                         totalItems = packs.size + 1,
                         isEnabled = isEnabled,
                         onEnableChange = { enabled -> isEnabled = enabled },
-                        onMoveUp = {},
-                        onMoveDown = {},
                         onDelete = {},
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -202,120 +205,148 @@ fun PreviewTexturePackCard() {
 }
 
 @Composable
-fun TexturePackCard(
-    pack: TexturePackItem,
+fun ResourcesPackCard(
+    pack: ResourcesPackItem,
     index: Int,
     totalItems: Int,
     isEnabled: Boolean,
     onEnableChange: (Boolean) -> Unit,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
+    onMoveUp: (() -> Unit)? = null,
+    onMoveDown: (() -> Unit)? = null,
     onDelete: () -> Unit,
+    switchEnabled: Boolean = true,  // 新增参数
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
     var iconLoadError by remember { mutableStateOf<String?>(null) }
 
-    Card(
+    val showMoveUp = onMoveUp != null && isEnabled && index > 0
+    val showMoveDown = onMoveDown != null && isEnabled && index < totalItems - 1
+    val showMoveButtons = showMoveUp || showMoveDown
+
+    Surface(
         modifier = modifier
             .fillMaxWidth()
             .animateContentSize(
                 animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing)
             ),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isEnabled)
-                MaterialTheme.colorScheme.surfaceVariant
-            else
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        shape = RoundedCornerShape(16.dp),
+        color = if (isEnabled) {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { expanded = !expanded }
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            // 第一行：图标、信息和开关
+            // 主行
             Row(
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // 材质包图标
-                if (pack.iconPath.isNotBlank()) {
-                    val fileSystem = FileSystem.SYSTEM
-                    val customIconPath = pack.iconPath.toPath()
-
-                    if (fileSystem.exists(customIconPath)) {
-                        KamelImage(
-                            resource = { asyncPainterResource(data = customIconPath.toFileUrlString()) },
-                            contentDescription = "自定义图标",
-                            onFailure = { _ ->
-                                iconLoadError = "图标加载失败"
-                            },
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                        )
+                // 图标
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isEnabled) {
+                        MaterialTheme.colorScheme.primaryContainer
                     } else {
-                        Icon(
-                            imageVector = Icons.Rounded.Error,
-                            contentDescription = "图标不存在",
-                            modifier = Modifier.size(28.dp),
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    }
-                } else {
-                    // 默认图标
-                    Icon(
-                        imageVector = Icons.Default.Texture,
-                        contentDescription = "默认图标",
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(
-                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
-                                shape = CircleShape
+                        MaterialTheme.colorScheme.surfaceContainerHighest
+                    },
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (pack.iconPath.isNotBlank()) {
+                            val fileSystem = FileSystem.SYSTEM
+                            val customIconPath = pack.iconPath.toPath()
+
+                            if (fileSystem.exists(customIconPath)) {
+                                KamelImage(
+                                    resource = { asyncPainterResource(data = customIconPath.toFileUrlString()) },
+                                    contentDescription = "自定义图标",
+                                    onFailure = { _ ->
+                                        iconLoadError = "图标加载失败"
+                                    },
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Rounded.Error,
+                                    contentDescription = "图标不存在",
+                                    modifier = Modifier.size(22.dp),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Texture,
+                                contentDescription = "默认图标",
+                                modifier = Modifier.size(22.dp),
+                                tint = if (isEnabled) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
                             )
-                            .padding(8.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                        }
+                    }
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
-
-                // 材质包信息
+                // 信息区域
                 Column(
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
                         text = pack.name,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        color = if (isEnabled)
+                        color = if (isEnabled) {
                             MaterialTheme.colorScheme.onSurface
-                        else
+                        } else {
                             MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        }
                     )
 
-                    Text(
-                        text = "作者: ${pack.author}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (isEnabled)
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        else
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                    )
-
-                    if (pack.version.isNotBlank()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         Text(
-                            text = "版本: ${pack.version}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = if (isEnabled) 1f else 0.5f)
+                            text = pack.author,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isEnabled) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            }
                         )
+
+                        if (pack.version.isNotBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer
+                            ) {
+                                Text(
+                                    text = "v${pack.version}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 9.sp,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -323,44 +354,57 @@ fun TexturePackCard(
                 Switch(
                     checked = isEnabled,
                     onCheckedChange = onEnableChange,
+                    enabled = switchEnabled,  // 使用传入的参数
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = MaterialTheme.colorScheme.primary,
                         checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
-                        uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
+                    ),
+                    thumbContent = {
+                        Icon(
+                            imageVector = if (isEnabled) {
+                                Icons.Rounded.Check
+                            } else {
+                                Icons.Rounded.Close
+                            },
+                            contentDescription = if (isEnabled) "已启用" else "已禁用",
+                            modifier = Modifier.size(14.dp),
+                            tint = if (isEnabled) {
+                                MaterialTheme.colorScheme.onPrimary
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            }
+                        )
+                    }
                 )
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // 展开/收起按钮
+                // 展开按钮
                 IconButton(
                     onClick = { expanded = !expanded },
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.ExpandMore,
+                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                         contentDescription = if (expanded) "收起" else "展开",
-                        modifier = Modifier
-                            .size(24.dp)
-                            .rotate(if (expanded) 180f else 0f),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        modifier = Modifier.size(22.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            // 展开后的详细信息（带动画）
-            androidx.compose.animation.AnimatedVisibility(
+            // 展开内容
+            AnimatedVisibility(
                 visible = expanded,
-                enter = fadeIn(animationSpec = tween(300)) +
+                enter = fadeIn(animationSpec = tween(200)) +
                         slideInVertically(
                             initialOffsetY = { -it / 2 },
-                            animationSpec = tween(300, easing = FastOutSlowInEasing)
+                            animationSpec = tween(200, easing = FastOutSlowInEasing)
                         ),
-                exit = fadeOut(animationSpec = tween(200)) +
+                exit = fadeOut(animationSpec = tween(150)) +
                         slideOutVertically(
                             targetOffsetY = { -it / 2 },
-                            animationSpec = tween(200, easing = FastOutSlowInEasing)
+                            animationSpec = tween(150, easing = FastOutSlowInEasing)
                         )
             ) {
                 Column(
@@ -368,128 +412,153 @@ fun TexturePackCard(
                         .fillMaxWidth()
                         .padding(top = 12.dp)
                 ) {
-                    // 描述文本
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     if (pack.description.isNotBlank()) {
                         Text(
-                            text = "描述: ${pack.description}",
+                            text = pack.description,
                             style = MaterialTheme.typography.bodyMedium,
-                            lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.2,
-                            modifier = Modifier.padding(bottom = 8.dp)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 20.sp,
+                            modifier = Modifier.padding(bottom = 12.dp)
                         )
                     }
 
-                    // 图标加载错误提示
                     iconLoadError?.let { error ->
-                        Text(
-                            text = error,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(bottom = 8.dp)
+                        AssistChip(
+                            onClick = {},
+                            label = {
+                                Text(
+                                    error,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Rounded.Error,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            },
+                            colors = AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                labelColor = MaterialTheme.colorScheme.onErrorContainer
+                            ),
+                            border = null,
+                            elevation = null,
+                            modifier = Modifier.padding(bottom = 12.dp)
                         )
                     }
 
-                    // 底部操作行
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        // 类型和顺序信息
                         Row(
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // 类型标签
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = when (pack.type) {
-                                    TexturePackItem.Type.Terraria ->
-                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
-                                    TexturePackItem.Type.TLPro ->
-                                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.2f)
+                            FilterChip(
+                                selected = false,
+                                onClick = {},
+                                label = {
+                                    Text(
+                                        pack.type.getText(),
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
                                 },
-                                modifier = Modifier.padding(end = 8.dp)
-                            ) {
-                                Text(
-                                    text = pack.type.getText(),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = when (pack.type) {
-                                        TexturePackItem.Type.Terraria ->
-                                            MaterialTheme.colorScheme.primary
-                                        TexturePackItem.Type.TLPro ->
-                                            MaterialTheme.colorScheme.secondary
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = when (pack.type) {
+                                        ResourcesPackItem.Type.Terraria ->
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        ResourcesPackItem.Type.TLPro ->
+                                            MaterialTheme.colorScheme.secondaryContainer
+                                        ResourcesPackItem.Type.TEFManager ->
+                                            MaterialTheme.colorScheme.tertiaryContainer
                                     },
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    labelColor = when (pack.type) {
+                                        ResourcesPackItem.Type.Terraria ->
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        ResourcesPackItem.Type.TLPro ->
+                                            MaterialTheme.colorScheme.onSecondaryContainer
+                                        ResourcesPackItem.Type.TEFManager ->
+                                            MaterialTheme.colorScheme.onTertiaryContainer
+                                    }
+                                ),
+                                border = null
+                            )
+
+                            if (showMoveButtons) {
+                                Text(
+                                    text = "${index + 1}/$totalItems",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-
-                            // 加载顺序
-                            Text(
-                                text = "加载顺序: ${index + 1}/$totalItems",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
-                            )
                         }
 
-                        // 操作按钮
-                        Row {
-                            // 顺序调整按钮（只有启用时才能修改顺序）
-                            IconButton(
-                                onClick = onMoveUp,
-                                enabled = isEnabled && index > 0,
-                                modifier = Modifier.size(36.dp)
+                        // 操作按钮 - 只有至少有一个可用时才显示
+                        if (showMoveButtons) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.ArrowUpward,
-                                    contentDescription = "上移",
-                                    modifier = Modifier.size(20.dp),
-                                    tint = if (isEnabled && index > 0)
-                                        MaterialTheme.colorScheme.primary
-                                    else
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                                )
-                            }
+                                if (showMoveUp) {
+                                    IconButton(
+                                        onClick = onMoveUp,
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ArrowUpward,
+                                            contentDescription = "上移",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
 
-                            IconButton(
-                                onClick = onMoveDown,
-                                enabled = isEnabled && index < totalItems - 1,
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.ArrowDownward,
-                                    contentDescription = "下移",
-                                    modifier = Modifier.size(20.dp),
-                                    tint = if (isEnabled && index < totalItems - 1)
-                                        MaterialTheme.colorScheme.primary
-                                    else
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                                )
+                                if (showMoveDown) {
+                                    IconButton(
+                                        onClick = onMoveDown,
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ArrowDownward,
+                                            contentDescription = "下移",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
                             }
+                        }
 
-                            // 删除按钮
-                            IconButton(
-                                onClick = onDelete,
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "删除",
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            }
+                        // 删除按钮
+                        IconButton(
+                            onClick = onDelete,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "删除",
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.error
+                            )
                         }
                     }
 
-                    // 顺序说明文字（只有启用时显示）
-                    if (isEnabled) {
+                    if (isEnabled && showMoveButtons) {
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "提示：材质包按顺序从上到下加载，下方的会覆盖上方的同名资源",
+                            text = "资源包按顺序从上到下加载，下方的会覆盖上方的同名资源",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier
-                                .padding(top = 8.dp)
-                                .fillMaxWidth(),
-                            textAlign = TextAlign.Start
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }

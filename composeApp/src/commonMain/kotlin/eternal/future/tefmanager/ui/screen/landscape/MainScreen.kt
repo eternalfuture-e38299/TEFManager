@@ -105,14 +105,13 @@ object MainScreen : Screen {
         ) { navigator ->
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
-                containerColor = MaterialTheme.colorScheme.background,
                 topBar = {
                     val currentScreen = navigator.lastItem
                     var refreshAction: (() -> Unit)? by mutableStateOf(((currentScreen as TitledScreen).refreshAction))
                     val title = (currentScreen as TitledScreen).title
 
                     Surface(
-                        tonalElevation = 1.dp,
+                        tonalElevation = 2.dp,
                         color = MaterialTheme.colorScheme.surface
                     ) {
                         CenterAlignedTopAppBar(
@@ -180,7 +179,7 @@ object MainScreen : Screen {
                             .weight(1f)
                             .fillMaxHeight(),
                         color = MaterialTheme.colorScheme.background,
-                        tonalElevation = 0.dp
+                        tonalElevation = 2.dp
                     ) {
                         // 使用 FadeTransition 替代 SlideTransition
                         // 淡入淡出动画在侧边栏导航中更加自然，不会产生方向冲突
@@ -230,9 +229,10 @@ object MainScreen : Screen {
 
         Surface(
             modifier = Modifier
-                .background(MaterialTheme.colorScheme.background)
+                .background(MaterialTheme.colorScheme.surface)
                 .fillMaxHeight()
-                .width(88.dp)
+                .width(88.dp),
+            tonalElevation = 2.dp
         ) {
             Column(
                 modifier = Modifier

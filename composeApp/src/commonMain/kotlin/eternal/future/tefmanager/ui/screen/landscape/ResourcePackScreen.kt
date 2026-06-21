@@ -1,7 +1,5 @@
 package eternal.future.tefmanager.ui.screen.landscape
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -15,43 +13,32 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Translate
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SearchBar
-import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,11 +49,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
-import eternal.future.tefmanager.ui.screen.shared.*
+import eternal.future.tefmanager.Platform
+import eternal.future.tefmanager.ui.component.ResourcePackInstallDialog
+import eternal.future.tefmanager.ui.screen.shared.resourcepack.FontPackScreen
+import eternal.future.tefmanager.ui.screen.shared.resourcepack.LanguagePackScreen
+import eternal.future.tefmanager.ui.screen.shared.resourcepack.AudioPackScreen
+import eternal.future.tefmanager.ui.screen.shared.resourcepack.LanguagePatchPackScreen
+import eternal.future.tefmanager.ui.screen.shared.resourcepack.TexturePackScreen
+import io.github.vinceglb.filekit.dialogs.FileKitMode
+import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
+import io.github.vinceglb.filekit.nameWithoutExtension
+import io.github.vinceglb.filekit.size
+import io.github.vinceglb.filekit.source
 import kotlinx.coroutines.launch
+import kotlinx.io.buffered
+import kotlinx.io.files.SystemFileSystem
+import okio.FileSystem
+import okio.Path
+import okio.Path.Companion.toPath
+import okio.SYSTEM
 
 /*******************************************************************************
  * TEFManager - ResourcePackScreen
@@ -90,15 +94,6 @@ import kotlinx.coroutines.launch
  * Created: 2026/2/4
  *******************************************************************************/
 
-data class ResourcePack(
-    val id: String,
-    val name: String,
-    val description: String,
-    val version: String,
-    val category: String,
-    val enabled: Boolean = false
-)
-
 object ResourcePackScreen : Screen, MainScreen.TitledScreen {
     data class ResourceCategory(
         val id: String,
@@ -114,11 +109,18 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
         val categories = remember {
             listOf(
                 ResourceCategory(
-                    id = "language",
-                    title = "语言包",
-                    icon = Icons.Outlined.Translate,
-                    iconFilled = Icons.Rounded.Translate,
-                    screen = LanguagePackScreen
+                id = "language",
+                title = "语言包",
+                icon = Icons.Outlined.Translate,
+                iconFilled = Icons.Rounded.Translate,
+                screen = LanguagePackScreen
+                ),
+                ResourceCategory(
+                    id = "language_patch",
+                    title = "语言补丁包",
+                    icon = Icons.Outlined.Edit,
+                    iconFilled = Icons.Rounded.Edit,
+                    screen = LanguagePatchPackScreen
                 ),
                 ResourceCategory(
                     id = "texture",
@@ -139,352 +141,271 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
                     title = "音乐包",
                     icon = Icons.Outlined.MusicNote,
                     iconFilled = Icons.Rounded.MusicNote,
-                    screen = MusicPackScreen
+                    screen = AudioPackScreen
                 )
             )
         }
 
         var selectedTab by remember { mutableIntStateOf(0) }
-        var searchQuery by remember { mutableStateOf("") }
-        var searchActive by remember { mutableStateOf(false) }
         val pagerState = rememberPagerState(pageCount = { categories.size })
         val coroutineScope = rememberCoroutineScope()
 
-        // 同步分页状态和标签选择
         LaunchedEffect(pagerState.currentPage) {
             selectedTab = pagerState.currentPage
         }
 
-        Scaffold(
+        Surface(
             modifier = Modifier.fillMaxSize()
-        ) { paddingValues ->
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                // 搜索栏
-                Column(
+                // 标题栏
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Palette,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "资源包管理",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // M3E 标签栏
+                M3ETabRow(
+                    categories = categories,
+                    selectedTab = selectedTab,
+                    onTabSelected = { index ->
+                        selectedTab = index
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(index)
+                        }
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 水平分页器
+                HorizontalPager(
+                    state = pagerState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 20.dp)
-                ) {
-                    SearchBar(
-                        query = searchQuery,
-                        onQueryChange = { searchQuery = it },
-                        onSearch = { query ->
-                            searchQuery = query
-                        },
-                        onActiveChange = { searchActive = it },
-                        active = searchActive,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                        .weight(1f)
+                ) { page ->
+                    val category = categories[page]
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 4.dp),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(vertical = 8.dp)
+                        ) {
+                            CategoryHeader(
+                                category = category
+                            )
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
 
-                    if (searchQuery.isEmpty()) {
-                        // 正常标签页模式
-                        NormalTabView(
-                            categories = categories,
-                            selectedTab = selectedTab,
-                            pagerState = pagerState,
-                            onTabSelected = { index ->
-                                coroutineScope.launch {
-                                    pagerState.animateScrollToPage(index)
-                                }
-                            }
-                        )
-                    } else {
-                        // 搜索模式
-                        SearchResultsView()
+                            categories[page].screen.Content()
+                        }
                     }
                 }
             }
         }
     }
 
-    data class SearchResult(
-        val categoryResults: List<ResourcePack>,
-        val allResults: List<ResourcePack>
-    )
-
-    @OptIn(ExperimentalFoundationApi::class)
     @Composable
-    private fun NormalTabView(
+    private fun M3ETabRow(
         categories: List<ResourceCategory>,
         selectedTab: Int,
-        pagerState: PagerState,
         onTabSelected: (Int) -> Unit
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize()
+        Surface(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            // 滑动标签栏
-            ScrollableTabRow(
-                selectedTabIndex = selectedTab,
-                modifier = Modifier.fillMaxWidth(),
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.primary,
-                divider = {},
-                edgePadding = 0.dp
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 categories.forEachIndexed { index, category ->
                     val isSelected = selectedTab == index
-                    val animatedColor by animateColorAsState(
-                        targetValue = if (isSelected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        animationSpec = tween(durationMillis = 300),
-                        label = "tabColor"
+
+                    M3ETab(
+                        category = category,
+                        isSelected = isSelected,
+                        onClick = { onTabSelected(index) }
                     )
-
-                    Tab(
-                        selected = isSelected,
-                        onClick = { onTabSelected(index) },
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp)
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = if (isSelected) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                },
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = if (isSelected) category.iconFilled else category.icon,
-                                        contentDescription = category.title,
-                                        modifier = Modifier.size(24.dp),
-                                        tint = animatedColor
-                                    )
-                                }
-                            }
-
-                            Text(
-                                text = category.title,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                                color = animatedColor
-                            )
-
-                            if (isSelected) {
-                                Surface(
-                                    modifier = Modifier
-                                        .width(20.dp)
-                                        .height(3.dp),
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.primary
-                                ) {}
-                            }
-                        }
-                    }
                 }
             }
+        }
+    }
 
-            // 水平分页器
-            HorizontalPager(
-                state = pagerState,
+    @Composable
+    private fun M3ETab(
+        category: ResourceCategory,
+        isSelected: Boolean,
+        onClick: () -> Unit
+    ) {
+        val containerColor = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            Color.Transparent
+        }
+
+        val contentColor = if (isSelected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
+
+        Surface(
+            onClick = onClick,
+            shape = RoundedCornerShape(12.dp),
+            color = containerColor,
+            modifier = Modifier
+        ) {
+            Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) { page ->
-                val category = categories[page]
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 20.dp, vertical = 20.dp)
-                ) {
-                    // 分类标题和添加按钮
-                    CategoryHeader(
-                        category = category,
-                        selectedTab = page
-                    )
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = if (isSelected) category.iconFilled else category.icon,
+                    contentDescription = category.title,
+                    modifier = Modifier.size(18.dp),
+                    tint = contentColor
+                )
 
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // 资源包列表
-                    categories[page].screen.Content()
-                }
+                Text(
+                    text = category.title,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
 
     @Composable
     private fun CategoryHeader(
-        category: ResourceCategory,
-        selectedTab: Int
+        category: ResourceCategory
     ) {
+        var showInstallDialog by remember { mutableStateOf(false) }
+        val installFiles = remember { mutableListOf<Path>() }
+
+        val filePickerLauncher = rememberFilePickerLauncher(
+            mode = FileKitMode.Multiple(maxItems = 10)
+        ) { files ->
+            installFiles.clear()
+            files?.forEach { file ->
+                val tmp = kotlinx.io.files.Path((Platform.getData("install_tmp") / file.nameWithoutExtension).toString())
+                tmp.parent?.let { SystemFileSystem.createDirectories(it) }
+                SystemFileSystem.sink(tmp).buffered().use { sink ->
+                    sink.write(file.source(), file.size())
+                    sink.flush()
+                    installFiles.add(tmp.toString().toPath())
+                }
+                showInstallDialog = true
+            }
+        }
+
+        if (showInstallDialog) {
+            ResourcePackInstallDialog(
+                filePaths = installFiles,
+                onDismiss = {
+                    FileSystem.SYSTEM.deleteRecursively(Platform.getData("install_tmp"))
+                    installFiles.clear()
+                    showInstallDialog = false
+                }
+            )
+        }
+
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(
-                imageVector = category.iconFilled,
-                contentDescription = null,
-                modifier = Modifier.size(28.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = category.iconFilled,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
 
             Text(
                 text = category.title,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface
             )
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // 添加按钮
             FilledTonalButton(
-                onClick = {
-                    // 根据当前分类执行不同的添加逻辑
-                    when (selectedTab) {
-                        0 -> { /* 添加语言包 */ }
-                        1 -> { /* 添加材质包 */ }
-                        2 -> { /* 添加字体包 */ }
-                        3 -> { /* 添加音乐包 */ }
-                    }
-                },
-                shape = MaterialTheme.shapes.medium
+                onClick = { filePickerLauncher.launch() },
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Add,
                     contentDescription = null,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
-                Spacer(Modifier.width(8.dp))
-                Text("添加${category.title}")
-            }
-        }
-    }
-
-    @Composable
-    private fun SearchResultsView() {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surfaceContainerLowest,
-            tonalElevation = 2.dp
-        ) {
-            NoSearchResults()
-        }
-    }
-
-    @Composable
-    private fun NoSearchResults() {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(40.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.SearchOff,
-                contentDescription = "无结果",
-                modifier = Modifier.size(64.dp),
-                tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "未找到相关资源包",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "尝试使用其他关键词搜索",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.outline
-            )
-        }
-    }
-
-    @OptIn(ExperimentalMaterial3Api::class)
-    @Composable
-    private fun SearchBar(
-        query: String,
-        onQueryChange: (String) -> Unit,
-        onSearch: (String) -> Unit,
-        onActiveChange: (Boolean) -> Unit,
-        active: Boolean,
-        modifier: Modifier = Modifier
-    ) {
-        Surface(
-            modifier = modifier,
-            shape = MaterialTheme.shapes.medium,
-            color = MaterialTheme.colorScheme.surfaceContainerLowest,
-            tonalElevation = 2.dp
-        ) {
-            SearchBar(
-                query = query,
-                onQueryChange = onQueryChange,
-                onSearch = onSearch,
-                active = active,
-                onActiveChange = onActiveChange,
-                placeholder = { Text("搜索资源包...") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Rounded.Search,
-                        contentDescription = "搜索",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                },
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { onQueryChange("") }) {
-                            Icon(
-                                imageVector = Icons.Rounded.Close,
-                                contentDescription = "清除",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = SearchBarDefaults.colors(
-                    containerColor = Color.Transparent
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "添加",
+                    style = MaterialTheme.typography.labelLarge
                 )
-            ) {
-                // 搜索建议（可选）
-            }
-        }
-    }
-
-
-    @Composable
-    private fun ScrollableTabRow(
-        selectedTabIndex: Int,
-        modifier: Modifier = Modifier,
-        containerColor: Color = MaterialTheme.colorScheme.surface,
-        contentColor: Color = MaterialTheme.colorScheme.primary,
-        divider: @Composable () -> Unit = {},
-        edgePadding: Dp = 0.dp,
-        content: @Composable () -> Unit
-    ) {
-        Surface(
-            modifier = modifier,
-            shape = MaterialTheme.shapes.medium,
-            color = containerColor,
-            tonalElevation = 1.dp
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                content()
             }
         }
     }

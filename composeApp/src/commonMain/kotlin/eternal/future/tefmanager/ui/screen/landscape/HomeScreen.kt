@@ -1,19 +1,49 @@
 package eternal.future.tefmanager.ui.screen.landscape
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Gamepad
-import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Fingerprint
+import androidx.compose.material.icons.rounded.Games
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Tag
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.runtime.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -22,10 +52,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
 import eternal.future.tefmanager.strings.StringsResource.Strings
-import eternal.future.tefmanager.utils.GameManager
 import eternal.future.tefmanager.ui.dialogs.AddGameDialog
 import eternal.future.tefmanager.ui.model.GameItem
 import eternal.future.tefmanager.utils.GameLauncher
+import eternal.future.tefmanager.utils.GameManager
 
 /*******************************************************************************
  * TEFManager - HomeScreen
@@ -56,13 +86,20 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
         var selectedItem by remember { mutableStateOf(GameManager.games.firstOrNull()) }
         var showAddGameDialog by remember { mutableStateOf(false) }
 
-        Scaffold(
-            containerColor = MaterialTheme.colorScheme.surface
-        ) { paddingValues ->
+        if (showAddGameDialog) {
+            AddGameDialog.Show {
+                showAddGameDialog = false
+                if (it != null) GameManager.addGame(it)
+            }
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.surface
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
                     .padding(20.dp),
                 horizontalArrangement = Arrangement.spacedBy(20.dp)
             ) {
@@ -78,13 +115,6 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                     },
                     modifier = Modifier.weight(2.5f)
                 )
-
-                if (showAddGameDialog) {
-                    AddGameDialog.Show {
-                        showAddGameDialog = false
-                        if (it != null) GameManager.addGame(it)
-                    }
-                }
 
                 // 右侧控制面板
                 ControlPanelCard(
@@ -109,34 +139,59 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
         onAddGame: () -> Unit,
         modifier: Modifier = Modifier
     ) {
-        Surface(
+        Card(
             modifier = modifier,
-            shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surfaceContainerLowest,
-            tonalElevation = 2.dp
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = 0.dp
+            )
         ) {
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
-                // 标题栏
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(24.dp, 20.dp),
+                        .padding(20.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = "已安装的游戏",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Games,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
 
-                    // 添加游戏按钮
+                        Text(
+                            text = "我的游戏",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
                     FilledTonalButton(
                         onClick = onAddGame,
-                        shape = MaterialTheme.shapes.medium,
+                        shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer
                         )
@@ -146,24 +201,55 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                             contentDescription = "添加游戏",
                             modifier = Modifier.size(18.dp)
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Text("添加游戏")
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "添加游戏",
+                            style = MaterialTheme.typography.labelLarge
+                        )
                     }
                 }
 
-                // 游戏列表
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(items) { item ->
-                        GameListItemMD3(
-                            item = item,
-                            isSelected = selectedItem?.hash == item.hash,
-                            onClick = { onItemClick(item) }
+                if (items.isEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Games,
+                            contentDescription = "暂无游戏",
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
                         )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "还没有添加游戏",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "点击「添加游戏」按钮开始",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(items, key = { it.hash }) { item ->
+                            GameListItemMD3(
+                                item = item,
+                                isSelected = selectedItem?.hash == item.hash,
+                                onClick = { onItemClick(item) }
+                            )
+                        }
                     }
                 }
             }
@@ -179,61 +265,56 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
     ) {
         Card(
             onClick = onClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(100.dp),
-            shape = MaterialTheme.shapes.large,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(
                 containerColor = if (isSelected) {
-                    MaterialTheme.colorScheme.secondaryContainer
+                    MaterialTheme.colorScheme.primaryContainer
                 } else {
-                    MaterialTheme.colorScheme.surfaceContainerLow
+                    MaterialTheme.colorScheme.surfaceContainerHigh
                 }
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-            border = if (isSelected) {
-                CardDefaults.outlinedCardBorder()
-            } else {
-                null
-            }
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = 0.dp,
+                pressedElevation = 0.dp
+            )
         ) {
             Row(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // 图标区域
-                Box(
-                    modifier = Modifier
-                        .size(60.dp)
-                        .clip(MaterialTheme.shapes.medium)
-                        .background(
-                            if (isSelected) {
-                                MaterialTheme.colorScheme.secondary
-                            } else {
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                            }
-                        ),
-                    contentAlignment = Alignment.Center
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerHighest
+                    },
+                    modifier = Modifier.size(44.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Gamepad,
-                        contentDescription = "Game",
-                        modifier = Modifier.size(28.dp),
-                        tint = if (isSelected) {
-                            MaterialTheme.colorScheme.onSecondary
-                        } else {
-                            MaterialTheme.colorScheme.primary
-                        }
-                    )
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Gamepad,
+                            contentDescription = "游戏",
+                            modifier = Modifier.size(22.dp),
+                            tint = if (isSelected) {
+                                MaterialTheme.colorScheme.onPrimary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
                 }
 
-                Spacer(Modifier.width(20.dp))
-
-                // 版本信息
                 Column(
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -241,43 +322,70 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                     ) {
                         Text(
                             text = item.version,
-                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp),
-                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium,
                             color = if (isSelected) {
-                                MaterialTheme.colorScheme.onSecondaryContainer
+                                MaterialTheme.colorScheme.onPrimaryContainer
                             } else {
                                 MaterialTheme.colorScheme.onSurface
-                            }
+                            },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
+
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = if (isSelected) {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                            } else {
+                                MaterialTheme.colorScheme.secondaryContainer
+                            }
+                        ) {
+                            Text(
+                                text = "v${item.versionCode}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 9.sp,
+                                color = if (isSelected) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.onSecondaryContainer
+                                },
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                            )
+                        }
                     }
 
-                    Spacer(Modifier.height(6.dp))
-
                     Text(
-                        text = "版本号: ${item.versionCode}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Spacer(Modifier.height(4.dp))
-
-                    Text(
-                        text = item.hash,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline,
+                        text = item.hash.take(20) + "...",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        } else {
+                            MaterialTheme.colorScheme.outline
+                        },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                // 选择标记
                 if (isSelected) {
-                    Icon(
-                        imageVector = Icons.Rounded.CheckCircle,
-                        contentDescription = "Selected",
-                        modifier = Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = "已选",
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -290,28 +398,60 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
         onRemoveGame: () -> Unit,
         modifier: Modifier = Modifier
     ) {
-        Surface(
+        Card(
             modifier = modifier,
-            shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 3.dp
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            ),
+            elevation = CardDefaults.cardElevation(
+                defaultElevation = 0.dp
+            )
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                // 游戏信息区域
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "游戏控制",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
                 GameInfoSection(selectedItem)
 
                 HorizontalDivider(
-                    Modifier,
-                    thickness = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                    thickness = 0.5.dp
                 )
 
-                // 控制按钮区域
                 ControlButtonsSection(
                     selectedItem = selectedItem,
                     onStartGame = onStartGame,
@@ -323,85 +463,65 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
 
     @Composable
     private fun GameInfoSection(selectedItem: GameItem?) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = "当前选择",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            if (selectedItem != null) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                    tonalElevation = 1.dp
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        // 版本信息
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            LabeledInfo(
-                                icon = Icons.Rounded.Tag,
-                                label = "游戏版本",
-                                value = selectedItem.version,
-                                iconColor = MaterialTheme.colorScheme.primary
-                            )
-
-                            LabeledInfo(
-                                icon = Icons.Rounded.Code,
-                                label = "版本代码",
-                                value = selectedItem.versionCode.toString(),
-                                iconColor = MaterialTheme.colorScheme.tertiary
-                            )
-
-                            LabeledInfo(
-                                icon = Icons.Rounded.Fingerprint,
-                                label = "哈希校验",
-                                value = selectedItem.hash,
-                                iconColor = MaterialTheme.colorScheme.secondary
-                            )
-                        }
-                    }
-                }
-            } else {
+        if (selectedItem != null) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLowest
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Gamepad,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                    LabeledInfo(
+                        icon = Icons.Rounded.Tag,
+                        label = "游戏版本",
+                        value = selectedItem.version,
+                        iconColor = MaterialTheme.colorScheme.primary
                     )
 
-                    Spacer(Modifier.height(16.dp))
-
-                    Text(
-                        text = "未选择游戏",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.8f)
+                    LabeledInfo(
+                        icon = Icons.Rounded.Code,
+                        label = "版本代码",
+                        value = selectedItem.versionCode.toString(),
+                        iconColor = MaterialTheme.colorScheme.tertiary
                     )
 
-                    Spacer(Modifier.height(8.dp))
-
-                    Text(
-                        text = "从左侧列表中选择一个游戏版本",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+                    LabeledInfo(
+                        icon = Icons.Rounded.Fingerprint,
+                        label = "哈希校验",
+                        value = selectedItem.hash,
+                        iconColor = MaterialTheme.colorScheme.secondary
                     )
                 }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Gamepad,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "未选择游戏",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "从左侧列表中选择",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
             }
         }
     }
@@ -417,25 +537,40 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                modifier = Modifier.size(20.dp),
-                tint = iconColor
-            )
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = iconColor.copy(alpha = 0.1f),
+                modifier = Modifier.size(28.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = label,
+                        modifier = Modifier.size(16.dp),
+                        tint = iconColor
+                    )
+                }
+            }
 
-            Column {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(1.dp)
+            ) {
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-
                 Text(
                     text = value,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -448,15 +583,15 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
         onRemoveGame: () -> Unit
     ) {
         Column(
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Button(
                 onClick = onStartGame,
                 enabled = selectedItem != null,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
-                shape = MaterialTheme.shapes.medium,
+                    .height(52.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors = if (selectedItem != null) {
                     ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
@@ -465,61 +600,57 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                 } else {
                     ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
                 },
                 elevation = ButtonDefaults.buttonElevation(
-                    defaultElevation = 4.dp,
-                    pressedElevation = 2.dp
+                    defaultElevation = 0.dp,
+                    pressedElevation = 0.dp
                 )
             ) {
                 Icon(
                     imageVector = Icons.Rounded.PlayArrow,
                     contentDescription = "开始游戏",
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(22.dp)
                 )
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(10.dp))
                 Text(
                     text = "开始游戏",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.Medium
                 )
             }
-            Button(
+
+            OutlinedButton(
                 onClick = onRemoveGame,
                 enabled = selectedItem != null,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
-                shape = MaterialTheme.shapes.medium,
-                colors = if (selectedItem != null) {
-                    // 启用状态：使用错误色系，明确警示
-                    ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                } else {
-                    // 禁用状态：更中性、柔和的表面颜色
-                    ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                    )
-                },
-                elevation = ButtonDefaults.buttonElevation(
-                    defaultElevation = 4.dp,
-                    pressedElevation = 2.dp
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = if (selectedItem != null) {
+                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    },
+                    contentColor = if (selectedItem != null) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    }
                 )
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.Remove, // 或者使用 Icons.Rounded.Delete
+                    imageVector = Icons.Rounded.Delete,
                     contentDescription = "移除游戏",
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(20.dp)
                 )
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(8.dp))
                 Text(
                     text = "移除游戏",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Medium
                 )
             }
         }

@@ -4,7 +4,7 @@ import eternal.future.tefmanager.Platform
 import eternal.future.tefmanager.ui.model.ResourcesPackItem
 
 /*******************************************************************************
- * TEFManager - TexturePackManager
+ * TEFManager - LanguagePatchPackManager
  * Copyright (C) 2026 eternalfuture-e38299
  *
  * This program is free software: you can redistribute it and/or modify
@@ -22,16 +22,15 @@ import eternal.future.tefmanager.ui.model.ResourcesPackItem
  *
  * Author: eternalfuture-e38299
  * GitHub: https://github.com/eternalfuture-e38299
- * Created: 2026/6/7
+ * Created: 2026/6/21
  *******************************************************************************/
 
-
-object TexturePackManager : BasePackManager(
+object LanguagePatchPackManager : BasePackManager(
     PackManagerConfig(
-        name = "texture_packs",
-        packType = ResourcesPackItem.PackType.TexturePack,
-        dbPath = Platform.getData("resource_pack") / "texture_packs" / "db",
-        configPath = Platform.getData("module") / "private" / "eternal.future.texturepack" / "config.json",
-        packSubDir = "texture_packs"
+        name = "language_patch_packs",
+        packType = ResourcesPackItem.PackType.LanguagePatchPack,
+        dbPath = Platform.getData("resource_pack") / "language_patch_packs" / "db",
+        configPath = Platform.getData("module") / "private" / "eternal.future.languagepacks" / "language_patch_packs.json",
+        packSubDir = "language_patch_packs"
     )
 )

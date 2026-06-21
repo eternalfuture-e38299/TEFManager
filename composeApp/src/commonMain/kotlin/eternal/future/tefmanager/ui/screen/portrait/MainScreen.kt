@@ -166,7 +166,7 @@ object MainScreen : Screen {
                         .fillMaxSize()
                         .padding(paddingValues),
                     color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 0.dp
+                    tonalElevation = 2.dp
                 ) {
                     // 使用淡入淡出动画，过渡更自然
                     FadeTransition(
@@ -214,7 +214,7 @@ object MainScreen : Screen {
 
         NavigationBar(
             containerColor = MaterialTheme.colorScheme.surface,
-            tonalElevation = 3.dp
+            tonalElevation = 2.dp
         ) {
             navigationItems.forEachIndexed { index, item ->
                 val selected = index == selectedIndex

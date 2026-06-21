@@ -1,0 +1,131 @@
+package eternal.future.tefmanager.ui.screen.shared.resourcepack
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import cafe.adriel.voyager.core.screen.Screen
+import eternal.future.tefmanager.ui.component.ResourcesPackCard
+import eternal.future.tefmanager.utils.resourcepack.BasePackManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/*******************************************************************************
+ * TEFManager - BasePackScreen
+ * Copyright (C) 2026 eternalfuture-e38299
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ *
+ * Author: eternalfuture-e38299
+ * GitHub: https://github.com/eternalfuture-e38299
+ * Created: 2026/6/21
+ *******************************************************************************/
+
+abstract class BasePackScreen(
+    protected val manager: BasePackManager,
+    protected val title: String,
+    protected val emptyMessage: String,
+    protected val loadingMessage: String = "正在加载...",
+    protected val emptyActionText: String = "请点击右上角按钮安装"
+) : Screen {
+
+    @Composable
+    override fun Content() {
+        var isLoading by remember { mutableStateOf(true) }
+
+        LaunchedEffect(Unit) {
+            withContext(Dispatchers.IO) {
+                manager.initialize()
+                isLoading = false
+            }
+        }
+
+        Surface(modifier = Modifier.fillMaxSize()) {
+            when {
+                isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(loadingMessage)
+                    }
+                }
+                manager.packs.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("$emptyMessage\n\n$emptyActionText")
+                    }
+                }
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(
+                            count = manager.packs.size,
+                            key = { index -> manager.packs[index].fileName }
+                        ) { index ->
+                            val pack = manager.packs[index]
+                            var isEnabled by remember(pack.fileName) {
+                                mutableStateOf(manager.isPackEnabled(pack.fileName))
+                            }
+
+                            ResourcesPackCard(
+                                pack = pack,
+                                index = index,
+                                totalItems = manager.packs.size,
+                                isEnabled = isEnabled,
+                                onEnableChange = { enabled ->
+                                    isEnabled = enabled
+                                    manager.setPackEnabled(pack.fileName, enabled)
+                                },
+                                onMoveUp = {
+                                    manager.movePackPriority(pack.fileName, moveUp = true)
+                                },
+                                onMoveDown = {
+                                    manager.movePackPriority(pack.fileName, moveUp = false)
+                                },
+                                onDelete = {
+                                    CoroutineScope(Dispatchers.IO).launch {
+                                        manager.deletePack(pack.fileName)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

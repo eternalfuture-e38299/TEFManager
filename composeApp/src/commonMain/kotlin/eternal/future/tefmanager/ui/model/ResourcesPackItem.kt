@@ -1,10 +1,9 @@
-package eternal.future.tefmanager.utils.resourcepack
+package eternal.future.tefmanager.ui.model
 
-import eternal.future.tefmanager.Platform
-import eternal.future.tefmanager.ui.model.ResourcesPackItem
+import kotlinx.serialization.Serializable
 
 /*******************************************************************************
- * TEFManager - TexturePackManager
+ * TEFManager - TexturePackItem
  * Copyright (C) 2026 eternalfuture-e38299
  *
  * This program is free software: you can redistribute it and/or modify
@@ -22,16 +21,39 @@ import eternal.future.tefmanager.ui.model.ResourcesPackItem
  *
  * Author: eternalfuture-e38299
  * GitHub: https://github.com/eternalfuture-e38299
- * Created: 2026/6/7
+ * Created: 2026/4/19
  *******************************************************************************/
 
+@Serializable
+data class ResourcesPackItem(
+    val name: String = "UNKNOWN",
+    val author: String = "UNKNOWN",
+    val description: String = "",
+    val version: String = "",
+    val fileName: String = "",
+    val iconPath: String = "",
+    val type: Type = Type.Terraria,
+    val packType: PackType = PackType.TexturePack
+) {
+    enum class Type {
+        Terraria,
+        TLPro,
+        TEFManager;
 
-object TexturePackManager : BasePackManager(
-    PackManagerConfig(
-        name = "texture_packs",
-        packType = ResourcesPackItem.PackType.TexturePack,
-        dbPath = Platform.getData("resource_pack") / "texture_packs" / "db",
-        configPath = Platform.getData("module") / "private" / "eternal.future.texturepack" / "config.json",
-        packSubDir = "texture_packs"
-    )
-)
+        fun getText(): String {
+            return when(this) {
+                Terraria -> "Terraria"
+                TLPro -> "TL Pro"
+                TEFManager -> "TEFManager"
+            }
+        }
+    }
+
+    enum class PackType {
+        TexturePack,
+        LanguagePack,
+        LanguagePatchPack,
+        AudioPack,
+        FontPack
+    }
+}

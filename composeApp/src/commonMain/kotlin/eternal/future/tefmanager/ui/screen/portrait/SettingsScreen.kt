@@ -1,24 +1,48 @@
 package eternal.future.tefmanager.ui.screen.portrait
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.*
-import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SportsEsports
+import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.SportsEsports
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import eternal.future.tefmanager.strings.StringsResource.Strings
@@ -64,70 +88,68 @@ object SettingsScreen : Screen, MainScreen.TitledScreen {
     @Composable
     override fun Content() {
         val categories = listOf(
-                SettingCategory(
-                    id = "general",
-                    title = Strings.settings.general.title,
-                    icon = Icons.Outlined.Settings,
-                    iconFilled = Icons.Rounded.Settings
-                ),
-                SettingCategory(
-                    id = "appearance",
-                    title = Strings.settings.appearance.title,
-                    icon = Icons.Outlined.Palette,
-                    iconFilled = Icons.Rounded.Palette
-                ),
-                SettingCategory(
-                    id = "advanced",
-                    title = Strings.settings.advanced.title,
-                    icon = Icons.Outlined.Code,
-                    iconFilled = Icons.Rounded.Code
-                ),
-                SettingCategory(
-                    id = "game",
-                    title = Strings.settings.game.title,
-                    icon = Icons.Outlined.SportsEsports,
-                    iconFilled = Icons.Rounded.SportsEsports
-                ),
-                SettingCategory(
-                    id = "about",
-                    title = Strings.settings.about.title,
-                    icon = Icons.Outlined.Info,
-                    iconFilled = Icons.Rounded.Info
-                )
+            SettingCategory(
+                id = "general",
+                title = Strings.settings.general.title,
+                icon = Icons.Outlined.Settings,
+                iconFilled = Icons.Rounded.Settings
+            ),
+            SettingCategory(
+                id = "appearance",
+                title = Strings.settings.appearance.title,
+                icon = Icons.Outlined.Palette,
+                iconFilled = Icons.Rounded.Palette
+            ),
+            SettingCategory(
+                id = "advanced",
+                title = Strings.settings.advanced.title,
+                icon = Icons.Outlined.Code,
+                iconFilled = Icons.Rounded.Code
+            ),
+            SettingCategory(
+                id = "game",
+                title = Strings.settings.game.title,
+                icon = Icons.Outlined.SportsEsports,
+                iconFilled = Icons.Rounded.SportsEsports
+            ),
+            SettingCategory(
+                id = "about",
+                title = Strings.settings.about.title,
+                icon = Icons.Outlined.Info,
+                iconFilled = Icons.Rounded.Info
             )
-
+        )
 
         var selectedTab by remember { mutableIntStateOf(0) }
         val pagerState = rememberPagerState(pageCount = { categories.size })
         val coroutineScope = rememberCoroutineScope()
 
-        // 同步分页状态和标签选择
         LaunchedEffect(pagerState.currentPage) {
             selectedTab = pagerState.currentPage
         }
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = 16.dp)
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                // 紧凑型标签栏
+                // 标签栏
                 CompactTabRow(
                     categories = categories,
                     selectedTab = selectedTab,
                     onTabSelected = { index ->
+                        selectedTab = index
                         coroutineScope.launch {
                             pagerState.animateScrollToPage(index)
                         }
                     }
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // 水平分页器
                 HorizontalPager(
@@ -136,12 +158,18 @@ object SettingsScreen : Screen, MainScreen.TitledScreen {
                         .fillMaxWidth()
                         .weight(1f)
                 ) { page ->
-                    when (page) {
-                        0 -> GeneralSettings()
-                        1 -> AppearanceSettings()
-                        2 -> AdvancedSettings()
-                        3 -> GameSettings()
-                        4 -> AboutSettings()
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        when (page) {
+                            0 -> GeneralSettings()
+                            1 -> AppearanceSettings()
+                            2 -> AdvancedSettings()
+                            3 -> GameSettings()
+                            4 -> AboutSettings()
+                        }
                     }
                 }
             }
@@ -161,14 +189,14 @@ object SettingsScreen : Screen, MainScreen.TitledScreen {
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+                    .padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(categories) { category ->
                     val index = categories.indexOf(category)
                     val isSelected = selectedTab == index
 
-                    CompactTab(
+                    M3ETab(
                         category = category,
                         isSelected = isSelected,
                         onClick = { onTabSelected(index) }
@@ -179,37 +207,32 @@ object SettingsScreen : Screen, MainScreen.TitledScreen {
     }
 
     @Composable
-    private fun CompactTab(
+    private fun M3ETab(
         category: SettingCategory,
         isSelected: Boolean,
         onClick: () -> Unit
     ) {
-        val animatedColor by animateColorAsState(
-            targetValue = if (isSelected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-            },
-            animationSpec = tween(durationMillis = 300),
-            label = "tabColor"
-        )
-
-        val backgroundColor = if (isSelected) {
+        val containerColor = if (isSelected) {
             MaterialTheme.colorScheme.primaryContainer
         } else {
-            MaterialTheme.colorScheme.surfaceContainerLow
+            Color.Transparent
+        }
+
+        val contentColor = if (isSelected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
         }
 
         Surface(
             onClick = onClick,
+            shape = RoundedCornerShape(12.dp),
+            color = containerColor,
             modifier = Modifier
-                .clip(MaterialTheme.shapes.medium)
-                .background(backgroundColor),
-            color = Color.Transparent
         ) {
             Row(
                 modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -217,15 +240,16 @@ object SettingsScreen : Screen, MainScreen.TitledScreen {
                     imageVector = if (isSelected) category.iconFilled else category.icon,
                     contentDescription = category.title,
                     modifier = Modifier.size(18.dp),
-                    tint = animatedColor
+                    tint = contentColor
                 )
 
                 Text(
                     text = category.title,
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                    color = animatedColor,
-                    maxLines = 1
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }

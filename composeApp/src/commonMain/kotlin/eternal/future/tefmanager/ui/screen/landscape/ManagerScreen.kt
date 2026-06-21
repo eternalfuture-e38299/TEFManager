@@ -1,7 +1,5 @@
 package eternal.future.tefmanager.ui.screen.landscape
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -21,12 +19,13 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Memory
 import androidx.compose.material.icons.rounded.Refresh
@@ -34,9 +33,13 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.ToggleOff
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -44,7 +47,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -66,6 +68,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import eternal.future.tefmanager.Platform
@@ -99,7 +102,7 @@ import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
 import okio.SYSTEM
-import kotlin.collections.forEach
+import kotlin.time.Duration.Companion.milliseconds
 
 /*******************************************************************************
  * TEFManager - ManagerScreen
@@ -125,42 +128,37 @@ import kotlin.collections.forEach
 
 object ManagerScreen : Screen, MainScreen.TitledScreen {
 
-    // 模拟数据
     private val kernelModules = AddonManager.modulesDataBase.getAllValues().toMutableStateList()
-
     private val kernelPlugins = AddonManager.pluginsDataBase.getAllValues().toMutableStateList()
-
     private val modLoaders = AddonManager.modLoaderDataBase.getAllValues().toMutableStateList()
-
     private val modList = mutableStateMapOf<String, SnapshotStateList<ModItem>>()
 
-    private val categories =
-        (listOf(
-            ManagerTab(
-                id = "kernel",
-                title = "内核模块",
-                icon = Icons.Rounded.Memory,
-                isKernel = true
-            ),
-            ManagerTab(
-                id = "kernel_plugins",
-                title = "内核插件",
-                icon = Icons.Rounded.Extension,
-                isKernelPlugin = true
-            ),
-            ManagerTab(
-                id = "mod_loaders",
-                title = "模组加载器",
-                icon = Icons.Rounded.Dashboard,
-                isModLoader = true
-            )
-        ) + modLoaders.map { loader ->
-            ManagerTab(
-                id = loader.pkgId,
-                title = loader.name,
-                iconPath = Platform.getData("modloader") / "icons" / "${loader.pkgId}.icon"
-            )
-        }).toMutableStateList()
+    private val categories = (listOf(
+        ManagerTab(
+            id = "kernel",
+            title = "内核模块",
+            icon = Icons.Rounded.Memory,
+            isKernel = true
+        ),
+        ManagerTab(
+            id = "kernel_plugins",
+            title = "内核插件",
+            icon = Icons.Rounded.Extension,
+            isKernelPlugin = true
+        ),
+        ManagerTab(
+            id = "mod_loaders",
+            title = "模组加载器",
+            icon = Icons.Rounded.Dashboard,
+            isModLoader = true
+        )
+    ) + modLoaders.map { loader ->
+        ManagerTab(
+            id = loader.pkgId,
+            title = loader.name,
+            iconPath = Platform.getData("modloader") / "icons" / "${loader.pkgId}.icon"
+        )
+    }).toMutableStateList()
 
     data class ManagerTab(
         val id: String,
@@ -185,38 +183,27 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         val showAddonInstallOrUpdateDialog = remember { mutableStateOf(false) }
 
         if (globalConfig.value != null) {
-            GlobalConfigEditor(globalConfig.value!!,
+            GlobalConfigEditor(
+                globalConfig.value!!,
                 ConfigManager.readConfigFile(globalConfig.value!!.generateFile),
-                {
-                    ConfigManager.writeConfigFile(globalConfig.value!!.generateFile, it)
-                },
-                {
-                    globalConfig.value = null
-                }
+                { ConfigManager.writeConfigFile(globalConfig.value!!.generateFile, it) },
+                { globalConfig.value = null }
             )
         }
 
-        // 防抖处理：延迟300ms更新搜索
         LaunchedEffect(searchQuery) {
-            delay(300)
+            delay(300.milliseconds)
             debouncedSearchQuery = searchQuery
         }
 
-
-        // 使用 mutableStateMapOf 来管理加载器状态
-        val enabledLoaders = remember {
-            mutableStateMapOf<String, Boolean>()
-        }
+        val enabledLoaders = remember { mutableStateMapOf<String, Boolean>() }
 
         LaunchedEffect(modLoaders) {
             refreshModDatabases(modLoaders)
             enabledLoaders.apply {
                 modLoaders.forEach {
                     val enabled = AddonManager.isAddonEnabled("modloader", it.pkgId)
-                    put(
-                        it.pkgId,
-                        enabled
-                    )
+                    put(it.pkgId, enabled)
 
                     if (enabled) {
                         AddonManager.modDataBaseList[it.pkgId]?.getAllValues()?.toMutableStateList()?.let { list ->
@@ -227,48 +214,48 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
             }
         }
 
-
-        // 同步分页状态和标签选择
         LaunchedEffect(pagerState.currentPage) {
             selectedTab = pagerState.currentPage
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp)
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
         ) {
-            // 搜索栏
-            SearchBar(
-                query = searchQuery,
-                onQueryChange = { searchQuery = it }
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            if (debouncedSearchQuery.isEmpty()) {
-                // 正常标签页模式
-                NormalTabView(
-                    selectedTab = selectedTab,
-                    pagerState = pagerState,
-                    enabledLoaders = enabledLoaders,
-                    onTabSelected = { index ->
-                        selectedTab = index
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(index)
-                        }
-                    },
-                    showAddonInstallOrUpdateDialog = showAddonInstallOrUpdateDialog,
-                    globalConfig = globalConfig
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                SearchBar(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it }
                 )
-            } else {
-                // 搜索模式
-                SearchResultsView(
-                    searchQuery = debouncedSearchQuery,
-                    enabledLoaders = enabledLoaders
-                ) {
-                    if (it.globalConfig.fileType != "null" && it.globalConfig.fileType.isNotEmpty())
-                        globalConfig.value = it.globalConfig
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (debouncedSearchQuery.isEmpty()) {
+                    NormalTabView(
+                        selectedTab = selectedTab,
+                        pagerState = pagerState,
+                        enabledLoaders = enabledLoaders,
+                        onTabSelected = { index ->
+                            selectedTab = index
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(index)
+                            }
+                        },
+                        showAddonInstallOrUpdateDialog = showAddonInstallOrUpdateDialog,
+                        globalConfig = globalConfig
+                    )
+                } else {
+                    SearchResultsView(
+                        searchQuery = debouncedSearchQuery,
+                        enabledLoaders = enabledLoaders
+                    ) {
+                        if (it.globalConfig.fileType != "null" && it.globalConfig.fileType.isNotEmpty())
+                            globalConfig.value = it.globalConfig
+                    }
                 }
             }
         }
@@ -282,7 +269,6 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
     ) {
         val query = searchQuery.trim()
 
-        // 使用 derivedStateOf 优化搜索性能
         val searchResults = remember(query, enabledLoaders, modList) {
             derivedStateOf {
                 if (query.isEmpty()) {
@@ -291,19 +277,16 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                     val lowerQuery = query.lowercase()
                     val results = mutableListOf<Pair<ModLoaderItem, ModItem>>()
 
-
                     modList.forEach {
-                        // 对每个模组进行搜索
                         it.value.forEach { mod ->
-                            // 安全地检查每个字段是否匹配
-                            val matches = isModMatchingSearch(mod, lowerQuery)
-                            if (matches) {
-                                results.add(modLoaders.find { modLoader -> modLoader.pkgId == it.key }!! to mod)
+                            if (isModMatchingSearch(mod, lowerQuery)) {
+                                modLoaders.find { modLoader -> modLoader.pkgId == it.key }?.let { loader ->
+                                    results.add(loader to mod)
+                                }
                             }
                         }
                     }
 
-                    // 根据相关性排序
                     results.sortedByDescending { (_, mod) ->
                         calculateRelevance(mod, lowerQuery)
                     }
@@ -311,172 +294,137 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
             }
         }.value
 
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surfaceContainerLowest,
-            tonalElevation = 2.dp
-        ) {
-            if (searchResults.isEmpty()) {
+        if (searchResults.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(40.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.SearchOff,
                         contentDescription = "无结果",
                         modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = if (query.isEmpty()) "输入关键词开始搜索" else "未找到相关模组",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = if (query.isEmpty()) "在搜索框中输入模组名称、作者、描述等关键词"
-                        else "尝试使用其他关键词搜索，或确保相关加载器已启用",
+                        text = if (query.isEmpty()) "搜索模组名称、作者、描述等关键词"
+                        else "尝试使用其他关键词，或确保相关加载器已启用",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.outline
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
                 }
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(20.dp)
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // 搜索结果标题
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.size(32.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Search,
-                            contentDescription = "搜索结果",
-                            modifier = Modifier.size(24.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-
-                        Text(
-                            text = "搜索结果",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-
-                        Spacer(modifier = Modifier.weight(1f))
-
-                        Text(
-                            text = "${searchResults.size} 个结果",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // 搜索结果列表
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(
-                            items = searchResults,
-                            key = { (loaderName, mod) -> "${loaderName}_${mod.pkgId}" }
-                        ) { (loader, mod) ->
-                            ModItemCard(
-                                mod = mod,
-                                enabled = AddonManager.isAddonEnabled("mods", mod.pkgId, loader.pkgId),
-                                customIconPath = Platform.getData("mods") / loader.pkgId / "icons" / "${mod.pkgId}.icon",
-                                onEnableChange = { enable ->
-                                    if (enable) AddonManager.enableAddon("mods", mod.pkgId, loader.pkgId)
-                                    else AddonManager.disableAddon("mods", mod.pkgId, loader.pkgId)
-                                },
-                                onDelete = {
-                                    runBlocking {
-                                        AddonManager.deleteMod(mod.pkgId, loader.pkgId)
-                                        modList[loader.pkgId]?.remove(mod)
-                                    }
-                                },
-                                configureCallback
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Search,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
+                    }
+
+                    Text(
+                        text = "搜索结果",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    AssistChip(
+                        onClick = {},
+                        label = {
+                            Text(
+                                "${searchResults.size} 个结果",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                        ),
+                        border = null,
+                        elevation = null
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(
+                        items = searchResults,
+                        key = { (loader, mod) -> "${loader.pkgId}_${mod.pkgId}" }
+                    ) { (loader, mod) ->
+                        ModItemCard(
+                            mod = mod,
+                            enabled = AddonManager.isAddonEnabled("mods", mod.pkgId, loader.pkgId),
+                            customIconPath = Platform.getData("mods") / loader.pkgId / "icons" / "${mod.pkgId}.icon",
+                            onEnableChange = { enable ->
+                                if (enable) AddonManager.enableAddon("mods", mod.pkgId, loader.pkgId)
+                                else AddonManager.disableAddon("mods", mod.pkgId, loader.pkgId)
+                            },
+                            onDelete = {
+                                runBlocking {
+                                    AddonManager.deleteMod(mod.pkgId, loader.pkgId)
+                                    modList[loader.pkgId]?.remove(mod)
+                                }
+                            },
+                            configureCallback
+                        )
                     }
                 }
             }
         }
     }
 
-    // 辅助函数：检查模组是否匹配搜索条件
     private fun isModMatchingSearch(mod: ModItem, query: String): Boolean {
         if (query.isEmpty()) return false
 
-        // 检查 name（非空）
-        if (mod.name.isNotBlank() && mod.name.lowercase().contains(query)) {
-            return true
-        }
-
-        // 检查 pkgId（非空）
-        if (mod.pkgId.isNotBlank() && mod.pkgId.lowercase().contains(query)) {
-            return true
-        }
-
-        // 检查 brieflyDescribe（可能为空或空字符串）
-        if (mod.brieflyDescribe.isNotBlank() && mod.brieflyDescribe.lowercase().contains(query)) {
-            return true
-        }
-
-        // 检查 description（可能为空或空字符串）
-        if (mod.description.isNotBlank() && mod.description.lowercase().contains(query)) {
-            return true
-        }
-
-        // 检查 author（可能为空或空字符串）
-        if (mod.author.isNotBlank() && mod.author.lowercase().contains(query)) {
-            return true
-        }
-
-        return false
+        return mod.name.isNotBlank() && mod.name.lowercase().contains(query) ||
+                mod.pkgId.isNotBlank() && mod.pkgId.lowercase().contains(query) ||
+                mod.brieflyDescribe.isNotBlank() && mod.brieflyDescribe.lowercase().contains(query) ||
+                mod.description.isNotBlank() && mod.description.lowercase().contains(query) ||
+                mod.author.isNotBlank() && mod.author.lowercase().contains(query)
     }
 
-    // 辅助函数：计算搜索相关性分数
     private fun calculateRelevance(mod: ModItem, query: String): Int {
         if (query.isEmpty()) return 0
 
         var relevance = 0
-
-        // name 匹配得分最高
-        if (mod.name.isNotBlank() && mod.name.lowercase().contains(query)) {
-            relevance += 5
-        }
-
-        // pkgId 匹配得分次高
-        if (mod.pkgId.isNotBlank() && mod.pkgId.lowercase().contains(query)) {
-            relevance += 4
-        }
-
-        // brieflyDescribe 匹配
-        if (mod.brieflyDescribe.isNotBlank() && mod.brieflyDescribe.lowercase().contains(query)) {
-            relevance += 3
-        }
-
-        // description 匹配
-        if (mod.description.isNotBlank() && mod.description.lowercase().contains(query)) {
-            relevance += 2
-        }
-
-        // author 匹配
-        if (mod.author.isNotBlank() && mod.author.lowercase().contains(query)) {
-            relevance += 2
-        }
-
+        if (mod.name.isNotBlank() && mod.name.lowercase().contains(query)) relevance += 5
+        if (mod.pkgId.isNotBlank() && mod.pkgId.lowercase().contains(query)) relevance += 4
+        if (mod.brieflyDescribe.isNotBlank() && mod.brieflyDescribe.lowercase().contains(query)) relevance += 3
+        if (mod.description.isNotBlank() && mod.description.lowercase().contains(query)) relevance += 2
+        if (mod.author.isNotBlank() && mod.author.lowercase().contains(query)) relevance += 2
         return relevance
     }
 
@@ -498,9 +446,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
             installFiles.clear()
             files?.forEach { file ->
                 val tmp = kotlinx.io.files.Path((Platform.getData("install_tmp") / file.nameWithoutExtension).toString())
-
                 tmp.parent?.let { SystemFileSystem.createDirectories(it) }
-
                 SystemFileSystem.sink(tmp).buffered().use { sink ->
                     sink.write(file.source(), file.size())
                     sink.flush()
@@ -510,7 +456,6 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
             }
         }
 
-        // 监听 enabledLoaders 的变化
         val loaderStates by remember(enabledLoaders) {
             derivedStateOf { enabledLoaders.toMap() }
         }
@@ -518,16 +463,13 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         if (showAddonInstallOrUpdateDialog.value) {
             AddonInstallOrUpdateDialog(installFiles) {
                 FileSystem.SYSTEM.deleteRecursively(Platform.getData("install_tmp"))
-
                 installFiles.clear()
                 showAddonInstallOrUpdateDialog.value = false
 
                 modLoaders.clear()
                 modLoaders.addAll(AddonManager.modLoaderDataBase.getAllValues())
-
                 kernelModules.clear()
                 kernelModules.addAll(AddonManager.modulesDataBase.getAllValues())
-
                 kernelPlugins.clear()
                 kernelPlugins.addAll(AddonManager.pluginsDataBase.getAllValues())
 
@@ -537,12 +479,9 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                 }
 
                 val newCategories = mutableListOf<ManagerTab>()
-
-                // 只添加基础标签
                 newCategories.addAll(categories.filter { tab ->
                     tab.id == "kernel" || tab.id == "kernel_plugins" || tab.id == "mod_loaders"
                 })
-
                 modLoaders.forEach { loader ->
                     newCategories.add(ManagerTab(
                         id = loader.pkgId,
@@ -550,7 +489,6 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                         iconPath = Platform.getData("modloader") / "icons" / "${loader.pkgId}.icon"
                     ))
                 }
-
                 categories.clear()
                 categories.addAll(newCategories)
             }
@@ -559,230 +497,165 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            // 标签栏
-            ScrollableTabRow(
+            // M3E Tab Row
+            Surface(
                 modifier = Modifier.fillMaxWidth(),
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+                color = MaterialTheme.colorScheme.background
             ) {
-                categories.forEachIndexed { index, tab ->
-                    val isSelected = selectedTab == index
-                    val animatedColor by animateColorAsState(
-                        targetValue = if (isSelected) {
-                            when {
-                                tab.isKernel -> MaterialTheme.colorScheme.tertiary
-                                tab.isKernelPlugin -> MaterialTheme.colorScheme.secondary
-                                tab.isModLoader -> MaterialTheme.colorScheme.primary
-                                else -> MaterialTheme.colorScheme.primary
-                            }
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        animationSpec = tween(durationMillis = 300),
-                        label = "tabColor"
-                    )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    categories.forEachIndexed { index, tab ->
+                        val isSelected = selectedTab == index
+                        val isLoaderTab = !tab.isKernel && !tab.isKernelPlugin && !tab.isModLoader
+                        val loaderEnabled = if (isLoaderTab) {
+                            loaderStates[tab.id] == true
+                        } else true
 
-                    val isLoaderTab = !tab.isKernel && !tab.isKernelPlugin && !tab.isModLoader
-                    val loaderEnabled = if (isLoaderTab) {
-                        loaderStates[tab.id] == true
-                    } else true
-
-                    Tab(
-                        selected = isSelected,
-                        onClick = {
-                            if (isLoaderTab && !loaderEnabled) {
-                                // 点击禁用的加载器标签不做任何事
-                                return@Tab
+                        M3ETab(
+                            tab = tab,
+                            isSelected = isSelected,
+                            isEnabled = loaderEnabled,
+                            onClick = {
+                                if (isLoaderTab && !loaderEnabled) return@M3ETab
+                                onTabSelected(index)
                             }
-                            onTabSelected(index)
-                        },
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp)
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = if (isSelected) {
-                                    when {
-                                        tab.isKernel -> MaterialTheme.colorScheme.tertiaryContainer
-                                        tab.isKernelPlugin -> MaterialTheme.colorScheme.secondaryContainer
-                                        tab.isModLoader -> MaterialTheme.colorScheme.primaryContainer
-                                        else -> MaterialTheme.colorScheme.primaryContainer
-                                    }
-                                } else if (!loaderEnabled) {
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                },
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    // 优先显示文件图标
-                                    tab.iconPath?.let { path ->
-                                        if (FileSystem.SYSTEM.exists(path)) {
-                                            KamelImage(
-                                                resource = { asyncPainterResource(data = path.toFileUrlString()) },
-                                                contentDescription = tab.title,
-                                                modifier = Modifier
-                                                    .size(16.dp)
-                                                    .clip(CircleShape)
-                                            )
-                                        } else if (tab.icon != null) {
-                                            // 其次使用内置图标
-                                            Icon(
-                                                imageVector = tab.icon,
-                                                contentDescription = tab.title,
-                                                modifier = Modifier.size(16.dp),
-                                                tint = if (!loaderEnabled) {
-                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                                                } else {
-                                                    animatedColor
-                                                }
-                                            )
-                                        } else {
-                                            // 默认的模组加载器图标
-                                            Icon(
-                                                imageVector = Icons.Rounded.Dashboard,
-                                                contentDescription = tab.title,
-                                                modifier = Modifier.size(16.dp),
-                                                tint = if (!loaderEnabled) {
-                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                                                } else {
-                                                    animatedColor
-                                                }
-                                            )
-                                        }
-                                    } ?: run {
-                                        // 没有 iconPath 时的处理
-                                        tab.icon?.let {
-                                            Icon(
-                                                imageVector = it,
-                                                contentDescription = tab.title,
-                                                modifier = Modifier.size(16.dp),
-                                                tint = if (!loaderEnabled) {
-                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                                                } else {
-                                                    animatedColor
-                                                }
-                                            )
-                                        } ?: Icon(
-                                            imageVector = Icons.Rounded.Dashboard,
-                                            contentDescription = tab.title,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = if (!loaderEnabled) {
-                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                                            } else {
-                                                animatedColor
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-
-                            Text(
-                                text = tab.title,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                                color = if (!loaderEnabled) {
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                                } else {
-                                    animatedColor
-                                }
-                            )
-
-                            if (isSelected) {
-                                Surface(
-                                    modifier = Modifier
-                                        .width(20.dp)
-                                        .height(3.dp),
-                                    shape = CircleShape,
-                                    color = when {
-                                        tab.isKernel -> MaterialTheme.colorScheme.tertiary
-                                        tab.isKernelPlugin -> MaterialTheme.colorScheme.secondary
-                                        tab.isModLoader -> MaterialTheme.colorScheme.primary
-                                        else -> MaterialTheme.colorScheme.primary
-                                    }
-                                ) {}
-                            }
-                        }
+                        )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // 水平分页器
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
             ) { page ->
-                val tab = categories[page]
+                val tab = categories.getOrNull(page) ?: return@HorizontalPager
 
-                Surface(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 8.dp),
-                    shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                    tonalElevation = 2.dp
-                ) {
-                    when {
-                        tab.isKernel -> KernelModulesSection(
-                            onAddModule = {
-                                filePickerLauncher.launch()
-                            }
-                        ) {
-                            globalConfig.value = it.globalConfig
-                        }
-
-                        tab.isKernelPlugin -> KernelPluginsSection(
-                            onAddPlugin = {
-                                filePickerLauncher.launch()
-                            }
-                        )
-
-                        tab.isModLoader -> ModLoadersSection(
-                            enabledLoaders = enabledLoaders,
-                            onLoaderToggle = { loaderId, enabled ->
-                                enabledLoaders[loaderId] = enabled
-                                if (enabled) {
-                                    AddonManager.enableAddon("modloader", loaderId)
-                                    modList[loaderId] = AddonManager.getOrCreateModDatabase(loaderId, true)!!.getAllValues()
-                                        .toMutableStateList()
-                                } else {
-                                    AddonManager.disableAddon("modloader", loaderId)
-                                    AddonManager.closeModDatabase(loaderId)
-                                    modList.remove(loaderId)
-                                }
-                            },
-                            onAddModLoader = {
-                                filePickerLauncher.launch()
-                            },
-                            onRefresh = { }
-                        )
-
-                        else -> {
-                            val loader = modLoaders.find { it.pkgId == tab.id }
-                            if (loader != null && loaderStates[loader.pkgId] == true) {
-                                ModListSection(
-                                    loader = loader,
-                                    onRefresh = { /* 刷新列表 */ },
-                                    onAddMod = {
-                                        filePickerLauncher.launch()
-                                    },
-                                    {
-                                        globalConfig.value = it.globalConfig
-                                    }
-                                )
+                when {
+                    tab.isKernel -> KernelModulesSection(
+                        onAddModule = { filePickerLauncher.launch() },
+                        configureCallback = { globalConfig.value = it.globalConfig }
+                    )
+                    tab.isKernelPlugin -> KernelPluginsSection(
+                        onAddPlugin = { filePickerLauncher.launch() }
+                    )
+                    tab.isModLoader -> ModLoadersSection(
+                        enabledLoaders = enabledLoaders,
+                        onLoaderToggle = { loaderId, enabled ->
+                            enabledLoaders[loaderId] = enabled
+                            if (enabled) {
+                                AddonManager.enableAddon("modloader", loaderId)
+                                modList[loaderId] = AddonManager.getOrCreateModDatabase(loaderId, true)!!.getAllValues()
+                                    .toMutableStateList()
                             } else {
-                                DisabledLoaderSection(loader = loader)
+                                AddonManager.disableAddon("modloader", loaderId)
+                                AddonManager.closeModDatabase(loaderId)
+                                modList.remove(loaderId)
                             }
+                        },
+                        onAddModLoader = { filePickerLauncher.launch() },
+                        onRefresh = { }
+                    )
+                    else -> {
+                        val loader = modLoaders.find { it.pkgId == tab.id }
+                        if (loader != null && loaderStates[loader.pkgId] == true) {
+                            ModListSection(
+                                loader = loader,
+                                onRefresh = { },
+                                onAddMod = { filePickerLauncher.launch() },
+                                configureCallback = { globalConfig.value = it.globalConfig }
+                            )
+                        } else {
+                            DisabledLoaderSection(loader = loader)
                         }
                     }
                 }
+            }
+        }
+    }
+
+    @Composable
+    private fun M3ETab(
+        tab: ManagerTab,
+        isSelected: Boolean,
+        isEnabled: Boolean,
+        onClick: () -> Unit
+    ) {
+        val containerColor = if (isSelected) {
+            when {
+                tab.isKernel -> MaterialTheme.colorScheme.tertiaryContainer
+                tab.isKernelPlugin -> MaterialTheme.colorScheme.secondaryContainer
+                else -> MaterialTheme.colorScheme.primaryContainer
+            }
+        } else {
+            Color.Transparent
+        }
+
+        val contentColor = if (isSelected) {
+            when {
+                tab.isKernel -> MaterialTheme.colorScheme.onTertiaryContainer
+                tab.isKernelPlugin -> MaterialTheme.colorScheme.onSecondaryContainer
+                else -> MaterialTheme.colorScheme.onPrimaryContainer
+            }
+        } else if (!isEnabled) {
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
+
+        Surface(
+            onClick = onClick,
+            shape = RoundedCornerShape(12.dp),
+            color = containerColor,
+            modifier = Modifier
+        ) {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // 图标
+                tab.iconPath?.let { path ->
+                    if (FileSystem.SYSTEM.exists(path)) {
+                        KamelImage(
+                            resource = { asyncPainterResource(data = path.toFileUrlString()) },
+                            contentDescription = tab.title,
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                        )
+                    } else {
+                        Icon(
+                            imageVector = tab.icon ?: Icons.Rounded.Dashboard,
+                            contentDescription = tab.title,
+                            modifier = Modifier.size(20.dp),
+                            tint = contentColor
+                        )
+                    }
+                } ?: Icon(
+                    imageVector = tab.icon ?: Icons.Rounded.Dashboard,
+                    contentDescription = tab.title,
+                    modifier = Modifier.size(20.dp),
+                    tint = contentColor
+                )
+
+                Text(
+                    text = tab.title,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
@@ -795,49 +668,30 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(20.dp)
+                .padding(horizontal = 4.dp)
         ) {
-            // 标题和按钮
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Column {
-                    Text(
-                        text = "内核模块",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Text(
-                        text = "系统级核心模块，优化游戏运行性能",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            SectionHeader(
+                title = "内核模块",
+                subtitle = "系统级核心模块，优化游戏运行性能",
+                icon = Icons.Rounded.Memory,
+                action = {
+                    FilledTonalButton(
+                        onClick = onAddModule,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = "添加模块",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("添加模块", style = MaterialTheme.typography.labelLarge)
+                    }
                 }
+            )
 
-                Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(12.dp))
 
-                // 添加模块按钮
-                FilledTonalButton(
-                    onClick = onAddModule,
-                    shape = MaterialTheme.shapes.medium
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Add,
-                        contentDescription = "添加模块",
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("添加模块")
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // 内核模块列表
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -871,49 +725,30 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(20.dp)
+                .padding(horizontal = 4.dp)
         ) {
-            // 标题和按钮
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Column {
-                    Text(
-                        text = "内核插件",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Text(
-                        text = "为模组加载器提供扩展功能，增强模组开发能力",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            SectionHeader(
+                title = "内核插件",
+                subtitle = "为模组加载器提供扩展功能，增强模组开发能力",
+                icon = Icons.Rounded.Extension,
+                action = {
+                    FilledTonalButton(
+                        onClick = onAddPlugin,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = "添加插件",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("添加插件", style = MaterialTheme.typography.labelLarge)
+                    }
                 }
+            )
 
-                Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(12.dp))
 
-                // 添加插件按钮
-                FilledTonalButton(
-                    onClick = onAddPlugin,
-                    shape = MaterialTheme.shapes.medium
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Add,
-                        contentDescription = "添加插件",
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("添加插件")
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // 内核插件列表
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -940,7 +775,6 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         onAddModLoader: () -> Unit,
         onRefresh: () -> Unit
     ) {
-        // 添加这个监听器来观察Map的变化
         val loaderStates by remember(enabledLoaders) {
             derivedStateOf { enabledLoaders.toMap() }
         }
@@ -948,72 +782,113 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(20.dp)
+                .padding(horizontal = 4.dp)
         ) {
-            // 标题
             Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = "模组加载器",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Text(
+                        text = "启用后可管理对应的模组",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                val enabledCount = loaderStates.values.count { it }
+                FilterChip(
+                    selected = false,
+                    onClick = {},
+                    label = {
+                        Text(
+                            "${enabledCount}/${modLoaders.size} 已启用",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        labelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ),
+                    border = null
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedButton(
+                FilledTonalButton(
                     onClick = onAddModLoader,
-                    shape = MaterialTheme.shapes.medium
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Add,
-                        contentDescription = "添加模组",
-                        modifier = Modifier.size(20.dp)
+                        contentDescription = "添加加载器",
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Text("添加加载器")
+                    Spacer(Modifier.width(6.dp))
+                    Text("添加加载器", style = MaterialTheme.typography.labelLarge)
                 }
 
-                FilledTonalButton(
+                OutlinedButton(
                     onClick = onRefresh,
-                    shape = MaterialTheme.shapes.medium
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Refresh,
-                        contentDescription = "刷新列表",
-                        modifier = Modifier.size(20.dp)
+                        contentDescription = "刷新",
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Text("刷新列表")
+                    Spacer(Modifier.width(6.dp))
+                    Text("刷新", style = MaterialTheme.typography.labelLarge)
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // 提示信息
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
+                shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Info,
                         contentDescription = "提示",
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(18.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
-
                     Text(
-                        text = "禁用加载器可以隐藏其模组列表，减少内存占用。",
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = "禁用加载器可隐藏其模组列表，减少内存占用",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // 加载器列表
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1054,66 +929,47 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(20.dp)
+                .padding(horizontal = 4.dp)
         ) {
-            // 标题和按钮
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Column {
-                    Text(
-                        text = loader.name,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Text(
-                        text = loader.description,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                // 操作按钮
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onAddMod,
-                        shape = MaterialTheme.shapes.medium
+            SectionHeader(
+                title = loader.name,
+                subtitle = loader.description,
+                icon = Icons.Rounded.GridView,
+                action = {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Add,
-                            contentDescription = "添加模组",
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("添加模组")
-                    }
+                        FilledTonalButton(
+                            onClick = onAddMod,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Add,
+                                contentDescription = "添加模组",
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text("添加模组", style = MaterialTheme.typography.labelLarge)
+                        }
 
-                    FilledTonalButton(
-                        onClick = onRefresh,
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Refresh,
-                            contentDescription = "刷新列表",
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("刷新列表")
+                        OutlinedButton(
+                            onClick = onRefresh,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Refresh,
+                                contentDescription = "刷新",
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text("刷新", style = MaterialTheme.typography.labelLarge)
+                        }
                     }
                 }
-            }
+            )
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // 模组列表
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1143,50 +999,102 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
     }
 
     @Composable
-    private fun DisabledLoaderSection(loader: ModLoaderItem?) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(40.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+    private fun SectionHeader(
+        title: String,
+        subtitle: String,
+        icon: ImageVector? = null,
+        action: @Composable (() -> Unit)? = null
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(
-                imageVector = Icons.Rounded.ToggleOff,
-                contentDescription = "加载器已禁用",
-                modifier = Modifier.size(64.dp),
-                tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-            )
+            icon?.let {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
 
-            Text(
-                text = "加载器已禁用",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            action?.invoke()
+        }
+    }
 
-            Text(
-                text = "请在\"模组加载器\"页面中启用${loader?.name ?: "此加载器"}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.outline
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Button(
-                onClick = { /* 跳转到加载器管理 */ },
-                shape = MaterialTheme.shapes.medium
+    @Composable
+    private fun DisabledLoaderSection(loader: ModLoaderItem?) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.Settings,
-                    contentDescription = "管理加载器",
-                    modifier = Modifier.size(20.dp)
+                    imageVector = Icons.Rounded.ToggleOff,
+                    contentDescription = "加载器已禁用",
+                    modifier = Modifier.size(64.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
                 )
-                Spacer(Modifier.width(8.dp))
-                Text("前往加载器管理")
+
+                Text(
+                    text = "加载器已禁用",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Text(
+                    text = "在「模组加载器」页面中启用 ${loader?.name ?: "此加载器"}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+
+                Button(
+                    onClick = { /* 跳转到加载器管理 - 通过选择对应的 tab */ },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Settings,
+                        contentDescription = "管理加载器",
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("前往加载器管理")
+                }
             }
         }
     }
@@ -1200,8 +1108,14 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
-            modifier = Modifier.fillMaxWidth().padding(4.dp),
-            placeholder = { Text("搜索模组...") },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = {
+                Text(
+                    "搜索模组...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+            },
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Rounded.Search,
@@ -1222,34 +1136,14 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
             },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = MaterialTheme.colorScheme.primary,
-                unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                cursorColor = MaterialTheme.colorScheme.primary
             ),
+            shape = RoundedCornerShape(12.dp),
             singleLine = true
         )
-    }
-
-    @Composable
-    private fun ScrollableTabRow(
-        modifier: Modifier = Modifier,
-        containerColor: Color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        content: @Composable () -> Unit
-    ) {
-        Surface(
-            modifier = modifier,
-            shape = MaterialTheme.shapes.medium,
-            color = containerColor,
-            tonalElevation = 1.dp
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                content()
-            }
-        }
     }
 
     override val title: String
