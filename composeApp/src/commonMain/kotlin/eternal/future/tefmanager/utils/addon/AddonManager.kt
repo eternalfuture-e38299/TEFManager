@@ -15,6 +15,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import no.synth.kmpzip.okio.ZipFile
 import no.synth.kmpzip.okio.asSource
+import no.synth.kmpzip.zip.ZipEntry
 import no.synth.kmpzip.zip.ZipFile
 import okio.FileSystem
 import okio.IOException
@@ -430,22 +431,12 @@ object AddonManager {
         logger.d("installDependence completed")
     }
 
-    /**
-     * 解压ZIP中的资源目录到指定路径
-     * @param zip 文件系统实例
-     * @param manifest JSON清单对象
-     * @param targetDir 目标解压目录
-     * @param progressCallback 进度回调（可选）
-     * @return 是否成功解压了资源（true表示有资源且解压成功，false表示没有resources字段）
-     * @throws IOException 当解压过程中发生IO错误时抛出
-     */
     fun extractResources(
         zip: ZipFile,
         manifest: JsonObject,
         targetDir: Path,
         progressCallback: ProgressCallback? = null
     ): Boolean {
-        // 检查是否存在resources字段
         val resourcesPath = manifest["resources"]?.jsonPrimitive?.content
         if (resourcesPath.isNullOrBlank()) {
             logger.d("No 'resources' field in manifest, skipping resource extraction")
@@ -453,57 +444,47 @@ object AddonManager {
         }
 
         logger.d("Extracting resources from: $resourcesPath to: $targetDir")
-
         progressCallback?.invoke(InstallProgress.PARSING_METADATA, null)
 
-        // 检查资源目录是否存在
         try {
-            // 使用Okio的FileSystem遍历ZIP中的目录
-            val resourceFiles = mutableListOf<String>()
+            // 收集所有需要解压的条目
+            val entriesToExtract = mutableListOf<ZipEntry>()
+            val resourcePathPrefix = resourcesPath.trimEnd('/') + "/"
 
-            // 递归收集所有需要解压的文件
-            fun collectFiles(currentPath: String) {
-                val entries = zip.entries
-                entries.forEach { entry ->
-                    val fullPath = currentPath.toPath() / entry.name
-                    if (entry.isDirectory) {
-                        collectFiles(fullPath.toString())
-                    } else {
-                        resourceFiles.add(fullPath.toString())
+            zip.entries.forEach { entry ->
+                // 检查条目是否在资源目录下
+                if (entry.name == resourcesPath ||
+                    entry.name == "$resourcesPath/" ||
+                    entry.name.startsWith(resourcePathPrefix)) {
+                    // 跳过目录条目本身
+                    if (!entry.isDirectory) {
+                        entriesToExtract.add(entry)
                     }
                 }
             }
 
-            // 如果路径是文件而不是目录，直接添加
-            if (zip.getEntry(resourcesPath)?.isDirectory == true) {
-                collectFiles(resourcesPath)
-            } else if (zip.getEntry(resourcesPath) != null) {
-                resourceFiles.add(resourcesPath)
-            } else {
-                logger.w("Resources path does not exist in zip: $resourcesPath")
-                return false
-            }
-
-            if (resourceFiles.isEmpty()) {
+            if (entriesToExtract.isEmpty()) {
                 logger.w("No files found in resources path: $resourcesPath")
                 return false
             }
 
-            logger.d("Found ${resourceFiles.size} files to extract")
+            logger.d("Found ${entriesToExtract.size} files to extract")
 
             var extractedCount = 0
-            val totalFiles = resourceFiles.size
+            val totalFiles = entriesToExtract.size
 
-            resourceFiles.forEach { sourcePath ->
-                // 计算相对路径 - 修正这部分逻辑
-                val relativePath = calculateRelativePath(sourcePath.toPath(), resourcesPath.toPath())
+            entriesToExtract.forEach { entry ->
+                // 计算相对路径
+                val relativePath = if (entry.name == resourcesPath) {
+                    // 直接是资源文件，不是目录
+                    entry.name.substringAfterLast('/')
+                } else {
+                    // 去掉资源目录前缀
+                    entry.name.substringAfter(resourcePathPrefix)
+                }
 
                 // 目标文件路径
-                val destPath = if (relativePath.name.isEmpty()) {
-                    targetDir / sourcePath.toPath().name
-                } else {
-                    targetDir / relativePath
-                }
+                val destPath = targetDir / relativePath
 
                 // 创建父目录
                 destPath.parent?.let { parent ->
@@ -518,10 +499,12 @@ object AddonManager {
                 )
 
                 // 解压文件
-                zip.getInputStream(sourcePath).asSource().use { source ->
+                zip.getInputStream(entry).use { inputStream ->
                     fileSystem.sink(destPath).buffer().use { sink ->
-                        sink.writeAll(source)
-                        sink.flush()
+                        inputStream.asSource().use { source ->
+                            sink.writeAll(source)
+                            sink.flush()
+                        }
                     }
                 }
 
@@ -549,7 +532,7 @@ object AddonManager {
 
             val iconEntry = zip.getEntry(iconFile) ?: return
 
-            fileSystem.sink(filePath, true).buffer().use {
+            fileSystem.sink(filePath, false).buffer().use {
                 it.writeAll(zip.getInputStream(iconEntry).asSource())
                 it.flush()
             }

@@ -574,9 +574,14 @@ fun ComponentInstallScreen(
                         AddonManager.installKernel(kernelTmpPath)
                         FileSystem.SYSTEM.delete(kernelTmpPath)
 
-                        val tefloaderTmpPath = releaseResourceToTmp("tefloader.zip")
-                        FileSystem.SYSTEM.copy(tefloaderTmpPath, Platform.getData("tefkernel") / "tefloader.zip")
-                        FileSystem.SYSTEM.delete(tefloaderTmpPath)
+                        if (Platform.isDesktop) {
+                            val tefloaderTmpPath = releaseResourceToTmp("tefloader.zip")
+                            FileSystem.SYSTEM.copy(
+                                tefloaderTmpPath,
+                                Platform.getData("tefkernel") / "tefloader.zip"
+                            )
+                            FileSystem.SYSTEM.delete(tefloaderTmpPath)
+                        }
                     } // TEFKernel
                     1 -> {
                         val moduleTmpPath = releaseResourceToTmp("LanguagePackExtension.zip")

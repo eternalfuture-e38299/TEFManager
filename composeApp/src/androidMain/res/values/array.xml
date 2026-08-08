@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="xposed_scope">
+        <item>com.and.games505.Terraria</item>
+        <item>com.and.games505.TerrariaPaid</item>
+    </string-array>
+</resources>
