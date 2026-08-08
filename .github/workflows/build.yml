@@ -129,9 +129,10 @@ jobs:
         shell: bash
 
       - name: Rename JAR with platform info
+        shell: bash
         run: |
           JARS_DIR="composeApp/build/compose/jars"
-          if [ -d "$JARS_DIR" ] && [ "$(ls -A $JARS_DIR/*.jar 2>/dev/null)" ]; then
+          if [ -d "$JARS_DIR" ] && ls "$JARS_DIR"/*.jar 1>/dev/null 2>&1; then
             for jar in "$JARS_DIR"/*.jar; do
               if [ -f "$jar" ]; then
                 NEW_NAME="$JARS_DIR/TEFManager.${{ matrix.jar_suffix }}.jar"
@@ -200,3 +201,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## 📥 Download" >> $GITHUB_STEP_SUMMARY
           echo "Download artifacts from the **Artifacts** section below." >> $GITHUB_STEP_SUMMARY
+
