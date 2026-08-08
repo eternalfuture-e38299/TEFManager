@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build-android:
-    name: Build Android (with R8)
+    name: Build Android (Unsigned APK)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     
@@ -41,22 +41,62 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Android Release APK (with R8)
+      - name: Build Android Unsigned Release APK (with R8)
         run: |
           ./gradlew :composeApp:assembleRelease \
             -Pandroid.enableR8.fullMode=true \
             --no-daemon
 
+      - name: Rename APK to TEFManager.apk
+        run: |
+          APK_PATH=$(find composeApp/build/outputs/apk/release -name "*.apk" | head -1)
+          if [ -n "$APK_PATH" ]; then
+            cp "$APK_PATH" composeApp/build/outputs/apk/release/TEFManager.apk
+            echo "APK renamed to TEFManager.apk"
+          else
+            echo "No APK found!"
+            exit 1
+          fi
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk
-          path: composeApp/build/outputs/apk/release/*.apk
+          name: android-apk-unsigned
+          path: composeApp/build/outputs/apk/release/TEFManager.apk
           retention-days: 90
 
-  build-jvm-windows-x86:
-    name: Build JVM JAR (Windows x86)
-    runs-on: windows-latest
+  build-jvm:
+    name: Build JVM JAR (${{ matrix.os_name }} ${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            os_name: Windows
+            arch: x86
+            jar_suffix: Windows.x86
+          - runner: windows-latest
+            os_name: Windows
+            arch: x64
+            jar_suffix: Windows.x64
+          - runner: ubuntu-latest
+            os_name: Linux
+            arch: x86
+            jar_suffix: Linux.x86
+          - runner: ubuntu-latest
+            os_name: Linux
+            arch: x64
+            jar_suffix: Linux.x64
+          - runner: macos-latest
+            os_name: macOS
+            arch: x64
+            jar_suffix: macOS.x64
+          - runner: macos-latest
+            os_name: macOS
+            arch: arm64
+            jar_suffix: macOS.arm64
+    
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     
     steps:
@@ -78,229 +118,42 @@ jobs:
           gradle-version: wrapper
           cache-read-only: false
 
-      - name: Build JVM JAR (Windows x86)
+      - name: Grant execute permission for gradlew (Unix)
+        if: runner.os != 'Windows'
+        run: chmod +x gradlew
+
+      - name: Build JVM JAR (${{ matrix.os_name }} ${{ matrix.arch }})
         run: |
           ./gradlew :composeApp:packageReleaseUberJarForCurrentOS \
             --no-daemon
         shell: bash
 
-      - name: Upload JAR
-        uses: actions/upload-artifact@v4
-        with:
-          name: jvm-jars
-          path: composeApp/build/compose/jars/*.jar
-          retention-days: 90
-          if-no-files-found: warn
-
-  build-jvm-windows-x64:
-    name: Build JVM JAR (Windows x64)
-    runs-on: windows-latest
-    timeout-minutes: 30
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: wrapper
-          cache-read-only: false
-
-      - name: Build JVM JAR (Windows x64)
+      - name: Rename JAR with platform info
         run: |
-          ./gradlew :composeApp:packageReleaseUberJarForCurrentOS \
-            --no-daemon
-        shell: bash
+          JARS_DIR="composeApp/build/compose/jars"
+          if [ -d "$JARS_DIR" ] && [ "$(ls -A $JARS_DIR/*.jar 2>/dev/null)" ]; then
+            for jar in "$JARS_DIR"/*.jar; do
+              if [ -f "$jar" ]; then
+                NEW_NAME="$JARS_DIR/TEFManager.${{ matrix.jar_suffix }}.jar"
+                mv "$jar" "$NEW_NAME"
+                echo "Renamed to: $NEW_NAME"
+              fi
+            done
+          else
+            echo "Warning: No JAR files found in $JARS_DIR"
+          fi
 
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
-          name: jvm-jars
-          path: composeApp/build/compose/jars/*.jar
-          retention-days: 90
-          if-no-files-found: warn
-
-  build-jvm-linux-x86:
-    name: Build JVM JAR (Linux x86)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: wrapper
-          cache-read-only: false
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Build JVM JAR (Linux x86)
-        run: |
-          ./gradlew :composeApp:packageReleaseUberJarForCurrentOS \
-            --no-daemon
-
-      - name: Upload JAR
-        uses: actions/upload-artifact@v4
-        with:
-          name: jvm-jars
-          path: composeApp/build/compose/jars/*.jar
-          retention-days: 90
-          if-no-files-found: warn
-
-  build-jvm-linux-x64:
-    name: Build JVM JAR (Linux x64)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: wrapper
-          cache-read-only: false
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Build JVM JAR (Linux x64)
-        run: |
-          ./gradlew :composeApp:packageReleaseUberJarForCurrentOS \
-            --no-daemon
-
-      - name: Upload JAR
-        uses: actions/upload-artifact@v4
-        with:
-          name: jvm-jars
-          path: composeApp/build/compose/jars/*.jar
-          retention-days: 90
-          if-no-files-found: warn
-
-  build-jvm-macos-x64:
-    name: Build JVM JAR (macOS x64)
-    runs-on: macos-latest
-    timeout-minutes: 30
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: wrapper
-          cache-read-only: false
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Build JVM JAR (macOS x64)
-        run: |
-          ./gradlew :composeApp:packageReleaseUberJarForCurrentOS \
-            --no-daemon
-
-      - name: Upload JAR
-        uses: actions/upload-artifact@v4
-        with:
-          name: jvm-jars
-          path: composeApp/build/compose/jars/*.jar
-          retention-days: 90
-          if-no-files-found: warn
-
-  build-jvm-macos-arm64:
-    name: Build JVM JAR (macOS ARM64)
-    runs-on: macos-latest
-    timeout-minutes: 30
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: wrapper
-          cache-read-only: false
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Build JVM JAR (macOS ARM64)
-        run: |
-          ./gradlew :composeApp:packageReleaseUberJarForCurrentOS \
-            --no-daemon
-
-      - name: Upload JAR
-        uses: actions/upload-artifact@v4
-        with:
-          name: jvm-jars
-          path: composeApp/build/compose/jars/*.jar
+          name: jvm-jar-${{ matrix.jar_suffix }}
+          path: composeApp/build/compose/jars/TEFManager.${{ matrix.jar_suffix }}.jar
           retention-days: 90
           if-no-files-found: warn
 
   summary:
     name: Build Summary
-    needs: [
-      build-android, 
-      build-jvm-windows-x86, 
-      build-jvm-windows-x64, 
-      build-jvm-linux-x86, 
-      build-jvm-linux-x64, 
-      build-jvm-macos-x64, 
-      build-jvm-macos-arm64
-    ]
+    needs: [build-android, build-jvm]
     runs-on: ubuntu-latest
     if: always()
     
@@ -315,45 +168,25 @@ jobs:
           echo "|----------|--------------|----------|--------|" >> $GITHUB_STEP_SUMMARY
           
           if [ "${{ needs.build-android.result }}" == "success" ]; then
-            echo "| Android | - | APK | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android | - | TEFManager.apk (unsigned) | ✅ Success |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| Android | - | APK | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android | - | TEFManager.apk (unsigned) | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
           
-          if [ "${{ needs.build-jvm-windows-x86.result }}" == "success" ]; then
-            echo "| JVM (Windows) | x86 | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.build-jvm.result }}" == "success" ]; then
+            echo "| JVM (Windows) | x86 | TEFManager.Windows.x86.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+            echo "| JVM (Windows) | x64 | TEFManager.Windows.x64.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+            echo "| JVM (Linux) | x86 | TEFManager.Linux.x86.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+            echo "| JVM (Linux) | x64 | TEFManager.Linux.x64.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+            echo "| JVM (macOS) | x64 | TEFManager.macOS.x64.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+            echo "| JVM (macOS) | ARM64 | TEFManager.macOS.arm64.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| JVM (Windows) | x86 | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ "${{ needs.build-jvm-windows-x64.result }}" == "success" ]; then
-            echo "| JVM (Windows) | x64 | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| JVM (Windows) | x64 | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ "${{ needs.build-jvm-linux-x86.result }}" == "success" ]; then
-            echo "| JVM (Linux) | x86 | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| JVM (Linux) | x86 | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ "${{ needs.build-jvm-linux-x64.result }}" == "success" ]; then
-            echo "| JVM (Linux) | x64 | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| JVM (Linux) | x64 | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ "${{ needs.build-jvm-macos-x64.result }}" == "success" ]; then
-            echo "| JVM (macOS) | x64 | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| JVM (macOS) | x64 | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ "${{ needs.build-jvm-macos-arm64.result }}" == "success" ]; then
-            echo "| JVM (macOS) | ARM64 | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| JVM (macOS) | ARM64 | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+            echo "| JVM (Windows) | x86 | TEFManager.Windows.x86.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
+            echo "| JVM (Windows) | x64 | TEFManager.Windows.x64.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
+            echo "| JVM (Linux) | x86 | TEFManager.Linux.x86.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
+            echo "| JVM (Linux) | x64 | TEFManager.Linux.x64.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
+            echo "| JVM (macOS) | x64 | TEFManager.macOS.x64.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
+            echo "| JVM (macOS) | ARM64 | TEFManager.macOS.arm64.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
           fi
           
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -363,6 +196,7 @@ jobs:
           echo "- **Description:** ${{ github.event.inputs.build_description }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Time:** $(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
           echo "- **R8:** ✅ Enabled for Android" >> $GITHUB_STEP_SUMMARY
+          echo "- **Signing:** ❌ Not signed (sign manually with Termux)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## 📥 Download" >> $GITHUB_STEP_SUMMARY
           echo "Download artifacts from the **Artifacts** section below." >> $GITHUB_STEP_SUMMARY
