@@ -54,8 +54,84 @@ jobs:
           path: composeApp/build/outputs/apk/release/*.apk
           retention-days: 90
 
-  build-jvm-linux:
-    name: Build JVM JAR (Linux)
+  build-jvm-windows-x86:
+    name: Build JVM JAR (Windows x86)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: wrapper
+          cache-read-only: false
+
+      - name: Build JVM JAR (Windows x86)
+        run: |
+          ./gradlew :composeApp:packageReleaseUberJarForCurrentOS \
+            --no-daemon
+        shell: bash
+
+      - name: Upload JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: jvm-jars
+          path: composeApp/build/compose/jars/*.jar
+          retention-days: 90
+          if-no-files-found: warn
+
+  build-jvm-windows-x64:
+    name: Build JVM JAR (Windows x64)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: wrapper
+          cache-read-only: false
+
+      - name: Build JVM JAR (Windows x64)
+        run: |
+          ./gradlew :composeApp:packageReleaseUberJarForCurrentOS \
+            --no-daemon
+        shell: bash
+
+      - name: Upload JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: jvm-jars
+          path: composeApp/build/compose/jars/*.jar
+          retention-days: 90
+          if-no-files-found: warn
+
+  build-jvm-linux-x86:
+    name: Build JVM JAR (Linux x86)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     
@@ -81,22 +157,22 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build JVM JAR (Linux)
+      - name: Build JVM JAR (Linux x86)
         run: |
           ./gradlew :composeApp:packageReleaseUberJarForCurrentOS \
             --no-daemon
 
-      - name: Upload JAR (Linux)
+      - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
-          name: jvm-jar-linux
-          path: composeApp/build/compose/jars/*-linux-*.jar
+          name: jvm-jars
+          path: composeApp/build/compose/jars/*.jar
           retention-days: 90
           if-no-files-found: warn
 
-  build-jvm-windows:
-    name: Build JVM JAR (Windows)
-    runs-on: windows-latest
+  build-jvm-linux-x64:
+    name: Build JVM JAR (Linux x64)
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     
     steps:
@@ -118,22 +194,24 @@ jobs:
           gradle-version: wrapper
           cache-read-only: false
 
-      - name: Build JVM JAR (Windows)
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build JVM JAR (Linux x64)
         run: |
           ./gradlew :composeApp:packageReleaseUberJarForCurrentOS \
             --no-daemon
-        shell: bash
 
-      - name: Upload JAR (Windows)
+      - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
-          name: jvm-jar-windows
-          path: composeApp/build/compose/jars/*-windows-*.jar
+          name: jvm-jars
+          path: composeApp/build/compose/jars/*.jar
           retention-days: 90
           if-no-files-found: warn
 
-  build-jvm-macos:
-    name: Build JVM JAR (macOS)
+  build-jvm-macos-x64:
+    name: Build JVM JAR (macOS x64)
     runs-on: macos-latest
     timeout-minutes: 30
     
@@ -159,22 +237,70 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build JVM JAR (macOS)
+      - name: Build JVM JAR (macOS x64)
         run: |
           ./gradlew :composeApp:packageReleaseUberJarForCurrentOS \
             --no-daemon
 
-      - name: Upload JAR (macOS)
+      - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
-          name: jvm-jar-macos
-          path: composeApp/build/compose/jars/*-macos-*.jar
+          name: jvm-jars
+          path: composeApp/build/compose/jars/*.jar
+          retention-days: 90
+          if-no-files-found: warn
+
+  build-jvm-macos-arm64:
+    name: Build JVM JAR (macOS ARM64)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: wrapper
+          cache-read-only: false
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build JVM JAR (macOS ARM64)
+        run: |
+          ./gradlew :composeApp:packageReleaseUberJarForCurrentOS \
+            --no-daemon
+
+      - name: Upload JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: jvm-jars
+          path: composeApp/build/compose/jars/*.jar
           retention-days: 90
           if-no-files-found: warn
 
   summary:
     name: Build Summary
-    needs: [build-android, build-jvm-linux, build-jvm-windows, build-jvm-macos]
+    needs: [
+      build-android, 
+      build-jvm-windows-x86, 
+      build-jvm-windows-x64, 
+      build-jvm-linux-x86, 
+      build-jvm-linux-x64, 
+      build-jvm-macos-x64, 
+      build-jvm-macos-arm64
+    ]
     runs-on: ubuntu-latest
     if: always()
     
@@ -185,31 +311,49 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## 📦 Build Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Platform | Artifact | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Architecture | Artifact | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------------|----------|--------|" >> $GITHUB_STEP_SUMMARY
           
           if [ "${{ needs.build-android.result }}" == "success" ]; then
-            echo "| Android | APK | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android | - | APK | ✅ Success |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| Android | APK | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android | - | APK | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
           
-          if [ "${{ needs.build-jvm-linux.result }}" == "success" ]; then
-            echo "| JVM (Linux) | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.build-jvm-windows-x86.result }}" == "success" ]; then
+            echo "| JVM (Windows) | x86 | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| JVM (Linux) | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+            echo "| JVM (Windows) | x86 | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
           
-          if [ "${{ needs.build-jvm-windows.result }}" == "success" ]; then
-            echo "| JVM (Windows) | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.build-jvm-windows-x64.result }}" == "success" ]; then
+            echo "| JVM (Windows) | x64 | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| JVM (Windows) | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+            echo "| JVM (Windows) | x64 | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
           
-          if [ "${{ needs.build-jvm-macos.result }}" == "success" ]; then
-            echo "| JVM (macOS) | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.build-jvm-linux-x86.result }}" == "success" ]; then
+            echo "| JVM (Linux) | x86 | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| JVM (macOS) | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+            echo "| JVM (Linux) | x86 | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.build-jvm-linux-x64.result }}" == "success" ]; then
+            echo "| JVM (Linux) | x64 | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| JVM (Linux) | x64 | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.build-jvm-macos-x64.result }}" == "success" ]; then
+            echo "| JVM (macOS) | x64 | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| JVM (macOS) | x64 | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.build-jvm-macos-arm64.result }}" == "success" ]; then
+            echo "| JVM (macOS) | ARM64 | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| JVM (macOS) | ARM64 | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
           
           echo "" >> $GITHUB_STEP_SUMMARY
