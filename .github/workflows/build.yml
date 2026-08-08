@@ -1,104 +1,24 @@
-name: Manual Build Release
+name: Manual Build All Platforms
 
 on:
   workflow_dispatch:
     inputs:
-      version_name:
-        description: 'Version Name (e.g., 1.0.0)'
-        required: true
-        type: string
-        default: '1.0.0'
-
-      version_code:
-        description: 'Version Code (integer)'
-        required: true
-        type: number
-        default: 2026080800
-
-      release_notes:
-        description: 'Release Notes / Changelog'
+      build_description:
+        description: 'Build Description (optional)'
         required: false
         type: string
-        default: 'Manual build release'
+        default: 'Manual build'
 
-      build_type:
-        description: 'Build Type'
-        required: true
-        type: choice
-        options:
-          - 'all'
-          - 'android-only'
-          - 'jvm-only'
-        default: 'all'
-
-      android_arch:
-        description: 'Android architectures to build (comma separated)'
-        required: false
-        type: string
-        default: 'all'
-        # all, arm64-v8a, armeabi-v7a, x86, x86_64
-
-      jvm_platforms:
-        description: 'JVM platforms to build (comma separated)'
-        required: false
-        type: choice
-        options:
-          - 'all'
-          - 'windows-only'
-          - 'macos-only'
-          - 'linux-only'
-        default: 'all'
-
-      debug_logs:
-        description: 'Enable debug logs'
-        required: false
-        type: boolean
-        default: false
-
-# 取消正在运行的旧工作流
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # 准备构建参数
-  prepare:
-    name: Prepare Build
-    runs-on: ubuntu-latest
-    outputs:
-      version_name: ${{ steps.set-vars.outputs.version_name }}
-      version_code: ${{ steps.set-vars.outputs.version_code }}
-      build_type: ${{ steps.set-vars.outputs.build_type }}
-      timestamp: ${{ steps.set-vars.outputs.timestamp }}
-      artifact_suffix: ${{ steps.set-vars.outputs.artifact_suffix }}
-
-    steps:
-      - name: Set build variables
-        id: set-vars
-        run: |
-          TIMESTAMP=$(date +'%Y%m%d_%H%M%S')
-          echo "version_name=${{ github.event.inputs.version_name }}" >> $GITHUB_OUTPUT
-          echo "version_code=${{ github.event.inputs.version_code }}" >> $GITHUB_OUTPUT
-          echo "build_type=${{ github.event.inputs.build_type }}" >> $GITHUB_OUTPUT
-          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
-          echo "artifact_suffix=${TIMESTAMP}_v${{ github.event.inputs.version_name }}" >> $GITHUB_OUTPUT
-          
-          echo "📋 Build Configuration:"
-          echo "  Version: ${{ github.event.inputs.version_name }}"
-          echo "  Version Code: ${{ github.event.inputs.version_code }}"
-          echo "  Build Type: ${{ github.event.inputs.build_type }}"
-          echo "  Timestamp: $TIMESTAMP"
-
-  # 构建 Android
   build-android:
-    name: Build Android Release
-    needs: prepare
+    name: Build Android (with R8)
     runs-on: ubuntu-latest
-    if: |
-      needs.prepare.outputs.build_type == 'all' || 
-      needs.prepare.outputs.build_type == 'android-only'
     timeout-minutes: 60
-
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -121,93 +41,37 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Show build info
-        run: |
-          echo "Building Android with version: ${{ needs.prepare.outputs.version_name }}"
-          echo "Version Code: ${{ needs.prepare.outputs.version_code }}"
-
-      - name: Build Android Release APK
+      - name: Build Android Release APK (with R8)
         run: |
           ./gradlew :composeApp:assembleRelease \
-            -PversionName=${{ needs.prepare.outputs.version_name }} \
-            -PversionCode=${{ needs.prepare.outputs.version_code }} \
+            -Pandroid.enableR8.fullMode=true \
             --no-daemon
 
-      - name: Build Android Release AAB
+      - name: Build Android Release AAB (with R8)
         run: |
           ./gradlew :composeApp:bundleRelease \
-            -PversionName=${{ needs.prepare.outputs.version_name }} \
-            -PversionCode=${{ needs.prepare.outputs.version_code }} \
+            -Pandroid.enableR8.fullMode=true \
             --no-daemon
-
-      - name: List built files
-        run: |
-          echo "📦 Built APKs:"
-          find composeApp/build/outputs/apk/release/ -name "*.apk" -ls
-          echo "📦 Built AABs:"
-          find composeApp/build/outputs/bundle/release/ -name "*.aab" -ls
-
-      - name: Rename APK with version
-        run: |
-          cd composeApp/build/outputs/apk/release/
-          for apk in *.apk; do
-            if [ -f "$apk" ]; then
-              new_name="TEFManager_Android_${{ needs.prepare.outputs.version_name }}_${{ needs.prepare.outputs.artifact_suffix }}.apk"
-              mv "$apk" "$new_name"
-              echo "Renamed: $apk -> $new_name"
-            fi
-          done
-
-      - name: Rename AAB with version
-        run: |
-          cd composeApp/build/outputs/bundle/release/
-          for aab in *.aab; do
-            if [ -f "$aab" ]; then
-              new_name="TEFManager_Android_${{ needs.prepare.outputs.version_name }}_${{ needs.prepare.outputs.artifact_suffix }}.aab"
-              mv "$aab" "$new_name"
-              echo "Renamed: $aab -> $new_name"
-            fi
-          done
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk-${{ needs.prepare.outputs.artifact_suffix }}
+          name: android-apk
           path: composeApp/build/outputs/apk/release/*.apk
           retention-days: 90
 
       - name: Upload AAB
         uses: actions/upload-artifact@v4
         with:
-          name: android-aab-${{ needs.prepare.outputs.artifact_suffix }}
+          name: android-aab
           path: composeApp/build/outputs/bundle/release/*.aab
           retention-days: 90
 
-  # 构建 JVM - 矩阵并行
-  build-jvm:
-    name: Build JVM (${{ matrix.os }})
-    needs: prepare
-    runs-on: ${{ matrix.os }}
-    if: |
-      needs.prepare.outputs.build_type == 'all' || 
-      needs.prepare.outputs.build_type == 'jvm-only'
-    timeout-minutes: 60
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-            format: AppImage
-            gradle_task: packageReleaseAppImage
-          - os: windows-latest
-            platform: windows
-            format: Msi
-            gradle_task: packageReleaseMsi
-          - os: macos-latest
-            platform: macos
-            format: Dmg
-            gradle_task: packageReleaseDmg
-
+  build-jvm-linux:
+    name: Build JVM JAR (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -228,130 +92,143 @@ jobs:
           cache-read-only: false
 
       - name: Grant execute permission for gradlew
-        if: runner.os != 'Windows'
         run: chmod +x gradlew
 
-      - name: Build JVM (${{ matrix.platform }})
+      - name: Build JVM JAR (Linux)
         run: |
-          ./gradlew :composeApp:${{ matrix.gradle_task }} \
-            -PversionName=${{ needs.prepare.outputs.version_name }} \
-            -PversionCode=${{ needs.prepare.outputs.version_code }} \
+          ./gradlew :composeApp:packageReleaseUberJarForCurrentOS \
+            --no-daemon
+
+      - name: Upload JAR (Linux)
+        uses: actions/upload-artifact@v4
+        with:
+          name: jvm-jar-linux
+          path: composeApp/build/compose/binaries/main-release/ubuntu/*.jar
+          retention-days: 90
+
+  build-jvm-windows:
+    name: Build JVM JAR (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: wrapper
+          cache-read-only: false
+
+      - name: Build JVM JAR (Windows)
+        run: |
+          ./gradlew :composeApp:packageReleaseUberJarForCurrentOS \
             --no-daemon
         shell: bash
 
-      - name: List built files
-        run: |
-          echo "📦 Built files for ${{ matrix.platform }}:"
-          find composeApp/build/compose/binaries/main-release/app/ -type f -ls
-
-      - name: Rename artifacts
-        run: |
-          cd composeApp/build/compose/binaries/main-release/app/
-          for file in *.${{ matrix.format == 'AppImage' && 'AppImage' || matrix.format == 'Msi' && 'msi' || 'dmg' }}; do
-            if [ -f "$file" ]; then
-              ext="${file##*.}"
-              new_name="TEFManager_${{ matrix.platform }}_${{ needs.prepare.outputs.version_name }}_${{ needs.prepare.outputs.artifact_suffix }}.${ext}"
-              mv "$file" "$new_name"
-              echo "Renamed: $file -> $new_name"
-            fi
-          done
-        shell: bash
-        continue-on-error: true
-
-      - name: Upload JVM artifacts
+      - name: Upload JAR (Windows)
         uses: actions/upload-artifact@v4
         with:
-          name: jvm-${{ matrix.platform }}-${{ needs.prepare.outputs.artifact_suffix }}
-          path: composeApp/build/compose/binaries/main-release/app/*.*
+          name: jvm-jar-windows
+          path: composeApp/build/compose/binaries/main-release/windows/*.jar
           retention-days: 90
-          if-no-files-found: warn
 
-  # 生成 Release Notes
-  create-release-notes:
-    name: Generate Release Notes
-    needs: [prepare, build-android, build-jvm]
-    runs-on: ubuntu-latest
-    if: always() && (needs.build-android.result == 'success' || needs.build-jvm.result == 'success')
-
+  build-jvm-macos:
+    name: Build JVM JAR (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    
     steps:
-      - name: Generate release notes
-        run: |
-          cat > release_notes.md << EOF
-          # TEFManager Release ${{ needs.prepare.outputs.version_name }}
-          
-          **Build Time:** $(date '+%Y-%m-%d %H:%M:%S UTC')
-          **Version Code:** ${{ needs.prepare.outputs.version_code }}
-          **Build Type:** ${{ needs.prepare.outputs.build_type }}
-          
-          ## Release Notes
-          ${{ github.event.inputs.release_notes }}
-          
-          ## Build Artifacts
-          - Android: APK and AAB
-          - JVM: ${{ github.event.inputs.jvm_platforms }}
-          
-          ## Changes
-          ${{ github.event.inputs.release_notes || 'No release notes provided' }}
-          
-          ## Download
-          Please download the artifacts from the Actions page.
-          EOF
-          
-          cat release_notes.md
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
 
-      - name: Upload release notes
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: wrapper
+          cache-read-only: false
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build JVM JAR (macOS)
+        run: |
+          ./gradlew :composeApp:packageReleaseUberJarForCurrentOS \
+            --no-daemon
+
+      - name: Upload JAR (macOS)
         uses: actions/upload-artifact@v4
         with:
-          name: release-notes-${{ needs.prepare.outputs.artifact_suffix }}
-          path: release_notes.md
+          name: jvm-jar-macos
+          path: composeApp/build/compose/binaries/main-release/macos/*.jar
           retention-days: 90
 
-  # 汇总所有产物
-  package-all:
-    name: Package All Artifacts
-    needs: [prepare, build-android, build-jvm, create-release-notes]
+  summary:
+    name: Build Summary
+    needs: [build-android, build-jvm-linux, build-jvm-windows, build-jvm-macos]
     runs-on: ubuntu-latest
-    if: always() && (needs.build-android.result == 'success' || needs.build-jvm.result == 'success')
-
+    if: always()
+    
     steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Create final package
+      - name: Generate build summary
         run: |
-          mkdir -p final-package
-          echo "📦 Copying all artifacts..."
-          find artifacts/ -type f -exec cp {} final-package/ \;
+          echo "# 🎉 Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📦 Build Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Artifact | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|----------|--------|" >> $GITHUB_STEP_SUMMARY
           
-          echo "📋 Final package contents:"
-          ls -la final-package/
+          if [ "${{ needs.build-android.result }}" == "success" ]; then
+            echo "| Android | APK, AAB | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Android | APK, AAB | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
           
-          cd final-package
-          zip -r ../TEFManager_${{ needs.prepare.outputs.version_name }}_${{ needs.prepare.outputs.artifact_suffix }}.zip *
-          cd ..
-
-      - name: Upload final package
-        uses: actions/upload-artifact@v4
-        with:
-          name: TEFManager-${{ needs.prepare.outputs.version_name }}-${{ needs.prepare.outputs.artifact_suffix }}
-          path: |
-            TEFManager_*.zip
-            final-package/
-          retention-days: 90
-
-      - name: Show build summary
-        run: |
-          echo "## 🎉 Build Complete!" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.build-jvm-linux.result }}" == "success" ]; then
+            echo "| JVM (Linux) | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| JVM (Linux) | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.build-jvm-windows.result }}" == "success" ]; then
+            echo "| JVM (Windows) | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| JVM (Windows) | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.build-jvm-macos.result }}" == "success" ]; then
+            echo "| JVM (macOS) | JAR | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| JVM (macOS) | JAR | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ needs.prepare.outputs.version_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Version Code:** ${{ needs.prepare.outputs.version_code }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Build Type:** ${{ needs.prepare.outputs.build_type }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Timestamp:** ${{ needs.prepare.outputs.timestamp }}" >> $GITHUB_STEP_SUMMARY
+          echo "## 📝 Build Info" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📦 Download Artifacts" >> $GITHUB_STEP_SUMMARY
-          echo "Check the artifacts section above to download the build outputs." >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Description:** ${{ github.event.inputs.build_description }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Time:** $(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "- **R8:** ✅ Enabled for Android" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📝 Release Notes" >> $GITHUB_STEP_SUMMARY
-          echo "${{ github.event.inputs.release_notes }}" >> $GITHUB_STEP_SUMMARY
+          echo "## 📥 Download" >> $GITHUB_STEP_SUMMARY
+          echo "Download artifacts from the **Artifacts** section below." >> $GITHUB_STEP_SUMMARY
