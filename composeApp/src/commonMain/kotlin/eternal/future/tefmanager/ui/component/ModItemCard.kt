@@ -272,9 +272,8 @@ fun ModItemCard(
                         )
                     }
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp)  // 垂直间距
                     ) {
                         Text(
                             text = mod.pkgId,
@@ -295,7 +294,7 @@ fun ModItemCard(
                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                             )
-                        }
+                        } 
                     }
 
                     Row(
