@@ -107,13 +107,16 @@ object AddonManager {
             "libtefkernel.android.armeabi-v7a.so"
         )
         else if(Platform.isWindows) listOf(
-            "libtefkernel.windows.x64.dll",
+            "libtefkernel.windows.x86_64.dll",
             "libtefkernel.windows.x86.dll"
         ) else if (Platform.isLinux)
             listOf(
                 "libtefkernel.linux.x86.so",
-                "libtefkernel.linux.x64.so"
-            ) else listOf()
+                "libtefkernel.linux.x86_64.so"
+            ) else listOf(
+                "libtefkernel.mac.arm64.so",
+                "libtefkernel.mac.x86_64.so"
+            )
 
         val infoString = zip.getInputStream("info.json").asSource().buffer().readUtf8()
         val version = json.parseToJsonElement(infoString).jsonObject["version"]?.jsonPrimitive?.content!!
