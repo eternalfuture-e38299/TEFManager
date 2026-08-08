@@ -47,24 +47,11 @@ jobs:
             -Pandroid.enableR8.fullMode=true \
             --no-daemon
 
-      - name: Build Android Release AAB (with R8)
-        run: |
-          ./gradlew :composeApp:bundleRelease \
-            -Pandroid.enableR8.fullMode=true \
-            --no-daemon
-
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
           path: composeApp/build/outputs/apk/release/*.apk
-          retention-days: 90
-
-      - name: Upload AAB
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-aab
-          path: composeApp/build/outputs/bundle/release/*.aab
           retention-days: 90
 
   build-jvm-linux:
@@ -103,8 +90,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: jvm-jar-linux
-          path: composeApp/build/compose/binaries/main-release/ubuntu/*.jar
+          path: composeApp/build/compose/jars/*-linux-*.jar
           retention-days: 90
+          if-no-files-found: warn
 
   build-jvm-windows:
     name: Build JVM JAR (Windows)
@@ -140,8 +128,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: jvm-jar-windows
-          path: composeApp/build/compose/binaries/main-release/windows/*.jar
+          path: composeApp/build/compose/jars/*-windows-*.jar
           retention-days: 90
+          if-no-files-found: warn
 
   build-jvm-macos:
     name: Build JVM JAR (macOS)
@@ -179,8 +168,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: jvm-jar-macos
-          path: composeApp/build/compose/binaries/main-release/macos/*.jar
+          path: composeApp/build/compose/jars/*-macos-*.jar
           retention-days: 90
+          if-no-files-found: warn
 
   summary:
     name: Build Summary
@@ -199,9 +189,9 @@ jobs:
           echo "|----------|----------|--------|" >> $GITHUB_STEP_SUMMARY
           
           if [ "${{ needs.build-android.result }}" == "success" ]; then
-            echo "| Android | APK, AAB | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android | APK | ✅ Success |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| Android | APK, AAB | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android | APK | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
           
           if [ "${{ needs.build-jvm-linux.result }}" == "success" ]; then
