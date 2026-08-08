@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build-android:
-    name: Build Android (Unsigned APK)
+    name: Build Android
     runs-on: ubuntu-latest
     timeout-minutes: 60
     
@@ -61,7 +61,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk-unsigned
+          name: android-apk
           path: composeApp/build/outputs/apk/release/TEFManager.apk
           retention-days: 90
 
@@ -73,16 +73,8 @@ jobs:
         include:
           - runner: windows-latest
             os_name: Windows
-            arch: x86
-            jar_suffix: Windows.x86
-          - runner: windows-latest
-            os_name: Windows
             arch: x64
             jar_suffix: Windows.x64
-          - runner: ubuntu-latest
-            os_name: Linux
-            arch: x86
-            jar_suffix: Linux.x86
           - runner: ubuntu-latest
             os_name: Linux
             arch: x64
@@ -175,16 +167,12 @@ jobs:
           fi
           
           if [ "${{ needs.build-jvm.result }}" == "success" ]; then
-            echo "| JVM (Windows) | x86 | TEFManager.Windows.x86.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
-            echo "| JVM (Windows) | x64 | TEFManager.Windows.x64.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
-            echo "| JVM (Linux) | x86 | TEFManager.Linux.x86.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+            echo "| JVM (Windows) | x64 | TEFManager.Windows.x64.jar | ✅ Success |" >> $GITHUB_STEP_SUMMAR
             echo "| JVM (Linux) | x64 | TEFManager.Linux.x64.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
             echo "| JVM (macOS) | x64 | TEFManager.macOS.x64.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
             echo "| JVM (macOS) | ARM64 | TEFManager.macOS.arm64.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| JVM (Windows) | x86 | TEFManager.Windows.x86.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
             echo "| JVM (Windows) | x64 | TEFManager.Windows.x64.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
-            echo "| JVM (Linux) | x86 | TEFManager.Linux.x86.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
             echo "| JVM (Linux) | x64 | TEFManager.Linux.x64.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
             echo "| JVM (macOS) | x64 | TEFManager.macOS.x64.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
             echo "| JVM (macOS) | ARM64 | TEFManager.macOS.arm64.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
