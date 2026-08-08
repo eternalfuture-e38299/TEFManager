@@ -1,7 +1,7 @@
 package eternal.future.tefmanager.ui.dialogs
 
 import androidx.compose.runtime.Composable
-import eternal.future.tefmanager.ui.model.GameItem
+import eternal.future.tefmanager.model.GameItem
 
 /*******************************************************************************
  * TEFManager - AddGameDialog

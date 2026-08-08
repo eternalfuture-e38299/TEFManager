@@ -1,5 +1,6 @@
 package eternal.future.tefmanager.ui.screen.shared.resourcepack
 
+import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.utils.resourcepack.TexturePackManager
 
 /*******************************************************************************
@@ -26,7 +27,5 @@ import eternal.future.tefmanager.utils.resourcepack.TexturePackManager
 
 object TexturePackScreen : BasePackScreen(
     manager = TexturePackManager,
-    title = "材质包管理",
-    emptyMessage = "暂无材质包",
-    emptyActionText = "请点击按钮安装材质包"
+    title = { Strings.resource.texture }
 )

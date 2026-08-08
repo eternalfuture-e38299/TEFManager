@@ -26,8 +26,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Error
@@ -54,8 +52,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -68,15 +64,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eternal.future.tefmanager.ui.model.ArchitectureSupport
-import eternal.future.tefmanager.ui.model.Dependence
-import eternal.future.tefmanager.ui.model.ModuleItem
-import eternal.future.tefmanager.ui.model.PlatformSupport
+import eternal.future.tefmanager.model.ModuleItem
 import eternal.future.tefmanager.utils.openUrl
 import eternal.future.tefmanager.utils.toFileUrlString
+import eternal.future.tefmanager.strings.StringsResource.Strings
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
 import okio.FileSystem
@@ -105,96 +98,6 @@ import okio.SYSTEM
  * Created: 2026/3/15
  *******************************************************************************/
 
-@Composable
-@Preview
-private fun Preview() {
-    MaterialTheme {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-            // 测试正常模块
-            ModuleItemCard(
-                module = ModuleItem(
-                    pkgId = "com.test.module1",
-                    name = "性能优化模块",
-                    author = "eternalfuture-e38299",
-                    brieflyDescribe = "优化渲染",
-                    description = "优化游戏渲染性能，提升帧率并减少卡顿，支持多种分辨率适配",
-                    version = "2.1.0",
-                    versionCode = 21,
-                    dependence = listOf(
-                        Dependence("com.test.base", 1, 0),
-                        Dependence("com.test.graphics", 2, 0)
-                    ),
-                    support = PlatformSupport(
-                        android = ArchitectureSupport(arm64 = true, arm = true),
-                        windows = ArchitectureSupport(x64 = true, x86 = true)
-                    )
-                ),
-                enabled = true,
-                isEssential = false,
-                onEnableChange = {},
-                onDelete = {},
-                onConfigure = { println("配置模块") }
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 测试核心模块
-            ModuleItemCard(
-                module = ModuleItem(
-                    pkgId = "com.system.core",
-                    name = "系统核心模块",
-                    author = "System Team",
-                    description = "系统级核心组件，负责内存管理和进程调度，禁用可能导致系统不稳定",
-                    version = "3.0.0",
-                    versionCode = 30,
-                    dependence = listOf(),
-                    support = PlatformSupport(
-                        android = ArchitectureSupport(arm64 = true, arm = true),
-                        windows = ArchitectureSupport(x64 = true, x86 = true),
-                        linux = ArchitectureSupport(x64 = true)
-                    )
-                ),
-                enabled = true,
-                isEssential = true,
-                onEnableChange = {},
-                onDelete = {},
-                onConfigure = null
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 测试长作者名模块
-            ModuleItemCard(
-                module = ModuleItem(
-                    pkgId = "com.network.enhancement",
-                    name = "网络增强模块",
-                    author = "Network Development Group with a very long author name",
-                    description = "网络传输优化，降低延迟，提升连接稳定性",
-                    version = "1.5.3",
-                    versionCode = 15,
-                    dependence = listOf(
-                        Dependence("com.network.base", 1, 0),
-                        Dependence("com.security.crypto", 2, 0)
-                    ),
-                    support = PlatformSupport(
-                        android = ArchitectureSupport(arm64 = true, arm = true),
-                        linux = ArchitectureSupport(x64 = true)
-                    )
-                ),
-                enabled = false,
-                isEssential = false,
-                onEnableChange = {},
-                onDelete = {},
-                onConfigure = { println("配置网络模块") }
-            )
-        }
-    }
-}
-
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun ModuleItemCard(
@@ -203,8 +106,7 @@ fun ModuleItemCard(
     isEssential: Boolean = false,
     customIconPath: Path? = null,
     onEnableChange: (Boolean) -> Unit = {},
-    onDelete: () -> Unit = {},
-    onConfigure: ((ModuleItem) -> Unit)? = null
+    onDelete: () -> Unit = {}
 ) {
     val fileSystem: FileSystem = FileSystem.SYSTEM
 
@@ -227,7 +129,7 @@ fun ModuleItemCard(
         try {
             hasCustomIcon = fileSystem.exists(customIconPath)
         } catch (_: Exception) {
-            iconLoadError = "图标加载失败"
+            iconLoadError = Strings.error.iconLoadFailed(customIconPath)
             hasCustomIcon = false
         }
     }
@@ -282,7 +184,7 @@ fun ModuleItemCard(
                             if (fileSystem.exists(customIconPath)) {
                                 KamelImage(
                                     resource = { asyncPainterResource(data = customIconPath.toFileUrlString()) },
-                                    contentDescription = "自定义图标",
+                                    contentDescription = null,
                                     onLoading = { progress ->
                                         CircularProgressIndicator(
                                             progress = { progress },
@@ -292,7 +194,7 @@ fun ModuleItemCard(
                                         )
                                     },
                                     onFailure = { _ ->
-                                        iconLoadError = "图标加载失败"
+                                        iconLoadError = Strings.error.iconLoadFailed(customIconPath)
                                     },
                                     modifier = Modifier
                                         .size(24.dp)
@@ -301,7 +203,7 @@ fun ModuleItemCard(
                             } else {
                                 Icon(
                                     imageVector = Icons.Rounded.Error,
-                                    contentDescription = "图标不存在",
+                                    contentDescription = null,
                                     modifier = Modifier.size(20.dp),
                                     tint = MaterialTheme.colorScheme.error
                                 )
@@ -309,7 +211,7 @@ fun ModuleItemCard(
                         } else {
                             Icon(
                                 imageVector = Icons.Rounded.Settings,
-                                contentDescription = "模块图标",
+                                contentDescription = null,
                                 modifier = Modifier.size(20.dp),
                                 tint = if (internalEnabled) {
                                     MaterialTheme.colorScheme.onPrimaryContainer
@@ -354,12 +256,12 @@ fun ModuleItemCard(
                                 ) {
                                     Icon(
                                         Icons.Rounded.Star,
-                                        contentDescription = "核心",
+                                        contentDescription = null,
                                         modifier = Modifier.size(10.dp),
                                         tint = MaterialTheme.colorScheme.onErrorContainer
                                     )
                                     Text(
-                                        text = "核心",
+                                        text = Strings.manager.module.essential,
                                         style = MaterialTheme.typography.labelSmall,
                                         fontSize = 9.sp,
                                         color = MaterialTheme.colorScheme.onErrorContainer
@@ -374,7 +276,7 @@ fun ModuleItemCard(
                                 color = MaterialTheme.colorScheme.tertiaryContainer
                             ) {
                                 Text(
-                                    text = "自定义",
+                                    text = Strings.manager.custom,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontSize = 9.sp,
                                     color = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -430,7 +332,7 @@ fun ModuleItemCard(
                     ) {
                         Icon(
                             Icons.Rounded.Person,
-                            contentDescription = "作者",
+                            contentDescription = null,
                             modifier = Modifier.size(12.dp),
                             tint = MaterialTheme.colorScheme.outline
                         )
@@ -453,33 +355,6 @@ fun ModuleItemCard(
                         onCheckedChange = { newValue ->
                             internalEnabled = newValue
                             onEnableChange(newValue)
-                        },
-                        enabled = !isEssential,
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.primary,
-                            checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
-                            uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-                            disabledCheckedThumbColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                            disabledCheckedTrackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                            disabledUncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            disabledUncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        ),
-                        thumbContent = {
-                            Icon(
-                                imageVector = if (internalEnabled) {
-                                    Icons.Rounded.Check
-                                } else {
-                                    Icons.Rounded.Close
-                                },
-                                contentDescription = if (internalEnabled) "已启用" else "已禁用",
-                                modifier = Modifier.size(14.dp),
-                                tint = if (internalEnabled) {
-                                    MaterialTheme.colorScheme.onPrimary
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                }
-                            )
                         }
                     )
 
@@ -498,7 +373,7 @@ fun ModuleItemCard(
                         ) { isExpanded ->
                             Icon(
                                 imageVector = if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                                contentDescription = if (isExpanded) "收起" else "展开",
+                                contentDescription = null,
                                 modifier = Modifier.size(24.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -552,12 +427,12 @@ fun ModuleItemCard(
                             ) {
                                 Icon(
                                     Icons.Rounded.Link,
-                                    contentDescription = "依赖",
+                                    contentDescription = null,
                                     modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "依赖项 (${module.dependence.size})",
+                                    text = "${Strings.manager.dependency} (${module.dependence.size})",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -597,7 +472,7 @@ fun ModuleItemCard(
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                                 Text(
-                                                    text = "版本: ${formatVersionCodeRange(dep.minVersionCode, dep.maxVersionCode)}",
+                                                    text = Strings.manager.dependencyVersion(formatVersionCodeRange(dep.minVersionCode, dep.maxVersionCode)),
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.outline
                                                 )
@@ -621,12 +496,12 @@ fun ModuleItemCard(
                             ) {
                                 Icon(
                                     Icons.Rounded.Devices,
-                                    contentDescription = "平台支持",
+                                    contentDescription = null,
                                     modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "支持平台",
+                                    text = Strings.manager.platforms,
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -689,7 +564,7 @@ fun ModuleItemCard(
                             onClick = {},
                             label = {
                                 Text(
-                                    "核心模块，禁用可能导致系统不稳定",
+                                    Strings.manager.module.essentialDec,
                                     style = MaterialTheme.typography.labelSmall
                                 )
                             },
@@ -714,24 +589,6 @@ fun ModuleItemCard(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        if (module.globalConfig.fileType != "null" && module.globalConfig.fileType.isNotEmpty()) {
-                            onConfigure?.let { configureCallback ->
-                                OutlinedButton(
-                                    onClick = { configureCallback(module) },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Settings,
-                                        contentDescription = "配置",
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("配置")
-                                }
-                            }
-                        }
-
                         if (module.detailsURL.isNotEmpty()) {
                             OutlinedButton(
                                 onClick = { openUrl(module.detailsURL) },
@@ -740,11 +597,11 @@ fun ModuleItemCard(
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.Info,
-                                    contentDescription = "详细信息",
+                                    contentDescription = null,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                Text("详细信息")
+                                Text(Strings.manager.details)
                             }
                         }
 
@@ -759,11 +616,11 @@ fun ModuleItemCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Delete,
-                                contentDescription = "删除",
+                                contentDescription = null,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text("删除")
+                            Text(Strings.delete)
                         }
                     }
                 }

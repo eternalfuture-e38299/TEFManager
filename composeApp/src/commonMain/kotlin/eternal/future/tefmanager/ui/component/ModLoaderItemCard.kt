@@ -28,8 +28,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Build
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Error
@@ -50,8 +48,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -63,13 +59,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eternal.future.tefmanager.ui.model.ArchitectureSupport
-import eternal.future.tefmanager.ui.model.Dependence
-import eternal.future.tefmanager.ui.model.ModLoaderItem
-import eternal.future.tefmanager.ui.model.PlatformSupport
+import eternal.future.tefmanager.model.ModLoaderItem
+import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.utils.toFileUrlString
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
@@ -98,87 +91,6 @@ import okio.SYSTEM
  * GitHub: https://github.com/eternalfuture-e38299
  * Created: 2026/3/22
  *******************************************************************************/
-
-@Composable
-@Preview
-private fun Preview() {
-    MaterialTheme {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-            // 测试启用的ModLoader
-            ModLoaderItemCard(
-                modLoader = ModLoaderItem(
-                    pkgId = "com.modloader.fabric",
-                    name = "Fabric ModLoader",
-                    author = "Fabric Team",
-                    brieflyDescribe = "轻量级模块加载器",
-                    description = "Fabric是一个轻量级的模块加载器，提供简单、现代的API，支持快速开发和模块间兼容性。",
-                    version = "0.14.0",
-                    versionCode = 140,
-                    dependence = listOf(
-                        Dependence("com.fabric.api", 1, 0),
-                        Dependence("com.fabric.loader", 2, 0)
-                    ),
-                    support = PlatformSupport(
-                        android = ArchitectureSupport(arm64 = true, arm = true),
-                        windows = ArchitectureSupport(x64 = true, x86 = true),
-                        linux = ArchitectureSupport(x64 = true)
-                    )
-                ),
-                enabled = true
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 测试禁用的ModLoader
-            ModLoaderItemCard(
-                modLoader = ModLoaderItem(
-                    pkgId = "com.modloader.forge",
-                    name = "Forge ModLoader",
-                    author = "Forge Development Team with a very long author name",
-                    brieflyDescribe = "强大的模块加载器，拥有丰富的模块生态",
-                    description = "Forge是一个功能强大的模块加载器，拥有庞大的模块生态系统和社区支持。",
-                    version = "1.20.1",
-                    versionCode = 2010,
-                    dependence = listOf(
-                        Dependence("com.forge.api", 1, 0),
-                        Dependence("com.forge.common", 2, 0)
-                    ),
-                    support = PlatformSupport(
-                        android = ArchitectureSupport(arm64 = true),
-                        windows = ArchitectureSupport(x64 = true, x86 = true),
-                        linux = ArchitectureSupport(x64 = true)
-                    )
-                ),
-                enabled = false
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 测试无依赖的ModLoader
-            ModLoaderItemCard(
-                modLoader = ModLoaderItem(
-                    pkgId = "com.modloader.quilt",
-                    name = "Quilt ModLoader",
-                    author = "Quilt Team",
-                    brieflyDescribe = "现代化的Fabric分支",
-                    description = "Quilt是基于Fabric的现代化分支，提供更好的模块兼容性和开发体验。",
-                    version = "2.0.0",
-                    versionCode = 200,
-                    dependence = listOf(),
-                    support = PlatformSupport(
-                        android = ArchitectureSupport(arm64 = true),
-                        windows = ArchitectureSupport(x64 = true)
-                    )
-                ),
-                enabled = true
-            )
-        }
-    }
-}
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
@@ -210,7 +122,7 @@ fun ModLoaderItemCard(
         try {
             hasCustomIcon = fileSystem.exists(customIconPath)
         } catch (_: Exception) {
-            iconLoadError = "图标加载失败"
+            iconLoadError = Strings.error.iconLoadFailed(customIconPath)
             hasCustomIcon = false
         }
     }
@@ -260,9 +172,9 @@ fun ModLoaderItemCard(
                             if (fileSystem.exists(customIconPath)) {
                                 KamelImage(
                                     resource = { asyncPainterResource(data = customIconPath.toFileUrlString()) },
-                                    contentDescription = "自定义图标",
+                                    contentDescription = null,
                                     onFailure = { _ ->
-                                        iconLoadError = "图标加载失败"
+                                        iconLoadError = Strings.error.iconLoadFailed(customIconPath)
                                     },
                                     modifier = Modifier
                                         .size(40.dp)
@@ -271,7 +183,7 @@ fun ModLoaderItemCard(
                             } else {
                                 Icon(
                                     imageVector = Icons.Rounded.Error,
-                                    contentDescription = "图标不存在",
+                                    contentDescription = null,
                                     modifier = Modifier.size(28.dp),
                                     tint = MaterialTheme.colorScheme.error
                                 )
@@ -279,7 +191,7 @@ fun ModLoaderItemCard(
                         } else {
                             Icon(
                                 imageVector = Icons.Rounded.Build,
-                                contentDescription = "ModLoader图标",
+                                contentDescription = null,
                                 modifier = Modifier.size(28.dp),
                                 tint = if (internalEnabled) {
                                     MaterialTheme.colorScheme.onPrimaryContainer
@@ -318,7 +230,7 @@ fun ModLoaderItemCard(
                                 color = MaterialTheme.colorScheme.tertiaryContainer
                             ) {
                                 Text(
-                                    text = "自定义",
+                                    text = Strings.manager.custom,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontSize = 10.sp,
                                     color = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -360,7 +272,7 @@ fun ModLoaderItemCard(
                     ) {
                         Icon(
                             Icons.Rounded.Person,
-                            contentDescription = "作者",
+                            contentDescription = null,
                             modifier = Modifier.size(12.dp),
                             tint = MaterialTheme.colorScheme.outline
                         )
@@ -396,28 +308,6 @@ fun ModLoaderItemCard(
                         onCheckedChange = { newValue ->
                             internalEnabled = newValue
                             onEnableChange(newValue)
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.primary,
-                            checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
-                            uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                        ),
-                        thumbContent = {
-                            Icon(
-                                imageVector = if (internalEnabled) {
-                                    Icons.Rounded.Check
-                                } else {
-                                    Icons.Rounded.Close
-                                },
-                                contentDescription = if (internalEnabled) "已启用" else "已禁用",
-                                modifier = Modifier.size(14.dp),
-                                tint = if (internalEnabled) {
-                                    MaterialTheme.colorScheme.onPrimary
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                }
-                            )
                         }
                     )
 
@@ -427,7 +317,7 @@ fun ModLoaderItemCard(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Delete,
-                            contentDescription = "删除",
+                            contentDescription = Strings.delete,
                             modifier = Modifier.size(24.dp),
                             tint = MaterialTheme.colorScheme.error
                         )
@@ -489,12 +379,12 @@ fun ModLoaderItemCard(
                             ) {
                                 Icon(
                                     Icons.Rounded.Info,
-                                    contentDescription = "描述",
+                                    contentDescription = null,
                                     modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "详细描述",
+                                    text = Strings.manager.details,
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -521,12 +411,12 @@ fun ModLoaderItemCard(
                             ) {
                                 Icon(
                                     Icons.Rounded.Link,
-                                    contentDescription = "依赖",
+                                    contentDescription = null,
                                     modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "依赖项",
+                                    text = Strings.manager.dependency,
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -549,7 +439,7 @@ fun ModLoaderItemCard(
                                     ) { isExpanded ->
                                         Icon(
                                             imageVector = if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                                            contentDescription = if (isExpanded) "收起依赖" else "展开依赖",
+                                            contentDescription = null,
                                             modifier = Modifier.size(20.dp),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -595,7 +485,7 @@ fun ModLoaderItemCard(
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                                     )
                                                     Text(
-                                                        text = "版本: ${formatVersionCodeRange(dep.minVersionCode, dep.maxVersionCode)}",
+                                                        text = Strings.manager.dependencyVersion(formatVersionCodeRange(dep.minVersionCode, dep.maxVersionCode)),
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = MaterialTheme.colorScheme.outline
                                                     )
@@ -620,12 +510,12 @@ fun ModLoaderItemCard(
                             ) {
                                 Icon(
                                     Icons.Rounded.Devices,
-                                    contentDescription = "平台支持",
+                                    contentDescription = null,
                                     modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "支持平台",
+                                    text = Strings.manager.platforms,
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -648,7 +538,7 @@ fun ModLoaderItemCard(
                                     ) { isExpanded ->
                                         Icon(
                                             imageVector = if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                                            contentDescription = if (isExpanded) "收起平台" else "展开平台",
+                                            contentDescription = null,
                                             modifier = Modifier.size(20.dp),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                                         )

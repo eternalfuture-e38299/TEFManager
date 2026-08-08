@@ -1,6 +1,6 @@
 package eternal.future.tefmanager.utils
 
-import eternal.future.tefmanager.ui.model.GameItem
+import eternal.future.tefmanager.model.GameItem
 
 /*******************************************************************************
  * TEFManager - GameLauncher
@@ -25,5 +25,5 @@ import eternal.future.tefmanager.ui.model.GameItem
  *******************************************************************************/
 
 expect object GameLauncher {
-    fun launch(item: GameItem?)
+    fun launch(item: GameItem?, isServerMode: Boolean = false)
 }

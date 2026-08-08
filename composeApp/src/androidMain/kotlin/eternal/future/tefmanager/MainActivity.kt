@@ -9,6 +9,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalConfiguration
+import eternal.future.tefmanager.ui.screen.portrait.OnboardingScreen as PortraitOnboardingScreen
+import eternal.future.tefmanager.ui.screen.landscape.OnboardingScreen as LandscapeOnboardingScreen
 import eternal.future.tefmanager.ui.theme.TEFManagerTheme
 import eternal.future.tefmanager.utils.AppLogger
 import eternal.future.tefmanager.utils.ConfigManager
@@ -45,13 +47,16 @@ class MainActivity : ComponentActivity() {
         val configuration = LocalConfiguration.current
         when (configuration.orientation) {
             Configuration.ORIENTATION_LANDSCAPE -> {
-                LandscapeMainScreen.Content()
+                if (!ConfigurationState.initialized) LandscapeOnboardingScreen { ConfigurationState.initialized = true }
+                else LandscapeMainScreen.Content()
             }
             Configuration.ORIENTATION_PORTRAIT -> {
-                PortraitMainScreen.Content()
+                if (!ConfigurationState.initialized) PortraitOnboardingScreen { ConfigurationState.initialized = true }
+                else PortraitMainScreen.Content()
             }
             else -> {
-                PortraitMainScreen.Content()
+                if (!ConfigurationState.initialized) PortraitOnboardingScreen { ConfigurationState.initialized = true }
+                else PortraitMainScreen.Content()
             }
         }
     }

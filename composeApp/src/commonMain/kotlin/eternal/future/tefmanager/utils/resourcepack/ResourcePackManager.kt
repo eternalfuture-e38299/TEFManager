@@ -1,17 +1,19 @@
 package eternal.future.tefmanager.utils.resourcepack
 
 import eternal.future.tefmanager.Platform
-import eternal.future.tefmanager.ui.model.ResourcesPackItem
+import eternal.future.tefmanager.model.ResourcesPackItem
 import eternal.future.tefmanager.utils.AppLogger
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import no.synth.kmpzip.okio.ZipFile
+import no.synth.kmpzip.okio.asSource
+import no.synth.kmpzip.zip.ZipFile
 import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
 import okio.SYSTEM
 import okio.buffer
-import okio.openZip
 import okio.use
 import kotlin.time.Clock
 
@@ -38,6 +40,15 @@ import kotlin.time.Clock
  *******************************************************************************/
 
 object ResourcePackManager {
+
+    data class PackManagerConfig(
+        val name: String,                          // 管理器名称
+        val packType: ResourcesPackItem.PackType,  // 包类型
+        val configName: String,                      // 配置文件名称
+        val packSubDir: String,
+        val packName: String                     // 模块包名
+    )
+
     enum class InstallProgress {
         STARTING,
         OPENING_PACKAGE,
@@ -72,12 +83,12 @@ object ResourcePackManager {
         logger.d("File size: ${fileSystem.metadata(filePath).size} bytes")
         progressCallback?.invoke(InstallProgress.STARTING, null)
 
-        var zip: FileSystem? = null
+        var zip: ZipFile? = null
 
         return try {
             logger.d("Opening ZIP package...")
             progressCallback?.invoke(InstallProgress.OPENING_PACKAGE, null)
-            zip = fileSystem.openZip(filePath)
+            zip = ZipFile(fileSystem.openReadOnly(filePath))
             logger.d("ZIP package opened successfully")
 
             logger.d("Reading manifest file...")
@@ -100,15 +111,15 @@ object ResourcePackManager {
 
             val targetDir = when (packInfo.packType) {
                 ResourcesPackItem.PackType.TexturePack ->
-                    Platform.getData("resource_pack") / "texture_packs"
+                    Platform.getData("module") / "private" / "eternal.future.texturepackextension" / "texture_packs"
                 ResourcesPackItem.PackType.LanguagePack ->
-                    Platform.getData("resource_pack") / "language_packs"
+                    Platform.getData("module") / "private" / "eternal.future.languagepackextension" / "language_packs"
                 ResourcesPackItem.PackType.LanguagePatchPack ->
-                    Platform.getData("resource_pack") / "language_patch_packs"
+                    Platform.getData("module") / "private" / "eternal.future.languagepackextension" / "language_patch_packs"
                 ResourcesPackItem.PackType.AudioPack ->
-                    Platform.getData("resource_pack") / "audio_packs"
+                    Platform.getData("module") / "private" / "eternal.future.audiopackextension" / "audio_packs"
                 ResourcesPackItem.PackType.FontPack ->
-                    Platform.getData("resource_pack") / "font_packs"
+                    Platform.getData("module") / "private" / "eternal.future.fontpackextension" / "font_packs"
             }
             logger.d("Target directory: $targetDir")
 
@@ -204,14 +215,14 @@ object ResourcePackManager {
     }
 
     private fun analyzePack(
-        zip: FileSystem,
+        zip: ZipFile,
         progressCallback: ProgressCallback?
     ): PackAnalysisResult? {
         logger.d("Starting resource pack analysis...")
         progressCallback?.invoke(InstallProgress.PARSING_METADATA, null)
 
-        val hasContent = zip.metadataOrNull("Content".toPath()) != null
-        val hasModified = zip.metadataOrNull("Modified".toPath()) != null
+        val hasContent = zip.getEntry("Content") != null
+        val hasModified = zip.getEntry("Modified") != null
         logger.d("Content directory exists: $hasContent")
         logger.d("Modified directory exists: $hasModified")
 
@@ -222,12 +233,14 @@ object ResourcePackManager {
             val contentPath = "Content".toPath()
 
             // 检查是否存在 Music 或 Images 文件夹
-            val musicFolder = contentPath.resolve("Music".toPath())
-            val hasMusicFolder = zip.exists(musicFolder) && zip.metadata(musicFolder).isDirectory
+            val musicFolder = contentPath.resolve("Music").toString()
+            val musicFolderEntry = zip.getEntry(musicFolder);
+            val hasMusicFolder = musicFolderEntry != null && musicFolderEntry.isDirectory
             logger.d("Music folder exists: $hasMusicFolder")
 
-            val imagesFolder = contentPath.resolve("Images".toPath())
-            val hasImagesFolder = zip.exists(imagesFolder) && zip.metadata(imagesFolder).isDirectory
+            val imagesFolder = contentPath.resolve("Images").toString()
+            val imagesFolderEntry = zip.getEntry(imagesFolder)
+            val hasImagesFolder = imagesFolderEntry != null && imagesFolderEntry.isDirectory
             logger.d("Images folder exists: $hasImagesFolder")
 
             packType = when {
@@ -246,14 +259,13 @@ object ResourcePackManager {
             }
         } else if (hasModified) {
             logger.d("Detected Modified directory structure")
-            val modifiedPath = "Modified".toPath()
 
             // 检查是否存在 .audio 文件
-            val hasAudioFiles = hasFilesWithExtension(zip, modifiedPath, "audio")
+            val hasAudioFiles = hasFilesWithExtension(zip, "audio")
             logger.d("Has audio files: $hasAudioFiles")
 
             // 检查是否存在 .texture 文件
-            val hasTextureFiles = hasFilesWithExtension(zip, modifiedPath, "texture")
+            val hasTextureFiles = hasFilesWithExtension(zip, "texture")
             logger.d("Has texture files: $hasTextureFiles")
 
             packType = when {
@@ -274,15 +286,15 @@ object ResourcePackManager {
             // 没有 Content/Modified，尝试解析 pack_info.json
             logger.d("No Content/Modified directories, trying pack_info.json")
 
-            val tefManagerPath = "pack_info.json".toPath()
-            if (!zip.exists(tefManagerPath)) {
+            val tefManagerEntry = zip.getEntry("pack_info.json")
+            if (tefManagerEntry == null) {
                 logger.d("pack_info.json not found")
                 return null
             }
 
             logger.d("Reading pack_info.json...")
             val tefManagerJson = try {
-                zip.source(tefManagerPath).buffer().use { it.readUtf8() }
+                zip.getInputStream(tefManagerEntry).asSource().buffer().use { it.readUtf8() }
             } catch (e: Exception) {
                 logger.e("Failed to read pack_info.json", e)
                 return null
@@ -362,12 +374,13 @@ object ResourcePackManager {
         return result
     }
 
-    private fun hasFilesWithExtension(zip: FileSystem, dirPath: Path, extension: String): Boolean {
+    private fun hasFilesWithExtension(zip: ZipFile, extension: String): Boolean {
         return try {
-            if (zip.exists(dirPath) && zip.metadata(dirPath).isDirectory) {
-                zip.list(dirPath).any { file ->
+            val entry = zip.getEntry("Modified")
+            if (entry != null && entry.isDirectory) {
+                zip.entries.any { file ->
                     file.name.endsWith(".$extension", ignoreCase = true) &&
-                            zip.metadataOrNull(file)?.isRegularFile == true
+                            !file.isDirectory
                 }
             } else {
                 false
@@ -377,11 +390,11 @@ object ResourcePackManager {
         }
     }
 
-    private fun extractIcon(zip: FileSystem, packId: String, targetDir: Path): String? {
+    private fun extractIcon(zip: ZipFile, packId: String, targetDir: Path): String? {
         return try {
             logger.d("Extracting icon for pack: $packId")
-            val iconPathInZip = "Icon.png".toPath()
-            if (!zip.exists(iconPathInZip)) {
+            val iconEntry = zip.getEntry("Icon.png")
+            if (iconEntry == null) {
                 logger.d("No icon found in resource pack")
                 return null
             }
@@ -395,7 +408,7 @@ object ResourcePackManager {
             val targetIconPath = iconDir / "$packId.png"
             logger.d("Target icon path: $targetIconPath")
 
-            zip.source(iconPathInZip).use { source ->
+            zip.getInputStream(iconEntry).asSource().use { source ->
                 fileSystem.sink(targetIconPath).use { sink ->
                     source.buffer().use { bufferedSource ->
                         sink.buffer().use { bufferedSink ->

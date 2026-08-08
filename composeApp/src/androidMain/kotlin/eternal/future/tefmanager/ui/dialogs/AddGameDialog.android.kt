@@ -30,7 +30,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import eternal.future.tefmanager.ui.model.GameItem
+import eternal.future.tefmanager.model.GameItem
+import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.utils.AppLogger
 import eternal.future.tefmanager.utils.Patcher
 import kotlinx.coroutines.Dispatchers
@@ -121,7 +122,7 @@ actual object AddGameDialog {
                                 }
                             } else {
                                 withContext(Dispatchers.Main) {
-                                    patchError.value = "修补后的APK文件未找到"
+                                    patchError.value = Strings.home.patch.error.cantFoundFile
                                     isPatching = false
                                 }
                             }
@@ -149,7 +150,7 @@ actual object AddGameDialog {
                     onResult(null)
                 },
                 title = {
-                    Text(text = if (isPatching) "修补中..." else "选择APK文件")
+                    Text(text = if (isPatching) Strings.home.patching else Strings.home.patch.title)
                 },
                 text = {
                     Column(
@@ -194,7 +195,7 @@ actual object AddGameDialog {
 
                                 if (patchError.value != null) {
                                     Text(
-                                        text = "错误: $patchError",
+                                        text = Strings.error.title(patchError),
                                         color = MaterialTheme.colorScheme.error,
                                         style = MaterialTheme.typography.bodySmall
                                     )
@@ -212,7 +213,7 @@ actual object AddGameDialog {
                                         text = selectedApkPath?.let {
                                             File(it).name.takeIf { name -> name.length <= 20 }
                                                 ?: "...${File(it).name.takeLast(20)}"
-                                        } ?: "未选择文件",
+                                        } ?: Strings.home.patch.selectedEmpty,
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                     if (selectedApkPath != null) {
@@ -231,14 +232,14 @@ actual object AddGameDialog {
                                         filePickerLauncher.launch("application/vnd.android.package-archive")
                                     }
                                 ) {
-                                    Text(text = "选择APK")
+                                    Text(text = Strings.home.patch.selected)
                                 }
                             }
 
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
-                                text = "选择修补入口:",
+                                text = Strings.home.patch.entrance,
                                 style = MaterialTheme.typography.titleSmall
                             )
 
@@ -256,7 +257,7 @@ actual object AddGameDialog {
                                         }
                                     )
                                     Text(
-                                        text = "Application (所有版本)",
+                                        text = "Application",
                                         modifier = Modifier.padding(start = 4.dp)
                                     )
                                 }
@@ -276,13 +277,13 @@ actual object AddGameDialog {
                                         Text(text = "AppComponentFactory (API 28+)")
                                         if (!isApi28OrAbove) {
                                             Text(
-                                                text = "当前系统版本过低 (API ${Build.VERSION.SDK_INT})",
+                                                text = Strings.home.patch.entranceWorng(Build.VERSION.SDK_INT),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.error
                                             )
                                         } else {
                                             Text(
-                                                text = "推荐使用",
+                                                text = Strings.home.patch.entranceRecommend,
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.primary
                                             )
@@ -293,7 +294,7 @@ actual object AddGameDialog {
 
                             if (selectedApkPath == null) {
                                 Text(
-                                    text = "请先选择APK文件",
+                                    text = Strings.home.patch.selectedEmpty,
                                     color = MaterialTheme.colorScheme.error,
                                     style = MaterialTheme.typography.bodySmall
                                 )
@@ -313,7 +314,7 @@ actual object AddGameDialog {
                                     .height(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "处理中...")
+                            Text(text = Strings.home.patching)
                         }
                     } else {
                         // 修补按钮
@@ -362,7 +363,7 @@ actual object AddGameDialog {
                                                             }
                                                         }
                                                     } else {
-                                                        patchError.value = "无法重命名修补后的文件"
+                                                        patchError.value = Strings.home.patch.error.cantRename
                                                         patchProgress.value = Patcher.PatchProgress.FAILED
                                                         isPatching = false
                                                     }
@@ -387,7 +388,7 @@ actual object AddGameDialog {
                             },
                             enabled = selectedApkPath != null && (selectedOption == Patcher.PatchOption.APPLICATION || isApi28OrAbove)
                         ) {
-                            Text(text = "开始修补")
+                            Text(text = Strings.home.patch.start)
                         }
                     }
                 },
@@ -401,7 +402,7 @@ actual object AddGameDialog {
                                 onResult(null)
                             }
                         ) {
-                            Text(text = "取消")
+                            Text(text = Strings.cancel)
                         }
                     }
                 }

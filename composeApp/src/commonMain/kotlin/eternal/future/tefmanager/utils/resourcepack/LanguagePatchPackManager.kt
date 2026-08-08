@@ -1,7 +1,6 @@
 package eternal.future.tefmanager.utils.resourcepack
 
-import eternal.future.tefmanager.Platform
-import eternal.future.tefmanager.ui.model.ResourcesPackItem
+import eternal.future.tefmanager.model.ResourcesPackItem
 
 /*******************************************************************************
  * TEFManager - LanguagePatchPackManager
@@ -26,11 +25,11 @@ import eternal.future.tefmanager.ui.model.ResourcesPackItem
  *******************************************************************************/
 
 object LanguagePatchPackManager : BasePackManager(
-    PackManagerConfig(
+    ResourcePackManager.PackManagerConfig(
         name = "language_patch_packs",
         packType = ResourcesPackItem.PackType.LanguagePatchPack,
-        dbPath = Platform.getData("resource_pack") / "language_patch_packs" / "db",
-        configPath = Platform.getData("module") / "private" / "eternal.future.languagepacks" / "language_patch_packs.json",
+        configName = "language_patch_packs.json",
+        packName = "eternal.future.languagepackextension",
         packSubDir = "language_patch_packs"
     )
 )

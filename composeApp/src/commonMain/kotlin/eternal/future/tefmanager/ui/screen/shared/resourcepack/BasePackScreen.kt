@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
+import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.ui.component.ResourcesPackCard
 import eternal.future.tefmanager.utils.resourcepack.BasePackManager
 import kotlinx.coroutines.CoroutineScope
@@ -50,14 +51,14 @@ import kotlinx.coroutines.withContext
 
 abstract class BasePackScreen(
     protected val manager: BasePackManager,
-    protected val title: String,
-    protected val emptyMessage: String,
-    protected val loadingMessage: String = "正在加载...",
-    protected val emptyActionText: String = "请点击右上角按钮安装"
+    protected val title: () -> String
 ) : Screen {
 
     @Composable
     override fun Content() {
+        val loadingMessage: String = Strings.loading
+        val emptyActionText: String = Strings.resource.emptyAction(title())
+
         var isLoading by remember { mutableStateOf(true) }
 
         LaunchedEffect(Unit) {
@@ -82,7 +83,7 @@ abstract class BasePackScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("$emptyMessage\n\n$emptyActionText")
+                        Text("${Strings.resource.empty(title())}\n\n$emptyActionText")
                     }
                 }
                 else -> {

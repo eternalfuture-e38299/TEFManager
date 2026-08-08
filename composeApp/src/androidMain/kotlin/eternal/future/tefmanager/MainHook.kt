@@ -78,6 +78,52 @@ class MainHook : IXposedHookLoadPackage {
      */
     private fun hookApplicationStartup(lpparam: XC_LoadPackage.LoadPackageParam) {
         try {
+            // 先hook Tefloader.initTefKernel，优先级排到前面
+            hookTefloaderInit(lpparam)
+
+            // 然后再hook Application.onCreate
+            hookApplicationOnCreate(lpparam)
+
+        } catch (e: Throwable) {
+            Log.w(TAG, "Hook Application.Startup Failed: ${e.message}")
+        }
+    }
+
+    private fun hookTefloaderInit(lpparam: XC_LoadPackage.LoadPackageParam) {
+        try {
+            val tefloaderClass = XposedHelpers.findClass(
+                "eternal.future.tefkernel.Tefloader",
+                lpparam.classLoader
+            )
+
+            // 使用更早的hook优先级
+            XposedHelpers.findAndHookMethod(
+                tefloaderClass,
+                "initTefKernel",
+                Context::class.java,
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val context = param.args[0] as Context
+                        val packageName = context.packageName
+
+                        Log.i(TAG, "Intercepting Tefloader.initTefKernel call - Package: $packageName")
+                        Log.i(TAG, "Prevent Tefloader from initializing")
+
+                        // 阻止原始方法执行
+                        param.result = null
+                    }
+                }
+            )
+
+            Log.i(TAG, "Tefloader.initTefKernel hook succeeded - initialization blocked")
+
+        } catch (e: Throwable) {
+            Log.w(TAG, "Hook Tefloader.initTefKernel Failed: ${e.message}")
+        }
+    }
+
+    private fun hookApplicationOnCreate(lpparam: XC_LoadPackage.LoadPackageParam) {
+        try {
             val applicationClass = XposedHelpers.findClass(
                 "android.app.Application",
                 lpparam.classLoader
@@ -107,6 +153,9 @@ class MainHook : IXposedHookLoadPackage {
                     }
                 }
             )
+
+            Log.i(TAG, "Application.onCreate hook succeeded")
+
         } catch (e: Throwable) {
             Log.w(TAG, "Hook Application.onCreate Failed: ${e.message}")
         }

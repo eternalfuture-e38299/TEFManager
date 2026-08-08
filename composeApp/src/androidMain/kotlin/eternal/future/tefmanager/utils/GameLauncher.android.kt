@@ -6,10 +6,10 @@ import android.os.Build
 import eternal.future.tefmanager.FileProviderForegroundService
 import eternal.future.tefmanager.MainActivity
 import eternal.future.tefmanager.Platform
-import eternal.future.tefmanager.ui.model.GameItem
+import eternal.future.tefmanager.model.GameItem
 
 actual object GameLauncher {
-    actual fun launch(item: GameItem?) {
+    actual fun launch(item: GameItem?, isServerMode: Boolean) {
         if (item == null) {
             AppLogger.e("GameItem object is null, cannot launch application")
             return

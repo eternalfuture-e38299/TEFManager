@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -38,8 +40,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import eternal.future.tefmanager.utils.AddonManager
+import eternal.future.tefmanager.utils.addon.AddonManager
 import eternal.future.tefmanager.utils.AppLogger
+import eternal.future.tefmanager.strings.StringsResource.Strings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
@@ -80,7 +83,7 @@ fun AddonInstallOrUpdateDialog(
     var hasError by remember { mutableStateOf(false) }
     var currentIndex by remember { mutableIntStateOf(0) }
     var currentProgress by remember { mutableFloatStateOf(0f) }
-    var currentStatus by remember { mutableStateOf("准备安装") }
+    var currentStatus by remember { mutableStateOf(Strings.manager.install.status.ready) }
     val scope = rememberCoroutineScope()
 
     // 计算进度
@@ -89,8 +92,7 @@ fun AddonInstallOrUpdateDialog(
     Dialog(onDismissRequest = { if (!isInstalling) onDismiss() }) {
         Card(
             modifier = Modifier
-                .fillMaxWidth(0.85f)
-                .height(220.dp),
+                .fillMaxWidth(0.85f),
             shape = MaterialTheme.shapes.large,
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface
@@ -109,9 +111,9 @@ fun AddonInstallOrUpdateDialog(
                 ) {
                     Text(
                         text = if (isComplete) {
-                            if (hasError) "安装失败" else "安装完成"
+                            if (hasError) Strings.manager.install.failed else Strings.manager.install.success
                         } else {
-                            "安装附加组件"
+                            Strings.manager.install.title
                         },
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Medium
@@ -123,7 +125,7 @@ fun AddonInstallOrUpdateDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "关闭"
+                            contentDescription = Strings.close
                         )
                     }
                 }
@@ -141,34 +143,39 @@ fun AddonInstallOrUpdateDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // 状态信息
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
                 ) {
-                    if (isInstalling && !isComplete) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                    } else if (isComplete) {
-                        val icon = if (hasError) Icons.Default.Error else Icons.Default.CheckCircle
-                        val iconColor = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = iconColor,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                    }
+                    Row(modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically) {
+                        if (isInstalling && !isComplete) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                        } else if (isComplete) {
+                            val icon =
+                                if (hasError) Icons.Default.Error else Icons.Default.CheckCircle
+                            val iconColor =
+                                if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = iconColor,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                        }
 
-                    Text(
-                        text = currentStatus,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                    )
+                        Text(
+                            text = currentStatus,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (hasError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -187,7 +194,7 @@ fun AddonInstallOrUpdateDialog(
                                 contentColor = MaterialTheme.colorScheme.onPrimary
                             )
                         ) {
-                            Text("确定")
+                            Text(Strings.confirm)
                         }
                     } else if (!isInstalling) {
                         OutlinedButton(
@@ -196,7 +203,7 @@ fun AddonInstallOrUpdateDialog(
                                 contentColor = MaterialTheme.colorScheme.onSurface
                             )
                         ) {
-                            Text("取消")
+                            Text(Strings.cancel)
                         }
 
                         Spacer(modifier = Modifier.width(8.dp))
@@ -233,7 +240,7 @@ fun AddonInstallOrUpdateDialog(
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("安装")
+                            Text(Strings.install)
                         }
                     } else {
                         Button(
@@ -250,7 +257,7 @@ fun AddonInstallOrUpdateDialog(
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("安装中...")
+                            Text(Strings.manager.install.status.installing)
                         }
                     }
                 }
@@ -270,39 +277,39 @@ private suspend fun startInstallation(
         for ((index, filePath) in filePaths.withIndex()) {
             val addonName = filePath.name
             // 更新进度 - 开始安装当前文件
-            onProgress(index, "正在安装: $addonName", false)
+            onProgress(index, Strings.manager.install.status.installingFile(addonName), false)
 
             try {
                 var hasInstallError = false
                 var installCompleted = false
 
-                AddonManager.installOrUpdate(filePath) { progress, error ->
+                AddonManager.install(filePath) { progress, error ->
                     when (progress) {
                         AddonManager.InstallProgress.COMPLETED -> {
                             if (error == null && !installCompleted) {
                                 installCompleted = true
-                                onProgress(index, "安装成功: $addonName", false)
+                                onProgress(index, Strings.manager.install.status.success(addonName), false)
                             } else if (error != null) {
                                 hasInstallError = true
                                 allSuccess = false
-                                onProgress(index, "安装失败: ${error.message}", true)
+                                onProgress(index, Strings.manager.install.status.failed(error.message!!), true)
                             }
                         }
                         AddonManager.InstallProgress.ERROR -> {
                             if (error != null && !hasInstallError) {
                                 hasInstallError = true
                                 allSuccess = false
-                                onProgress(index, "安装失败: ${error.message}", true)
+                                onProgress(index, Strings.manager.install.status.failed(error.message!!), true)
                             }
                         }
                         AddonManager.InstallProgress.COPYING_FILES -> {
-                            onProgress(index, "复制文件: $addonName", false)
+                            onProgress(index, Strings.manager.install.status.copying(addonName), false)
                         }
                         AddonManager.InstallProgress.EXTRACTING_ICON -> {
-                            onProgress(index, "提取图标: $addonName", false)
+                            onProgress(index, Strings.manager.install.status.extractingIcon(addonName), false)
                         }
                         AddonManager.InstallProgress.UPDATING_DATABASE -> {
-                            onProgress(index, "更新数据库: $addonName", false)
+                            onProgress(index, Strings.manager.install.status.updatingDb(addonName), false)
                         }
                         else -> { }
                     }
@@ -310,12 +317,12 @@ private suspend fun startInstallation(
 
                 // 确保进度更新
                 if (!installCompleted && !hasInstallError) {
-                    onProgress(index, "安装完成: $addonName", false)
+                    onProgress(index, Strings.manager.install.status.completed(addonName), false)
                 }
 
             } catch (e: Exception) {
                 AppLogger.e("Failed to install addon: $addonName", e)
-                onProgress(index, "安装失败: ${e.message ?: "未知错误"}", true)
+                onProgress(index, Strings.manager.install.status.failed(e.message ?: Strings.error.unknown), true)
                 allSuccess = false
 
             }
@@ -324,7 +331,7 @@ private suspend fun startInstallation(
             delay(100.milliseconds)
         }
 
-        if (allSuccess) onProgress(filePaths.size - 1, "所有附加组件安装完成", !allSuccess)
+        if (allSuccess) onProgress(filePaths.size - 1, Strings.manager.install.status.allCompleted, !allSuccess)
         onComplete(allSuccess)
     }
 }

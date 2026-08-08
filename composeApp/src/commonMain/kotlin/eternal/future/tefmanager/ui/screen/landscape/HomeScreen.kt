@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Gamepad
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Fingerprint
@@ -45,15 +46,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.screen.Screen
+import eternal.future.tefmanager.Platform
 import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.ui.dialogs.AddGameDialog
-import eternal.future.tefmanager.ui.model.GameItem
+import eternal.future.tefmanager.model.GameItem
 import eternal.future.tefmanager.utils.GameLauncher
 import eternal.future.tefmanager.utils.GameManager
 
@@ -122,6 +125,9 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                     onStartGame = {
                         GameLauncher.launch(selectedItem)
                     },
+                    onStartGameServer = {
+                        GameLauncher.launch(selectedItem, true)
+                    },
                     onRemoveGame = {
                         selectedItem?.let { GameManager.removeGame(it.hash) }
                     },
@@ -182,7 +188,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                         }
 
                         Text(
-                            text = "我的游戏",
+                            text = Strings.home.game.title,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface
@@ -198,12 +204,12 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Add,
-                            contentDescription = "添加游戏",
+                            contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            "添加游戏",
+                            Strings.home.game.add,
                             style = MaterialTheme.typography.labelLarge
                         )
                     }
@@ -219,19 +225,19 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Games,
-                            contentDescription = "暂无游戏",
+                            contentDescription = null,
                             modifier = Modifier.size(64.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "还没有添加游戏",
+                            text = Strings.home.game.empty,
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "点击「添加游戏」按钮开始",
+                            text = Strings.home.game.prompt,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
@@ -301,7 +307,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Gamepad,
-                            contentDescription = "游戏",
+                            contentDescription = null,
                             modifier = Modifier.size(22.dp),
                             tint = if (isSelected) {
                                 MaterialTheme.colorScheme.onPrimary
@@ -380,7 +386,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Check,
-                                contentDescription = "已选",
+                                contentDescription = null,
                                 modifier = Modifier.size(14.dp),
                                 tint = MaterialTheme.colorScheme.onPrimary
                             )
@@ -395,6 +401,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
     private fun ControlPanelCard(
         selectedItem: GameItem?,
         onStartGame: () -> Unit,
+        onStartGameServer: () -> Unit,
         onRemoveGame: () -> Unit,
         modifier: Modifier = Modifier
     ) {
@@ -438,7 +445,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                     }
 
                     Text(
-                        text = "游戏控制",
+                        text = Strings.home.game.control,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface
@@ -455,6 +462,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                 ControlButtonsSection(
                     selectedItem = selectedItem,
                     onStartGame = onStartGame,
+                    onStartGameServer = onStartGameServer,
                     onRemoveGame = onRemoveGame
                 )
             }
@@ -477,21 +485,23 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                 ) {
                     LabeledInfo(
                         icon = Icons.Rounded.Tag,
-                        label = "游戏版本",
+                        label = Strings.home.game.version,
                         value = selectedItem.version,
                         iconColor = MaterialTheme.colorScheme.primary
                     )
 
-                    LabeledInfo(
-                        icon = Icons.Rounded.Code,
-                        label = "版本代码",
-                        value = selectedItem.versionCode.toString(),
-                        iconColor = MaterialTheme.colorScheme.tertiary
-                    )
+                    if (Platform.isAndroid) {
+                        LabeledInfo(
+                            icon = Icons.Rounded.Code,
+                            label = Strings.home.game.versionCode,
+                            value = selectedItem.versionCode.toString(),
+                            iconColor = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
 
                     LabeledInfo(
                         icon = Icons.Rounded.Fingerprint,
-                        label = "哈希校验",
+                        label = Strings.home.game.hash,
                         value = selectedItem.hash,
                         iconColor = MaterialTheme.colorScheme.secondary
                     )
@@ -513,12 +523,12 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "未选择游戏",
+                    text = Strings.home.game.selectedEmpty,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "从左侧列表中选择",
+                    text = Strings.home.game.selectedHint,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
@@ -580,6 +590,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
     private fun ControlButtonsSection(
         selectedItem: GameItem?,
         onStartGame: () -> Unit,
+        onStartGameServer: () -> Unit,
         onRemoveGame: () -> Unit
     ) {
         Column(
@@ -610,48 +621,85 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
             ) {
                 Icon(
                     imageVector = Icons.Rounded.PlayArrow,
-                    contentDescription = "开始游戏",
+                    contentDescription = null,
                     modifier = Modifier.size(22.dp)
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    text = "开始游戏",
+                    text = Strings.home.game.play,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium
                 )
             }
 
-            OutlinedButton(
-                onClick = onRemoveGame,
-                enabled = selectedItem != null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = if (selectedItem != null) {
-                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f)
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    },
-                    contentColor = if (selectedItem != null) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                    }
-                )
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Delete,
-                    contentDescription = "移除游戏",
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "移除游戏",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Medium
-                )
+            if (!Platform.isAndroid) {
+                OutlinedButton(
+                    onClick = onStartGameServer,
+                    enabled = selectedItem != null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (selectedItem != null) {
+                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        },
+                        contentColor = if (selectedItem != null) {
+                            MaterialTheme.colorScheme.secondary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        }
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Cloud,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = Strings.home.game.startServer, // 您需要添加这个字符串资源
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            if (!Platform.isAndroid) {
+                OutlinedButton(
+                    onClick = onRemoveGame,
+                    enabled = selectedItem != null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = if (selectedItem != null) {
+                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        },
+                        contentColor = if (selectedItem != null) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        }
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Delete,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = Strings.home.game.remove,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
     }

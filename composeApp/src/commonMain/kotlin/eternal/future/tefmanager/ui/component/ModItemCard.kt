@@ -59,8 +59,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -75,9 +73,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eternal.future.tefmanager.ui.model.ModItem
+import eternal.future.tefmanager.model.ModItem
 import eternal.future.tefmanager.utils.openUrl
 import eternal.future.tefmanager.utils.toFileUrlString
+import eternal.future.tefmanager.strings.StringsResource.Strings
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
 import okio.FileSystem
@@ -112,8 +111,7 @@ fun ModItemCard(
     enabled: Boolean = false,
     customIconPath: Path? = null,
     onEnableChange: (Boolean) -> Unit = {},
-    onDelete: () -> Unit = {},
-    configureCallback: ((ModItem) -> Unit)? = null,
+    onDelete: () -> Unit = {}
 ) {
     val fileSystem: FileSystem = FileSystem.SYSTEM
     var expanded by remember { mutableStateOf(false) }
@@ -137,7 +135,7 @@ fun ModItemCard(
         try {
             hasCustomIcon = fileSystem.exists(customIconPath)
         } catch (_: Exception) {
-            iconLoadError = "图标加载失败"
+            iconLoadError = Strings.error.iconLoadFailed(customIconPath)
             hasCustomIcon = false
         }
     }
@@ -192,9 +190,9 @@ fun ModItemCard(
                             if (fileSystem.exists(customIconPath)) {
                                 KamelImage(
                                     resource = { asyncPainterResource(data = customIconPath.toFileUrlString()) },
-                                    contentDescription = "自定义图标",
+                                    contentDescription = null,
                                     onFailure = { _ ->
-                                        iconLoadError = "图标加载失败"
+                                        iconLoadError = Strings.error.iconLoadFailed(customIconPath)
                                     },
                                     modifier = Modifier
                                         .size(24.dp)
@@ -203,7 +201,7 @@ fun ModItemCard(
                             } else {
                                 Icon(
                                     imageVector = Icons.Rounded.Error,
-                                    contentDescription = "图标不存在",
+                                    contentDescription = null,
                                     modifier = Modifier.size(20.dp),
                                     tint = MaterialTheme.colorScheme.error
                                 )
@@ -211,7 +209,7 @@ fun ModItemCard(
                         } else {
                             Icon(
                                 imageVector = Icons.Rounded.Extension,
-                                contentDescription = "Mod图标",
+                                contentDescription = null,
                                 modifier = Modifier.size(20.dp),
                                 tint = if (internalEnabled) {
                                     MaterialTheme.colorScheme.onPrimaryContainer
@@ -250,7 +248,7 @@ fun ModItemCard(
                                 color = MaterialTheme.colorScheme.tertiaryContainer
                             ) {
                                 Text(
-                                    text = "自定义",
+                                    text = Strings.manager.custom,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontSize = 9.sp,
                                     color = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -306,7 +304,7 @@ fun ModItemCard(
                     ) {
                         Icon(
                             Icons.Rounded.Person,
-                            contentDescription = "作者",
+                            contentDescription = null,
                             modifier = Modifier.size(12.dp),
                             tint = MaterialTheme.colorScheme.outline
                         )
@@ -329,28 +327,6 @@ fun ModItemCard(
                         onCheckedChange = { newValue ->
                             internalEnabled = newValue
                             onEnableChange(newValue)
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.primary,
-                            checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
-                            uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                        ),
-                        thumbContent = {
-                            Icon(
-                                imageVector = if (internalEnabled) {
-                                    Icons.Rounded.Check
-                                } else {
-                                    Icons.Rounded.Close
-                                },
-                                contentDescription = if (internalEnabled) "已启用" else "已禁用",
-                                modifier = Modifier.size(14.dp),
-                                tint = if (internalEnabled) {
-                                    MaterialTheme.colorScheme.onPrimary
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                }
-                            )
                         }
                     )
 
@@ -369,7 +345,7 @@ fun ModItemCard(
                         ) { isExpanded ->
                             Icon(
                                 imageVector = if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                                contentDescription = if (isExpanded) "收起" else "展开",
+                                contentDescription = null,
                                 modifier = Modifier.size(24.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -414,7 +390,7 @@ fun ModItemCard(
                                 onClick = {},
                                 label = {
                                     Text(
-                                        "已验证",
+                                        Strings.manager.mod.verified,
                                         style = MaterialTheme.typography.labelSmall
                                     )
                                 },
@@ -439,7 +415,7 @@ fun ModItemCard(
                                 onClick = {},
                                 label = {
                                     Text(
-                                        "实验性",
+                                        Strings.manager.mod.experimental,
                                         style = MaterialTheme.typography.labelSmall
                                     )
                                 },
@@ -464,7 +440,7 @@ fun ModItemCard(
                                 onClick = {},
                                 label = {
                                     Text(
-                                        "已弃用",
+                                        Strings.manager.mod.deprecated,
                                         style = MaterialTheme.typography.labelSmall
                                     )
                                 },
@@ -494,12 +470,12 @@ fun ModItemCard(
                             ) {
                                 Icon(
                                     Icons.Rounded.VideogameAsset,
-                                    contentDescription = "游戏版本",
+                                    contentDescription = null,
                                     modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "游戏版本",
+                                    text = Strings.manager.mod.gameVersion,
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -514,7 +490,7 @@ fun ModItemCard(
                                     onClick = {},
                                     label = {
                                         Text(
-                                            "目标: ${mod.targetGameVersion}",
+                                            Strings.manager.mod.targetGameVersion(mod.targetGameVersion),
                                             style = MaterialTheme.typography.labelSmall
                                         )
                                     },
@@ -530,7 +506,7 @@ fun ModItemCard(
                                         onClick = {},
                                         label = {
                                             Text(
-                                                "兼容: ${mod.minGameVersion} - ${mod.maxGameVersion}",
+                                                Strings.manager.mod.compatibleGameVersion(mod.minGameVersion, mod.maxGameVersion),
                                                 style = MaterialTheme.typography.labelSmall
                                             )
                                         },
@@ -623,7 +599,7 @@ fun ModItemCard(
                                     onClick = {},
                                     label = {
                                         Text(
-                                            "扩展内容",
+                                            Strings.manager.mod.extendedContent,
                                             style = MaterialTheme.typography.labelSmall
                                         )
                                     },
@@ -647,12 +623,12 @@ fun ModItemCard(
                             ) {
                                 Icon(
                                     Icons.Rounded.Link,
-                                    contentDescription = "依赖",
+                                    contentDescription = null,
                                     modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "依赖项 (${mod.dependence.size})",
+                                    text = "${Strings.manager.dependency} (${mod.dependence.size})",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -675,7 +651,7 @@ fun ModItemCard(
                                     ) { isExpanded ->
                                         Icon(
                                             imageVector = if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                                            contentDescription = if (isExpanded) "收起依赖" else "展开依赖",
+                                            contentDescription = null,
                                             modifier = Modifier.size(18.dp),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -721,7 +697,7 @@ fun ModItemCard(
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                                     )
                                                     Text(
-                                                        text = "版本: ${formatVersionCodeRange(dep.minVersionCode, dep.maxVersionCode)}",
+                                                        text = Strings.manager.dependencyVersion(formatVersionCodeRange(dep.minVersionCode, dep.maxVersionCode)),
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = MaterialTheme.colorScheme.outline
                                                     )
@@ -745,12 +721,12 @@ fun ModItemCard(
                             ) {
                                 Icon(
                                     Icons.Rounded.Devices,
-                                    contentDescription = "平台支持",
+                                    contentDescription = null,
                                     modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "支持平台",
+                                    text = Strings.manager.platforms,
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -773,7 +749,7 @@ fun ModItemCard(
                                     ) { isExpanded ->
                                         Icon(
                                             imageVector = if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                                            contentDescription = if (isExpanded) "收起平台" else "展开平台",
+                                            contentDescription = null,
                                             modifier = Modifier.size(18.dp),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -821,12 +797,12 @@ fun ModItemCard(
                             ) {
                                 Icon(
                                     Icons.Rounded.Warning,
-                                    contentDescription = "冲突",
+                                    contentDescription = null,
                                     modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.error
                                 )
                                 Text(
-                                    text = "冲突Mod (${mod.conflicts.size})",
+                                    text = "${Strings.manager.mod.conflict} (${mod.conflicts.size})",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -872,24 +848,6 @@ fun ModItemCard(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        if (mod.globalConfig.fileType != "null" && mod.globalConfig.fileType.isNotEmpty()) {
-                            configureCallback?.let {
-                                OutlinedButton(
-                                    onClick = { it(mod) },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Settings,
-                                        contentDescription = "配置",
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("配置")
-                                }
-                            }
-                        }
-
                         if (mod.detailsURL.isNotEmpty()) {
                             OutlinedButton(
                                 onClick = { openUrl(mod.detailsURL) },
@@ -898,11 +856,11 @@ fun ModItemCard(
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.Info,
-                                    contentDescription = "详细信息",
+                                    contentDescription = null,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                Text("详细信息")
+                                Text(Strings.manager.details)
                             }
                         }
 
@@ -917,11 +875,11 @@ fun ModItemCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Delete,
-                                contentDescription = "删除",
+                                contentDescription = null,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(Modifier.width(8.dp))
-                            Text("删除")
+                            Text(Strings.delete)
                         }
                     }
                 }

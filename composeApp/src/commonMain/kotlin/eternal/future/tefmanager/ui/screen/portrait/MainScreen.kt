@@ -1,7 +1,6 @@
 package eternal.future.tefmanager.ui.screen.portrait
 
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -18,7 +17,6 @@ import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,7 +35,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -48,6 +45,9 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.transitions.FadeTransition
 import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.ui.component.RefreshIconButton
+import org.jetbrains.compose.resources.painterResource
+import tefmanager.composeapp.generated.resources.Res
+import tefmanager.composeapp.generated.resources.tefmanager_logo
 
 /*******************************************************************************
  * TEFManager - MainScreen
@@ -112,20 +112,20 @@ object MainScreen : Screen {
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.primaryContainer)
+                                    Surface(
+                                        modifier = Modifier.size(36.dp)
                                             .padding(6.dp),
-                                        contentAlignment = Alignment.Center
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.onPrimary
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Terminal,
-                                            contentDescription = "App Icon",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                painter = painterResource(Res.drawable.tefmanager_logo),
+                                                contentDescription = "Logo",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
                                     }
 
                                     Text(
@@ -192,13 +192,13 @@ object MainScreen : Screen {
                 screen = ResourcePackScreen,
                 selectedIcon = Icons.Rounded.Palette,
                 unselectedIcon = Icons.Outlined.Palette,
-                label = "资源包"
+                label = Strings.resource.title
             ),
             NavigationItem(
                 screen = ManagerScreen,
                 selectedIcon = Icons.Rounded.Widgets,
                 unselectedIcon = Icons.Outlined.Widgets,
-                label = "管理"
+                label = Strings.manager.title
             ),
             NavigationItem(
                 screen = SettingsScreen,

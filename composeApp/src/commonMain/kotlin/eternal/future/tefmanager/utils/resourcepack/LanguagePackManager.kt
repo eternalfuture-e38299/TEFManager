@@ -3,7 +3,7 @@ package eternal.future.tefmanager.utils.resourcepack
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import eternal.future.tefmanager.Platform
-import eternal.future.tefmanager.ui.model.ResourcesPackItem
+import eternal.future.tefmanager.model.ResourcesPackItem
 import eternal.future.tefmanager.utils.AppLogger
 import eternal.future.tefmanager.utils.LightProtoStore
 import eternal.future.tefmanager.utils.resourcepack.ResourcePackManager.InstallProgress
@@ -11,11 +11,11 @@ import eternal.future.tefmanager.utils.resourcepack.ResourcePackManager.PackAnal
 import eternal.future.tefmanager.utils.resourcepack.ResourcePackManager.ProgressCallback
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import no.synth.kmpzip.okio.asSource
+import no.synth.kmpzip.zip.ZipFile
 import okio.FileSystem
-import okio.Path.Companion.toPath
 import okio.SYSTEM
 import okio.buffer
 import okio.use
@@ -54,7 +54,7 @@ object LanguagePackManager {
 
     // 数据库
     private val languagePacksDataBase = LightProtoStore(
-        Platform.getData("resource_pack") / "language_packs" / "db",
+        Platform.getData("module") / "private" / "eternal.future.languagepackextension" / "language_packs" / "db",
         ResourcesPackItem.serializer(),
         "language_packs"
     )
@@ -68,7 +68,7 @@ object LanguagePackManager {
     val enabledPacks: Map<String, Boolean> = _enabledPacks
 
     // 配置文件
-    private val configFile = Platform.getData("module") / "private" / "eternal.future.languagepack" / "config.json"
+    private val configFile = Platform.getData("module") / "private" / "eternal.future.languagepackextension" / "config.json"
 
     // 最大启用数量（根据平台）
     val maxEnabledCount: Int
@@ -101,17 +101,17 @@ object LanguagePackManager {
      * 分析语言包类型和元数据
      */
     fun analyzeLanguagePack(
-        zip: FileSystem,
+        zip: ZipFile,
         progressCallback: ProgressCallback? = null
     ): PackAnalysisResult? {
         try {
 
             // 检查 TEFManager 格式 (pack_info.json)
-            val packInfoPath = "pack_info.json".toPath()
-            if (zip.exists(packInfoPath)) {
+            val packInfoEntry = zip.getEntry("pack_info.json")
+            if (packInfoEntry != null) {
                 progressCallback?.invoke(InstallProgress.PARSING_METADATA, null)
 
-                val packInfoContent = zip.source(packInfoPath).buffer().use { it.readUtf8() }
+                val packInfoContent = zip.getInputStream(packInfoEntry).asSource().buffer().use { it.readUtf8() }
                 val packInfoJson = json.parseToJsonElement(packInfoContent).jsonObject
 
                 val name = packInfoJson["name"]?.jsonPrimitive?.content
@@ -170,12 +170,8 @@ object LanguagePackManager {
     private fun ensurePackConfig(fileName: String) {
         val configs = readConfigs()
         if (configs.none { it.file == fileName }) {
-            // 检查是否已达到最大启用数量
-            val enabledCount = configs.count { it.enable }
-            val shouldEnable = enabledCount < maxEnabledCount
-
             val maxPriority = configs.maxOfOrNull { it.priority } ?: -1
-            configs.add(PackConfig(fileName, shouldEnable, maxPriority + 1))
+            configs.add(PackConfig(fileName, false, maxPriority + 1))
             writeConfigs(configs)
         }
     }
@@ -225,13 +221,13 @@ object LanguagePackManager {
             languagePacksDataBase.delete(fileName)
             languagePacksDataBase.flush()
 
-            val packFile = Platform.getData("resource_pack") / "language_packs" / fileName
+            val packFile = Platform.getData("module") / "private" / "eternal.future.languagepackextension" / "language_packs" / fileName
             if (fileSystem.exists(packFile)) {
                 fileSystem.delete(packFile)
             }
 
             val packId = fileName.removeSuffix(".zip")
-            val iconFile = Platform.getData("resource_pack") / "language_packs" / "icons" / "$packId.png"
+            val iconFile = Platform.getData("module") / "private" / "eternal.future.languagepackextension" / "language_packs" / "icons" / "$packId.png"
             if (fileSystem.exists(iconFile)) {
                 fileSystem.delete(iconFile)
             }

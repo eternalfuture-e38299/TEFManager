@@ -14,8 +14,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import eternal.future.tefmanager.ui.model.PluginItem
+import eternal.future.tefmanager.model.PluginItem
 import eternal.future.tefmanager.utils.toFileUrlString
+import eternal.future.tefmanager.strings.StringsResource.Strings
 import io.kamel.image.KamelImage
 import io.kamel.image.asyncPainterResource
 import okio.FileSystem
@@ -67,7 +68,7 @@ fun PluginItemCard(
         try {
             hasCustomIcon = fileSystem.exists(customIconPath)
         } catch (_: Exception) {
-            iconLoadError = "图标加载失败"
+            iconLoadError = Strings.error.iconLoadFailed(customIconPath)
             hasCustomIcon = false
         }
     }
@@ -116,9 +117,9 @@ fun PluginItemCard(
                             if (fileSystem.exists(customIconPath)) {
                                 KamelImage(
                                     resource = { asyncPainterResource(data = customIconPath.toFileUrlString()) },
-                                    contentDescription = "自定义图标",
+                                    contentDescription = null,
                                     onFailure = { _ ->
-                                        iconLoadError = "图标加载失败"
+                                        iconLoadError = Strings.error.iconLoadFailed(customIconPath)
                                     },
                                     modifier = Modifier
                                         .size(40.dp)
@@ -127,7 +128,7 @@ fun PluginItemCard(
                             } else {
                                 Icon(
                                     imageVector = Icons.Rounded.Error,
-                                    contentDescription = "图标不存在",
+                                    contentDescription = null,
                                     modifier = Modifier.size(28.dp),
                                     tint = MaterialTheme.colorScheme.error
                                 )
@@ -135,7 +136,7 @@ fun PluginItemCard(
                         } else {
                             Icon(
                                 imageVector = Icons.Rounded.Extension,
-                                contentDescription = "插件图标",
+                                contentDescription = null,
                                 modifier = Modifier.size(28.dp),
                                 tint = MaterialTheme.colorScheme.onTertiary
                             )
@@ -186,7 +187,7 @@ fun PluginItemCard(
                                 color = MaterialTheme.colorScheme.tertiaryContainer
                             ) {
                                 Text(
-                                    text = "自定义",
+                                    text = Strings.manager.custom,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontSize = 10.sp,
                                     color = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -216,7 +217,7 @@ fun PluginItemCard(
                         ) {
                             Icon(
                                 Icons.Rounded.Person,
-                                contentDescription = "作者",
+                                contentDescription = null,
                                 modifier = Modifier.size(12.dp),
                                 tint = MaterialTheme.colorScheme.outline
                             )
@@ -238,7 +239,7 @@ fun PluginItemCard(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Delete,
-                        contentDescription = "删除",
+                        contentDescription = Strings.delete,
                         modifier = Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.error
                     )

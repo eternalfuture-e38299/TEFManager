@@ -1,5 +1,6 @@
 package eternal.future.tefmanager.ui.dialogs
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,35 +9,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.outlined.Architecture
-import androidx.compose.material.icons.outlined.Code
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,23 +35,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import eternal.future.tefmanager.Platform
-import eternal.future.tefmanager.ui.model.GameItem
+import eternal.future.tefmanager.model.GameItem
+import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.utils.AppLogger
 import eternal.future.tefmanager.utils.GamePatcher
 import eternal.future.tefmanager.utils.TrParser
 import io.github.vinceglb.filekit.dialogs.FileKitType
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
-import io.github.vinceglb.filekit.name
 import io.github.vinceglb.filekit.path
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -89,6 +71,7 @@ enum class ArchitectureType(val displayName: String) {
 }
 
 actual object AddGameDialog {
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     actual fun Show(
         onResult: (GameItem?) -> Unit
@@ -96,51 +79,28 @@ actual object AddGameDialog {
         var gameFilePath by remember { mutableStateOf("") }
         var useCustomTefLoader by remember { mutableStateOf(false) }
         var tefLoaderPath by remember { mutableStateOf("") }
-        var enableTefLoader by remember { mutableStateOf(true) }
         var gameVersion by remember { mutableStateOf("") }
         var architecture by remember { mutableStateOf(ArchitectureType.defaultForCurrentPlatform()) }
-        val showErrorDialog = remember { mutableStateOf(false) }
-        var errorMessage by remember { mutableStateOf("") }
+        var errorMessage by remember { mutableStateOf<String?>(null) }
 
-        val focusRequester = remember { FocusRequester() }
         val scrollState = rememberScrollState()
 
-        // 游戏文件选择器
-        val gameFilePickerLauncher = rememberFilePickerLauncher(
+        // 文件选择器
+        val gameFilePicker = rememberFilePickerLauncher(
             type = FileKitType.File("*.dll | *.exe"),
-            onResult = { file ->
-                file?.let { platformFile ->
-                    gameFilePath = platformFile.path
-                    AppLogger.d("Selected game file: ${platformFile.name}")
-                }
-            }
+            onResult = { file -> file?.let { gameFilePath = it.path } }
         )
 
-        // TEFLoader文件选择器
-        val tefLoaderPickerLauncher = rememberFilePickerLauncher(
+        val tefLoaderPicker = rememberFilePickerLauncher(
             type = FileKitType.File("*.dll"),
-            onResult = { file ->
-                file?.let { platformFile ->
-                    tefLoaderPath = platformFile.path
-                    AppLogger.d("Selected TEFLoader file: ${platformFile.name}")
-                }
-            }
+            onResult = { file -> file?.let { tefLoaderPath = it.path } }
         )
 
         // 自动检测版本
         LaunchedEffect(gameFilePath) {
-            focusRequester.requestFocus()
-
-            if (gameFilePath.isNotBlank() && File(gameFilePath).exists() && gameVersion.isEmpty()) {
-                val info = withContext(Dispatchers.IO) {
-                    try {
-                        TrParser.parse(gameFilePath)
-                    } catch (_: Exception) {
-                        null
-                    }
-                }
-                info?.let {
-                    gameVersion = it.version ?: ""
+            if (gameFilePath.isNotBlank() && gameVersion.isEmpty()) {
+                withContext(Dispatchers.IO) {
+                    TrParser.parse(gameFilePath).version?.let { gameVersion = it }
                 }
             }
         }
@@ -151,808 +111,211 @@ actual object AddGameDialog {
         ) {
             Surface(
                 modifier = Modifier
-                    .width(600.dp)
-                    .wrapContentHeight()
-                    .padding(8.dp),
-                shape = MaterialTheme.shapes.extraLarge,
-                tonalElevation = 6.dp,
-                shadowElevation = 4.dp
-            ) {
-                Column(modifier = Modifier.verticalScroll(scrollState)) {
-                    // 标题栏
-                    Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f),
-                        tonalElevation = 2.dp,
-                        shape = MaterialTheme.shapes.extraLarge.copy(
-                            topStart = MaterialTheme.shapes.extraLarge.topStart,
-                            topEnd = MaterialTheme.shapes.extraLarge.topEnd
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 28.dp, vertical = 20.dp)
-                        ) {
-                            Text(
-                                text = "添加游戏",
-                                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = "选择游戏可执行文件并进行配置",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-                    }
-
-                    // 内容区域
-                    Column(modifier = Modifier.fillMaxWidth().padding(28.dp)) {
-                        // 游戏文件路径
-                        GameFilePathSection(
-                            filePath = gameFilePath,
-                            onFilePathChange = { gameFilePath = it },
-                            onBrowseClick = {
-                                gameFilePickerLauncher.launch()
-                            },
-                            modifier = Modifier.padding(bottom = 24.dp)
-                        )
-
-                        // TEFLoader配置区域
-                        TefLoaderConfigSection(
-                            enableTefLoader = enableTefLoader,
-                            onTefLoaderEnableChange = { enableTefLoader = it },
-                            useCustomTefLoader = useCustomTefLoader,
-                            onUseCustomTefLoaderChange = { useCustomTefLoader = it },
-                            tefLoaderPath = tefLoaderPath,
-                            onTefLoaderPathChange = { tefLoaderPath = it },
-                            onBrowseTefLoader = { tefLoaderPickerLauncher.launch() },
-                            modifier = Modifier.padding(bottom = 24.dp)
-                        )
-
-                        // 选项区域
-                        OptionsSection(
-                            gameVersion = gameVersion,
-                            onGameVersionChange = { gameVersion = it },
-                            architecture = architecture,
-                            onArchitectureChange = { architecture = it },
-                            modifier = Modifier.padding(bottom = 28.dp)
-                        )
-
-                        // 分隔线
-                        HorizontalDivider(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            thickness = 1.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
-                        )
-
-                        // 按钮区域
-                        ButtonSection(
-                            onCancel = { onResult(null) },
-                            onConfirm = {
-                                if (gameFilePath.isNotBlank()) {
-                                    val gameFile = File(gameFilePath)
-                                    if (gameFile.exists() && gameFile.isFile) {
-                                        // 验证TEFLoader配置
-                                        if (enableTefLoader && useCustomTefLoader && tefLoaderPath.isNotBlank()) {
-                                            val tefFile = File(tefLoaderPath)
-                                            if (!tefFile.exists() || !tefFile.isFile) {
-                                                errorMessage = "TEFLoader文件不存在或无效"
-                                                showErrorDialog.value = true
-                                                return@ButtonSection
-                                            }
-                                        }
-
-                                        try {
-                                            // 转换版本号为版本代码
-                                            val versionCode = convertVersionToCode(gameVersion)
-
-                                            val gameItem = GameItem(
-                                                apkPackName = "", // 从APK解析，这里留空
-                                                filePath = gameFilePath,
-                                                tefloaderPath = if (enableTefLoader && useCustomTefLoader) tefLoaderPath
-                                                else if (enableTefLoader) "${gameFilePath.toPath().parent!! / "tefloader.exe"}"  else "",
-                                                version = gameVersion,
-                                                versionCode = versionCode,
-                                                architecture = architecture.toString(),
-                                                hash = calculateFileHash(gameFile)
-                                            )
-
-                                            // 补丁操作
-                                            if (enableTefLoader && !useCustomTefLoader) {
-                                                GamePatcher.patchViaDotNetGrafting(
-                                                    gameFilePath.toPath(),
-                                                    enableTefLoader,
-                                                    architecture.toString()
-                                                )
-                                            }
-
-                                            onResult(gameItem)
-                                        } catch (e: Exception) {
-                                            errorMessage = "创建游戏项目时出错: ${e.message}"
-                                            showErrorDialog.value = true
-                                        }
-                                    } else {
-                                        errorMessage = "请选择一个有效的游戏可执行文件"
-                                        showErrorDialog.value = true
-                                    }
-                                } else {
-                                    errorMessage = "请选择游戏文件"
-                                    showErrorDialog.value = true
-                                }
-                            },
-                            confirmEnabled = gameFilePath.isNotBlank() && File(gameFilePath).exists() &&
-                                    (!enableTefLoader || !useCustomTefLoader || (tefLoaderPath.isNotBlank() && File(tefLoaderPath).exists())),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
-        }
-
-        // 错误对话框
-        if (showErrorDialog.value) {
-            AlertDialog(
-                onDismissRequest = { showErrorDialog.value = false },
-                icon = {
-                    Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                },
-                title = {
-                    Text("操作错误", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold))
-                },
-                text = { Text(errorMessage, style = MaterialTheme.typography.bodyMedium) },
-                confirmButton = {
-                    Button(onClick = { showErrorDialog.value = false }, modifier = Modifier.fillMaxWidth()) {
-                        Text("确定")
-                    }
-                },
-                shape = MaterialTheme.shapes.large,
-                tonalElevation = 6.dp
-            )
-        }
-    }
-
-    @Composable
-    private fun TefLoaderConfigSection(
-        enableTefLoader: Boolean,
-        onTefLoaderEnableChange: (Boolean) -> Unit,
-        useCustomTefLoader: Boolean,
-        onUseCustomTefLoaderChange: (Boolean) -> Unit,
-        tefLoaderPath: String,
-        onTefLoaderPathChange: (String) -> Unit,
-        onBrowseTefLoader: () -> Unit,
-        modifier: Modifier = Modifier
-    ) {
-        Column(modifier = modifier) {
-            Text(
-                text = "TEFLoader 配置",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                )
+                    .padding(16.dp)
+                    .fillMaxWidth(0.5f),
+                shape = RoundedCornerShape(28.dp),
+                tonalElevation = 2.dp,
+                color = MaterialTheme.colorScheme.surfaceContainer
             ) {
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp)
+                        .verticalScroll(scrollState)
+                        .padding(24.dp)
                 ) {
-                    // 启用TEFLoader开关
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = "启用 TEFLoader 支持",
-                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
-                            )
-                            Text(
-                                text = "为游戏启用模组加载器，支持游戏模组和插件",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-                        Switch(
-                            checked = enableTefLoader,
-                            onCheckedChange = onTefLoaderEnableChange,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
-                                checkedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
-                                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-                                uncheckedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                            )
-                        )
-                    }
-
-                    // 仅在启用TEFLoader时显示高级选项
-                    if (enableTefLoader) {
-                        Spacer(modifier = Modifier.height(20.dp))
-                        HorizontalDivider(thickness = 1.dp)
-                        Spacer(modifier = Modifier.height(20.dp))
-
-                        // 使用自定义TEFLoader选项
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Checkbox(
-                                checked = useCustomTefLoader,
-                                onCheckedChange = onUseCustomTefLoaderChange
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(
-                                    text = "使用自定义 TEFLoader",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
-                                )
-                                Text(
-                                    text = "指定自定义的TEFLoader DLL文件路径",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        // 自定义路径输入（仅在勾选时显示）
-                        if (useCustomTefLoader) {
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            val file = remember(tefLoaderPath) { File(tefLoaderPath) }
-                            val isInvalid = tefLoaderPath.isNotBlank() && (!file.exists() || !file.isFile)
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                OutlinedTextField(
-                                    value = tefLoaderPath,
-                                    onValueChange = onTefLoaderPathChange,
-                                    placeholder = {
-                                        Text(
-                                            "选择TEFLoader DLL文件路径",
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                        )
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(end = 4.dp),
-                                    singleLine = true,
-                                    isError = isInvalid,
-                                    shape = MaterialTheme.shapes.small,
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                                        disabledContainerColor = MaterialTheme.colorScheme.surface,
-                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                        errorBorderColor = MaterialTheme.colorScheme.error,
-                                        focusedLabelColor = MaterialTheme.colorScheme.primary,
-                                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        errorLabelColor = MaterialTheme.colorScheme.error
-                                    ),
-                                    trailingIcon = {
-                                        if (tefLoaderPath.isNotBlank()) {
-                                            if (file.exists() && file.isFile) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Folder,
-                                                    contentDescription = "文件存在",
-                                                    tint = MaterialTheme.colorScheme.primary
-                                                )
-                                            } else if (isInvalid) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Warning,
-                                                    contentDescription = "文件无效",
-                                                    tint = MaterialTheme.colorScheme.error
-                                                )
-                                            }
-                                        }
-                                    }
-                                )
-
-                                FilledTonalButton(
-                                    onClick = onBrowseTefLoader,
-                                    modifier = Modifier.wrapContentSize(),
-                                    shape = MaterialTheme.shapes.small
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Folder,
-                                        contentDescription = "浏览文件",
-                                        modifier = Modifier.padding(end = 8.dp)
-                                    )
-                                    Text("浏览")
-                                }
-                            }
-
-                            // 错误提示
-                            if (isInvalid) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Warning,
-                                        contentDescription = "错误",
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier
-                                            .width(16.dp)
-                                            .height(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = if (!file.exists()) "文件不存在，请检查路径"
-                                        else if (!file.isFile) "请选择文件而不是文件夹"
-                                        else "文件不可访问，请检查权限",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                }
-                            }
-                        } else {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = "将使用内置的 TEFLoader（推荐）",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(start = 28.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    @OptIn(ExperimentalMaterial3Api::class)
-    @Composable
-    private fun GameFilePathSection(
-        filePath: String,
-        onFilePathChange: (String) -> Unit,
-        onBrowseClick: () -> Unit,
-        modifier: Modifier = Modifier
-    ) {
-        val file = remember(filePath) { File(filePath) }
-        val isInvalid = filePath.isNotBlank() && (!file.exists() || !file.isFile)
-
-        Column(modifier = modifier) {
-            Text(
-                text = "游戏文件路径",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
-                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                )
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = filePath,
-                            onValueChange = onFilePathChange,
-                            placeholder = {
-                                Text(
-                                    "选择或输入游戏可执行文件路径",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(end = 4.dp),
-                            singleLine = true,
-                            isError = isInvalid,
-                            shape = MaterialTheme.shapes.small,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                                disabledContainerColor = MaterialTheme.colorScheme.surface,
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                errorBorderColor = MaterialTheme.colorScheme.error,
-                                focusedLabelColor = MaterialTheme.colorScheme.primary,
-                                unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                errorLabelColor = MaterialTheme.colorScheme.error
-                            ),
-                            trailingIcon = {
-                                if (filePath.isNotBlank()) {
-                                    if (file.exists() && file.isFile) {
-                                        Icon(
-                                            imageVector = Icons.Default.Folder,
-                                            contentDescription = "文件存在",
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                    } else if (isInvalid) {
-                                        Icon(
-                                            imageVector = Icons.Default.Warning,
-                                            contentDescription = "文件无效",
-                                            tint = MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                }
-                            }
-                        )
-
-                        FilledTonalButton(
-                            onClick = onBrowseClick,
-                            modifier = Modifier.wrapContentSize(),
-                            shape = MaterialTheme.shapes.small
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Folder,
-                                contentDescription = "浏览文件",
-                                modifier = Modifier.padding(end = 8.dp)
-                            )
-                            Text("浏览")
-                        }
-                    }
-
-                    if (filePath.isNotBlank() && file.exists() && file.isFile) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        SelectionContainer {
-                            Text(
-                                buildAnnotatedString {
-                                    withStyle(
-                                        style = SpanStyle(
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            fontWeight = FontWeight.Normal
-                                        )
-                                    ) {
-                                        append("已选文件: ")
-                                    }
-                                    withStyle(
-                                        style = SpanStyle(
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    ) {
-                                        append(file.name)
-                                    }
-                                    append("\n")
-                                    withStyle(
-                                        style = SpanStyle(
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            fontWeight = FontWeight.Normal
-                                        )
-                                    ) {
-                                        append("文件大小: ")
-                                    }
-                                    withStyle(
-                                        style = SpanStyle(
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                    ) {
-                                        append(formatFileSize(file.length()))
-                                    }
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                lineHeight = MaterialTheme.typography.bodySmall.lineHeight
-                            )
-                        }
-                    }
-
-                    if (isInvalid) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Warning,
-                                contentDescription = "错误",
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier
-                                    .width(18.dp)
-                                    .height(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (!file.exists()) "文件不存在，请检查路径"
-                                else if (!file.isFile) "请选择文件而不是文件夹"
-                                else "文件不可访问，请检查权限",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-                }
-            }
-
-            Text(
-                text = "选择游戏的可执行文件（.exe）或主程序文件，文件大小通常较大（100MB-1GB）",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp, start = 4.dp)
-            )
-        }
-    }
-
-    @Composable
-    private fun OptionsSection(
-        gameVersion: String,
-        onGameVersionChange: (String) -> Unit,
-        architecture: ArchitectureType,
-        onArchitectureChange: (ArchitectureType) -> Unit,
-        modifier: Modifier = Modifier
-    ) {
-        Column(modifier = modifier) {
-            Text(
-                text = "高级配置",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-
-            // 架构选择选项
-            ArchitectureCard(
-                architecture = architecture,
-                onArchitectureChange = onArchitectureChange
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // 版本输入区域
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
-                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp)
-                ) {
-                    VersionInputRow(
-                        icon = Icons.Outlined.Code,
-                        value = gameVersion,
-                        onValueChange = onGameVersionChange,
-                        modifier = Modifier.padding(bottom = 0.dp)
+                    // 标题
+                    Text(
+                        text = Strings.home.add.title,  // "添加游戏"
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                }
-            }
-        }
-    }
+                    Text(
+                        text = Strings.home.add.subtitle,  // "选择游戏文件并配置启动选项"
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 24.dp)
+                    )
 
-    @Composable
-    private fun ArchitectureCard(
-        architecture: ArchitectureType,
-        onArchitectureChange: (ArchitectureType) -> Unit
-    ) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium,
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface
-            )
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                ) {
-                    Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f),
-                        tonalElevation = 1.dp
+                    // 游戏文件
+                    OutlinedTextField(
+                        value = gameFilePath,
+                        onValueChange = { gameFilePath = it },
+                        placeholder = { Text(Strings.home.add.gameFile) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        singleLine = true,
+                        trailingIcon = {
+                            IconButton(onClick = { gameFilePicker.launch() }) {
+                                Icon(Icons.Default.FolderOpen, contentDescription = null)
+                            }
+                        },
+                        isError = gameFilePath.isNotBlank() && !File(gameFilePath).exists()
+                    )
+
+                    // TEFLoader 切换
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(vertical = 8.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Architecture,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .padding(12.dp)
-                                .width(24.dp)
-                                .height(24.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = "目标架构",
-                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
+                        Checkbox(
+                            checked = useCustomTefLoader,
+                            onCheckedChange = { useCustomTefLoader = it }
                         )
                         Text(
-                            text = "选择游戏的架构类型，将影响兼容性和性能",
+                            text = Strings.home.add.useCustomTefLoader,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp)
+                            modifier = Modifier.padding(start = 8.dp)
                         )
                     }
-                }
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .selectableGroup()
-                ) {
-                    ArchitectureType.entries.forEach { arch ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
+                    // 自定义TEFLoader路径
+                    AnimatedVisibility(visible = useCustomTefLoader) {
+                        OutlinedTextField(
+                            value = tefLoaderPath,
+                            onValueChange = { tefLoaderPath = it },
+                            placeholder = { Text(Strings.home.add.tefLoaderPath) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                        ) {
-                            RadioButton(
+                                .padding(top = 8.dp, bottom = 12.dp),
+                            singleLine = true,
+                            trailingIcon = {
+                                IconButton(onClick = { tefLoaderPicker.launch() }) {
+                                    Icon(Icons.Default.FolderOpen, contentDescription = null)
+                                }
+                            },
+                            isError = tefLoaderPath.isNotBlank() && !File(tefLoaderPath).exists()
+                        )
+                    }
+
+                    // 版本号
+                    OutlinedTextField(
+                        value = gameVersion,
+                        onValueChange = { gameVersion = it },
+                        placeholder = { Text(Strings.home.add.version) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        singleLine = true,
+                        leadingIcon = {
+                            Icon(Icons.Default.Info, contentDescription = null)
+                        }
+                    )
+
+                    // 架构选择
+                    Text(
+                        text = Strings.home.add.architecture,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        ArchitectureType.entries.forEach { arch ->
+                            FilterChip(
                                 selected = architecture == arch,
-                                onClick = { onArchitectureChange(arch) },
-                                modifier = Modifier.padding(end = 12.dp)
+                                onClick = { architecture = arch },
+                                label = { Text(arch.displayName) },
+                                modifier = Modifier.weight(1f).padding(4.dp)
                             )
-                            Column(
-                                modifier = Modifier.weight(1f)
+                        }
+                    }
+
+                    // 错误信息
+                    errorMessage?.let { message ->
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = arch.displayName,
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
+                                Icon(
+                                    Icons.Default.Error,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error
                                 )
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = when (arch) {
-                                        ArchitectureType.X86 -> "32位 x86 架构，适用于大部分旧版游戏"
-                                        ArchitectureType.X86_64 -> "64位 x86-64 架构，现代系统标准配置"
-                                        ArchitectureType.ARM64 -> "ARM64 架构，适用于 Apple Silicon 和 ARM 设备（不适用windows）"
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 2.dp)
+                                    text = message,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                             }
                         }
                     }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // 按钮
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 24.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { onResult(null) }) {
+                            Text(Strings.cancel)
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Button(
+                            onClick = {
+                                val gameFile = File(gameFilePath)
+                                if (!gameFile.exists() || !gameFile.isFile) {
+                                    errorMessage = Strings.home.add.error.invalidGameFile
+                                    return@Button
+                                }
+
+                                if (useCustomTefLoader) {
+                                    val tefFile = File(tefLoaderPath)
+                                    if (!tefFile.exists() || !tefFile.isFile) {
+                                        errorMessage = Strings.home.add.error.invalidTefLoader
+                                        return@Button
+                                    }
+                                }
+
+                                try {
+                                    val versionCode = convertVersionToCode(gameVersion)
+                                    val gameItem = GameItem(
+                                        apkPackName = "",
+                                        filePath = gameFilePath,
+                                        tefloaderPath = if (useCustomTefLoader) tefLoaderPath else "",
+                                        version = gameVersion,
+                                        versionCode = versionCode,
+                                        architecture = architecture.toString(),
+                                        hash = calculateFileHash(gameFile)
+                                    )
+
+                                    if (!useCustomTefLoader) {
+                                        GamePatcher.patchViaDotNetGrafting(
+                                            gameFilePath.toPath(),
+                                            tefLoaderPath,
+                                            architecture.toString()
+                                        )
+                                    }
+
+                                    onResult(gameItem)
+                                } catch (e: Exception) {
+                                    errorMessage = Strings.error.title(e.message ?: Strings.error.unknown)
+                                }
+                            },
+                            enabled = gameFilePath.isNotBlank() &&
+                                    File(gameFilePath).exists() &&
+                                    (!useCustomTefLoader ||
+                                            (tefLoaderPath.isNotBlank() && File(tefLoaderPath).exists()))
+                        ) {
+                            Text(Strings.home.game.add)
+                        }
+                    }
                 }
-
-                Text(
-                    text = "当前平台默认: ${ArchitectureType.defaultForCurrentPlatform().displayName}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 12.dp, start = 36.dp)
-                )
-            }
-        }
-    }
-
-    @OptIn(ExperimentalMaterial3Api::class)
-    @Composable
-    private fun VersionInputRow(
-        icon: ImageVector,
-        value: String,
-        onValueChange: (String) -> Unit,
-        modifier: Modifier = Modifier
-    ) {
-        Column(modifier = modifier) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 8.dp)
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .width(20.dp)
-                        .height(20.dp)
-                        .padding(end = 8.dp)
-                )
-                Text(
-                    text = "游戏版本",
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "(可选)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Text(
-                text = "留空以自动检测版本号，支持标准版本格式（如 1.4.0.5）",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 12.dp, start = 28.dp)
-            )
-
-            OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                shape = MaterialTheme.shapes.small,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                    disabledContainerColor = MaterialTheme.colorScheme.surface,
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                    focusedLabelColor = MaterialTheme.colorScheme.primary,
-                    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                textStyle = MaterialTheme.typography.bodyMedium
-            )
-        }
-    }
-
-    @Composable
-    private fun ButtonSection(
-        onCancel: () -> Unit,
-        onConfirm: () -> Unit,
-        confirmEnabled: Boolean,
-        modifier: Modifier = Modifier
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = modifier
-        ) {
-            TextButton(
-                onClick = onCancel,
-                modifier = Modifier.padding(end = 12.dp),
-                shape = MaterialTheme.shapes.small
-            ) {
-                Text(
-                    text = "取消",
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium)
-                )
-            }
-
-            Button(
-                onClick = onConfirm,
-                enabled = confirmEnabled,
-                shape = MaterialTheme.shapes.small,
-                elevation = ButtonDefaults.buttonElevation(
-                    defaultElevation = 2.dp,
-                    pressedElevation = 4.dp,
-                    disabledElevation = 0.dp
-                ),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    disabledContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-                    disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                )
-            ) {
-                Text(
-                    text = "添加游戏",
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
-                )
             }
         }
     }
@@ -984,18 +347,5 @@ actual object AddGameDialog {
             AppLogger.e("Error calculating hash", e)
             "unknown"
         }
-    }
-
-    private fun formatFileSize(bytes: Long): String {
-        val units = arrayOf("B", "KB", "MB", "GB")
-        var size = bytes.toDouble()
-        var unitIndex = 0
-
-        while (size >= 1024 && unitIndex < units.size - 1) {
-            size /= 1024
-            unitIndex++
-        }
-
-        return "%.2f %s".format(size, units[unitIndex])
     }
 }

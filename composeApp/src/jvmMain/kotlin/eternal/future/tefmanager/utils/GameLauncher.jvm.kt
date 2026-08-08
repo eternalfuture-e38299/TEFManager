@@ -1,11 +1,11 @@
 package eternal.future.tefmanager.utils
 
 import eternal.future.tefmanager.Platform
-import eternal.future.tefmanager.ui.model.GameItem
+import eternal.future.tefmanager.model.GameItem
 
 actual object GameLauncher {
 
-    actual fun launch(item: GameItem?) {
+    actual fun launch(item: GameItem?, isServerMode: Boolean) {
         if (item == null) {
             AppLogger.e("GameItem is null")
             return
@@ -18,6 +18,9 @@ actual object GameLauncher {
             "-k", (Platform.getData("tefkernel") / Platform.getDynamicLibraryName("tefkernel.${Platform.osName.lowercase()}.${item.architecture.lowercase()}")).toString(),
             "-w", (Platform.getData(null)).toString()
         )
+
+        if (isServerMode)
+            command.add("-server")
 
         AppLogger.i("Launching: ${command.joinToString(" ")}")
 

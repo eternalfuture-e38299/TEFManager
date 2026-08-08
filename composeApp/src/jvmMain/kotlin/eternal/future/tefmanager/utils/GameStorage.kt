@@ -1,7 +1,7 @@
 package eternal.future.tefmanager.utils
 
 import eternal.future.tefmanager.Platform
-import eternal.future.tefmanager.ui.model.GameItem
+import eternal.future.tefmanager.model.GameItem
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import okio.FileSystem

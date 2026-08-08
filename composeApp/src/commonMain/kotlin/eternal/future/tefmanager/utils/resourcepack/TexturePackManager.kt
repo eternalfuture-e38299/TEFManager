@@ -1,7 +1,6 @@
 package eternal.future.tefmanager.utils.resourcepack
 
-import eternal.future.tefmanager.Platform
-import eternal.future.tefmanager.ui.model.ResourcesPackItem
+import eternal.future.tefmanager.model.ResourcesPackItem
 
 /*******************************************************************************
  * TEFManager - TexturePackManager
@@ -27,11 +26,11 @@ import eternal.future.tefmanager.ui.model.ResourcesPackItem
 
 
 object TexturePackManager : BasePackManager(
-    PackManagerConfig(
+    ResourcePackManager.PackManagerConfig(
         name = "texture_packs",
         packType = ResourcesPackItem.PackType.TexturePack,
-        dbPath = Platform.getData("resource_pack") / "texture_packs" / "db",
-        configPath = Platform.getData("module") / "private" / "eternal.future.texturepack" / "config.json",
+        configName = "config.json",
+        packName = "eternal.future.texturepackextension",
         packSubDir = "texture_packs"
     )
 )

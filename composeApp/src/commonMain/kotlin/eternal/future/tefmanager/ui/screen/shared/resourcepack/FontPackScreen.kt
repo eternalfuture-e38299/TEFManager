@@ -31,6 +31,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import eternal.future.tefmanager.strings.StringsResource
+import eternal.future.tefmanager.strings.StringsResource.Strings
 
 /*******************************************************************************
  * TEFManager - FontPackScreen
@@ -75,7 +77,7 @@ object FontPackScreen : Screen {
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("正在加载字体包...")
+                        Text(Strings.loading)
                     }
                 }
                 FontPackManager.fontPacks.isEmpty() -> {
@@ -83,7 +85,7 @@ object FontPackScreen : Screen {
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("暂无字体包\n\n请点击右上角按钮安装字体包")
+                        Text("${Strings.resource.empty(Strings.resource.font.title)}\n\n${Strings.resource.emptyAction(Strings.resource.font.title)}")
                     }
                 }
                 else -> {
@@ -104,14 +106,19 @@ object FontPackScreen : Screen {
                             ) {
                                 Column {
                                     Text(
-                                        text = "字体包管理",
+                                        text = Strings.resource.font.hint,
                                         style = MaterialTheme.typography.titleMedium
                                     )
                                     Text(
                                         text = if (selectedPackName != null) {
-                                            "当前选中: ${FontPackManager.getSelectedFontPack()?.name ?: "未知"}"
+                                            FontPackManager.getSelectedFontPack()?.name.let {
+                                                if (it != null)
+                                                    Strings.resource.font.selected(it)
+                                                else
+                                                    Strings.resource.font.selectedUnknown
+                                            }
                                         } else {
-                                            "未选中任何字体包"
+                                            Strings.resource.font.none
                                         },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = if (selectedPackName != null) {
@@ -119,13 +126,6 @@ object FontPackScreen : Screen {
                                         } else {
                                             MaterialTheme.colorScheme.onSurfaceVariant
                                         }
-                                    )
-                                }
-                                if (selectedPackName != null) {
-                                    Text(
-                                        text = "已选中",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.primary
                                     )
                                 }
                             }

@@ -1,20 +1,17 @@
 package eternal.future.tefmanager.ui.dialogs
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -22,7 +19,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Error
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -36,6 +32,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -49,10 +46,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import eternal.future.tefmanager.Platform
-import eternal.future.tefmanager.ui.model.UpdateInfo
+import eternal.future.tefmanager.model.UpdateInfo
+import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.utils.NetworkService
 import eternal.future.tefmanager.utils.openUrl
-
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.launch
+import okio.FileSystem
+import okio.Path
+import okio.SYSTEM
 
 /*******************************************************************************
  * TEFManager - UpdateDialog
@@ -78,98 +82,235 @@ import eternal.future.tefmanager.utils.openUrl
 
 @Composable
 fun UpdateDialog(
-    updates: List<UpdateInfo.Info>,
+    updateInfo: UpdateInfo,
     onDismiss: () -> Unit,
+    onModuleInstalled: ((ModuleType, Path) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val networkServices = remember(updates) {
-        updates.associate { it.moduleName to NetworkService() }
+    // 为每个模块创建独立的 NetworkService
+    val tefLoaderService = remember { NetworkService() }
+    val tefKernelService = remember { NetworkService() }
+    val languageService = remember { NetworkService() }
+    val materialService = remember { NetworkService() }
+    val fontService = remember { NetworkService() }
+    val musicService = remember { NetworkService() }
+
+    // 清理资源
+    DisposableEffect(Unit) {
+        onDispose {
+            tefLoaderService.close()
+            tefKernelService.close()
+            languageService.close()
+            materialService.close()
+            fontService.close()
+            musicService.close()
+        }
     }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = modifier
-                .fillMaxWidth()
-                .wrapContentHeight()
-                .padding(16.dp),
+                .wrapContentSize()
+                .wrapContentHeight(),
             shape = MaterialTheme.shapes.extraLarge,
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp)
-                    .verticalScroll(rememberScrollState())
+            Column(modifier = Modifier
+                .padding(16.dp)
+                .wrapContentSize()
+                .wrapContentHeight()
             ) {
-                // 标题区域
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "可用更新",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                Text(
+                    text = Strings.update.title,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(16.dp))
 
-                    // 关闭按钮
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "关闭",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+
+
+                    // 软件更新
+                    updateInfo.tefmanager?.let {
+                        ModuleUpdateItem(
+                            title = "TEFManager",
+                            info = it,
+                            type = ModuleType.External,
+                            networkService = null,
+                            onInstall = null
+                        )
+                    }
+
+
+                    updateInfo.tefloader?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        ModuleUpdateItem(
+                            title = "TEFLoader",
+                            info = it,
+                            type = ModuleType.TEFLoader,
+                            networkService = tefLoaderService,
+                            onInstall = onModuleInstalled
+                        )
+                    }
+
+                    updateInfo.tefkernel?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // 内核更新
+                        ModuleUpdateItem(
+                            title = Strings.update.kernel,
+                            info = it,
+                            type = ModuleType.TEFKernel,
+                            networkService = tefKernelService,
+                            onInstall = onModuleInstalled
+                        )
+                    }
+
+                    // 语言包
+                    updateInfo.language?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        ModuleUpdateItem(
+                            title = Strings.update.language,
+                            info = it,
+                            type = ModuleType.Language,
+                            networkService = languageService,
+                            onInstall = onModuleInstalled
+                        )
+                    }
+
+                    // 材质包
+                    updateInfo.texture?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        ModuleUpdateItem(
+                            title = Strings.update.texture,
+                            info = it,
+                            type = ModuleType.Texture,
+                            networkService = materialService,
+                            onInstall = onModuleInstalled
+                        )
+                    }
+
+                    // 字体包
+                    updateInfo.font?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        ModuleUpdateItem(
+                            title = Strings.update.font,
+                            info = it,
+                            type = ModuleType.Font,
+                            networkService = fontService,
+                            onInstall = onModuleInstalled
+                        )
+                    }
+
+                    // 音乐包
+                    updateInfo.music?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        ModuleUpdateItem(
+                            title = Strings.update.music,
+                            info = it,
+                            type = ModuleType.Music,
+                            networkService = musicService,
+                            onInstall = onModuleInstalled
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 更新描述
-                Text(
-                    text = "发现 ${updates.size} 个模块需要更新",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-
-                // 更新列表
-                if (updates.size > 1) {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 300.dp)
-                            .padding(bottom = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(updates) { update ->
-                            UpdateItem(update = update, networkService = networkServices[update.moduleName]!!)
-                        }
-                    }
-                } else if (updates.isNotEmpty()) {
-                    UpdateItem(update = updates.first(), networkService = networkServices[updates.first().moduleName]!!)
-                }
-
-                // 底部按钮区域
+                // 底部按钮
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.End
                 ) {
-                    // 取消按钮
-                    TextButton(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    TextButton(onClick = onDismiss) {
+                        Text(Strings.close)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModuleUpdateItem(
+    title: String,
+    info: UpdateInfo.Info,
+    type: ModuleType,
+    networkService: NetworkService?,
+    onInstall: ((ModuleType, Path) -> Unit)?
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        tonalElevation = 1.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "v${info.newVersion}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (info.description.isNotEmpty()) {
+                    Text(
+                        text = info.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                if (info.fileSize.isNotEmpty()) {
+                    Text(
+                        text = info.fileSize,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+            }
+
+            when (type) {
+                ModuleType.External -> {
+                    OutlinedButton(
+                        onClick = { openUrl(info.externalUrl) },
+                        modifier = Modifier.wrapContentSize()
                     ) {
-                        Text(
-                            text = "取消",
-                            style = MaterialTheme.typography.labelLarge
+                        Text(Strings.update.view)
+                    }
+                }
+                else -> {
+                    if (networkService != null && onInstall != null) {
+                        DownloadButton(
+                            networkService = networkService,
+                            downloadUrl = info.downloadUrl,
+                            fileName = info.fileName,
+                            moduleType = type,
+                            onInstall = onInstall
                         )
                     }
                 }
@@ -179,207 +320,185 @@ fun UpdateDialog(
 }
 
 @Composable
-private fun UpdateItem(update: UpdateInfo.Info, networkService: NetworkService) {
+private fun DownloadButton(
+    networkService: NetworkService,
+    downloadUrl: String,
+    fileName: String,
+    moduleType: ModuleType,
+    onInstall: (ModuleType, Path) -> Unit
+) {
     val downloadProgress by networkService.downloadProgress.collectAsState()
-
-    // 防止取消按钮重复点击
     var isCancelling by remember { mutableStateOf(false) }
 
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .wrapContentHeight(),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        tonalElevation = 1.dp
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            // 模块名称和版本信息
+    // 保存当前下载的路径和URL，用于重试
+    var currentDownloadPath by remember { mutableStateOf<Path?>(null) }
+    var currentDownloadUrl by remember { mutableStateOf<String?>(null) }
+
+    // 重置取消状态
+    LaunchedEffect(downloadProgress.status) {
+        when (downloadProgress.status) {
+            NetworkService.DownloadStatus.CANCELLED -> {
+                isCancelling = false
+            }
+            NetworkService.DownloadStatus.COMPLETED -> {
+                // 下载完成，调用安装回调
+                currentDownloadPath?.let { path ->
+                    onInstall(moduleType, path)
+                }
+                // 清空状态
+                currentDownloadPath = null
+                currentDownloadUrl = null
+            }
+            else -> {}
+        }
+    }
+
+    when (downloadProgress.status) {
+        NetworkService.DownloadStatus.IDLE -> {
+            FilledTonalButton(
+                onClick = {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        // 获取临时目录
+                        val tempDir = Platform.getDirectory("tmp")
+                        val outputPath = tempDir / fileName
+
+                        // 确保临时目录存在
+                        FileSystem.SYSTEM.createDirectories(tempDir)
+
+                        // 保存当前下载信息
+                        currentDownloadPath = outputPath
+                        currentDownloadUrl = downloadUrl
+
+                        networkService.downloadFile(downloadUrl, outputPath)
+                    }
+                },
+                modifier = Modifier.wrapContentSize()
+            ) {
+                Icon(Icons.Default.Download, null, Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(Strings.update.download)
+            }
+        }
+
+        NetworkService.DownloadStatus.DOWNLOADING -> {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = update.moduleName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                IconButton(
+                    onClick = {
+                        if (!isCancelling) {
+                            isCancelling = true
+                            networkService.cancelDownload()
+                            // 取消时清空保存的状态
+                            currentDownloadPath = null
+                            currentDownloadUrl = null
+                        }
+                    },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(16.dp)
                     )
+                }
 
+                Column(horizontalAlignment = Alignment.End) {
+                    LinearProgressIndicator(
+                        progress = { downloadProgress.percentage / 100f },
+                        modifier = Modifier.width(80.dp).height(4.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = ProgressIndicatorDefaults.linearTrackColor,
+                        strokeCap = ProgressIndicatorDefaults.LinearStrokeCap
+                    )
                     Text(
-                        text = "版本: ${update.newVersion}",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "${downloadProgress.percentage.toInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-
-                // 操作按钮
-                when (downloadProgress.status) {
-                    NetworkService.DownloadStatus.IDLE -> {
-                        if (update.downloadUrl.isEmpty()) {
-                            // 外部链接按钮
-                            OutlinedButton(
-                                onClick = {
-                                    openUrl(update.externalUrl)
-                                },
-                                modifier = Modifier.wrapContentSize()
-                            ) {
-                                Text("查看详情")
-                            }
-                        } else {
-                            // 下载按钮
-                            FilledTonalButton(
-                                onClick = {
-                                    // 直接调用，不需要自己创建协程
-                                    networkService.downloadFile(
-                                        update.downloadUrl,
-                                        Platform.getData(null) / update.fileName
-                                    )
-                                },
-                                modifier = Modifier.wrapContentSize()
-                            ) {
-                                Icon(Icons.Default.Download, null, Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("下载")
-                            }
-                        }
-                    }
-
-                    NetworkService.DownloadStatus.DOWNLOADING -> {
-                        val progress = downloadProgress.percentage
-                        // 下载进度显示 + 取消按钮
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // 取消按钮 - 防重复点击
-                            IconButton(
-                                onClick = {
-                                    if (!isCancelling) {
-                                        isCancelling = true
-                                        networkService.cancelDownload()
-                                    }
-                                },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Close,
-                                    "取消下载",
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-
-                            // 下载进度显示
-                            Column(horizontalAlignment = Alignment.End) {
-                                LinearProgressIndicator(
-                                    progress = { progress / 100f },
-                                    modifier = Modifier.width(80.dp).height(4.dp),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    trackColor = ProgressIndicatorDefaults.linearTrackColor,
-                                    strokeCap = ProgressIndicatorDefaults.LinearStrokeCap,
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    text = "${progress.toInt()}%",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-
-                    NetworkService.DownloadStatus.COMPLETED -> {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Check, "完成", tint = MaterialTheme.colorScheme.primary)
-                            Spacer(Modifier.width(4.dp))
-                            Text("完成", style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
-
-                    NetworkService.DownloadStatus.ERROR -> {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Error, "错误", tint = MaterialTheme.colorScheme.error)
-                            Spacer(Modifier.width(4.dp))
-                            Text("重试", style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
-
-                    NetworkService.DownloadStatus.CANCELLED -> {
-                        // 重置取消标志
-                        LaunchedEffect(Unit) {
-                            isCancelling = false
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Close, "已取消", tint = MaterialTheme.colorScheme.outline)
-                            Spacer(Modifier.width(4.dp))
-                            Text("已取消", style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
-                }
             }
+        }
 
-            // 更新描述
-            if (update.description.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
+        NetworkService.DownloadStatus.COMPLETED -> {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Check,
+                    null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
                 Text(
-                    text = update.description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
+                    Strings.update.status.completed,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
+        }
 
-            // 文件大小信息
-            if (update.fileSize.isNotEmpty()) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = update.fileSize,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
+        NetworkService.DownloadStatus.ERROR -> {
+            FilledTonalButton(
+                onClick = {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        // 使用保存的路径和URL重试
+                        val outputPath = currentDownloadPath ?: run {
+                            val tempDir = Platform.getDirectory("tmp")
+                            tempDir / fileName
+                        }.also { currentDownloadPath = it }
+
+                        val url = currentDownloadUrl ?: downloadUrl
+                        currentDownloadUrl = url
+
+                        // 确保临时目录存在
+                        val tempDir = Platform.getDirectory("tmp")
+                        FileSystem.SYSTEM.createDirectories(tempDir)
+                        networkService.downloadFile(url, outputPath)
+                    }
+                },
+                modifier = Modifier.wrapContentSize()
+            ) {
+                Icon(Icons.Default.Error, null, Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(Strings.update.retry)
+            }
+        }
+
+        NetworkService.DownloadStatus.CANCELLED -> {
+            FilledTonalButton(
+                onClick = {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        val tempDir = Platform.getDirectory("tmp")
+                        val outputPath = tempDir / fileName
+
+                        FileSystem.SYSTEM.createDirectories(tempDir)
+
+                        currentDownloadPath = outputPath
+                        currentDownloadUrl = downloadUrl
+
+                        networkService.downloadFile(downloadUrl, outputPath)
+                    }
+                },
+                modifier = Modifier.wrapContentSize()
+            ) {
+                Icon(Icons.Default.Download, null, Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(Strings.update.redownload)
             }
         }
     }
 }
 
-// 使用示例
-@Composable
-fun UpdateDialogExample() {
-    val sampleUpdates = listOf(
-        UpdateInfo.Info(
-            "tefloader.zip",
-            moduleName = "tefloader",
-            newVersion = "v1.0.0",
-            description = "用于内核加载",
-            downloadUrl = "https://gitee.com/eternalfuture/tefmod-loader/releases/download/tefmodloader-2025-05-24-core.efml/tefmodloader.efml",
-            fileSize = "3.2 MB",
-            externalUrl = "" // 直接使用字符串
-        ),
-        UpdateInfo.Info(
-            "tefloader.zip",
-            moduleName = "tefloadaer",
-            newVersion = "v1.0.0",
-            description = "用于内核加载",
-            downloadUrl = "",
-            fileSize = "3.2 MB",
-            externalUrl = "https://gitee.com/eternalfuture/tefmod-loader/releases/download/tefmodloader-2025-05-24-core.efml/tefmodloader.efml" // 直接使用字符串
-        )
-    )
-
-
-    UpdateDialog(
-        updates = sampleUpdates,
-        onDismiss = { /* 处理关闭逻辑 */ }
-    )
+enum class ModuleType {
+    External,      // 软件更新（外部链接）
+    TEFLoader,     // TEFLoader
+    TEFKernel,     // 内核
+    Language,      // 语言包
+    Texture,       // 材质包
+    Font,          // 字体包
+    Music          // 音乐包
 }

@@ -19,12 +19,10 @@ import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -44,13 +42,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
+import eternal.future.tefmanager.model.SettingCategory
 import eternal.future.tefmanager.strings.StringsResource.Strings
-import eternal.future.tefmanager.ui.model.SettingCategory
-import eternal.future.tefmanager.ui.screen.shared.SettingsContent.AboutSettings
-import eternal.future.tefmanager.ui.screen.shared.SettingsContent.AdvancedSettings
-import eternal.future.tefmanager.ui.screen.shared.SettingsContent.AppearanceSettings
-import eternal.future.tefmanager.ui.screen.shared.SettingsContent.GameSettings
-import eternal.future.tefmanager.ui.screen.shared.SettingsContent.GeneralSettings
+import eternal.future.tefmanager.ui.screen.shared.settings.AboutSettings
+import eternal.future.tefmanager.ui.screen.shared.settings.AdvancedSettings
+import eternal.future.tefmanager.ui.screen.shared.settings.AppearanceSettings
+import eternal.future.tefmanager.ui.screen.shared.settings.GeneralSettings
 import kotlinx.coroutines.launch
 
 /*******************************************************************************
@@ -98,12 +95,6 @@ object SettingsScreen : Screen, MainScreen.TitledScreen {
                 title = Strings.settings.advanced.title,
                 icon = Icons.Outlined.Code,
                 iconFilled = Icons.Rounded.Code
-            ),
-            SettingCategory(
-                id = "game",
-                title = Strings.settings.game.title,
-                icon = Icons.Outlined.SportsEsports,
-                iconFilled = Icons.Rounded.SportsEsports
             ),
             SettingCategory(
                 id = "about",
@@ -160,8 +151,7 @@ object SettingsScreen : Screen, MainScreen.TitledScreen {
                             0 -> GeneralSettings()
                             1 -> AppearanceSettings()
                             2 -> AdvancedSettings()
-                            3 -> GameSettings()
-                            4 -> AboutSettings()
+                            3 -> AboutSettings()
                         }
                     }
                 }

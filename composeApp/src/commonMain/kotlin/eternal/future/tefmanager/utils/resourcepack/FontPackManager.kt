@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import eternal.future.tefmanager.Platform
-import eternal.future.tefmanager.ui.model.ResourcesPackItem
+import eternal.future.tefmanager.model.ResourcesPackItem
 import eternal.future.tefmanager.utils.AppLogger
 import eternal.future.tefmanager.utils.LightProtoStore
 import eternal.future.tefmanager.utils.resourcepack.ResourcePackManager.InstallProgress
@@ -14,8 +14,9 @@ import eternal.future.tefmanager.utils.resourcepack.ResourcePackManager.Progress
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import no.synth.kmpzip.okio.asSource
+import no.synth.kmpzip.zip.ZipFile
 import okio.FileSystem
-import okio.Path.Companion.toPath
 import okio.SYSTEM
 import okio.buffer
 import okio.use
@@ -55,7 +56,7 @@ object FontPackManager {
 
     // 数据库
     private val fontPacksDataBase = LightProtoStore(
-        Platform.getData("resource_pack") / "font_packs" / "db",
+        Platform.getData("module") / "private" / "eternal.future.fontpackextension" / "font_packs" / "db",
         ResourcesPackItem.serializer(),
         "font_packs"
     )
@@ -68,7 +69,7 @@ object FontPackManager {
     var selectedPackFileName by mutableStateOf<String?>(null)
     
     // 配置文件（只存储选中的文件名）
-    private val configFile = Platform.getData("module") / "private" / "eternal.future.fontpack" / "selected.json"
+    private val configFile = Platform.getData("module") / "private" / "eternal.future.fontpackextension" / "selected.json"
 
     /**
      * 安装字体包
@@ -87,17 +88,17 @@ object FontPackManager {
      * 分析字体包类型和元数据
      */
     fun analyzeFontPack(
-        zip: FileSystem,
+        zip: ZipFile,
         progressCallback: ProgressCallback? = null
     ): PackAnalysisResult? {
         try {
 
             // 检查 TEFManager 格式 (pack_info.json)
-            val packInfoPath = "pack_info.json".toPath()
-            if (zip.exists(packInfoPath)) {
+            val packInfoEntry = zip.getEntry("pack_info.json")
+            if (packInfoEntry != null) {
                 progressCallback?.invoke(InstallProgress.PARSING_METADATA, null)
 
-                val packInfoContent = zip.source(packInfoPath).buffer().use { it.readUtf8() }
+                val packInfoContent = zip.getInputStream(packInfoEntry).asSource().buffer().use { it.readUtf8() }
                 val packInfoJson = json.parseToJsonElement(packInfoContent).jsonObject
 
                 val name = packInfoJson["name"]?.jsonPrimitive?.content
@@ -192,13 +193,13 @@ object FontPackManager {
             fontPacksDataBase.delete(fileName)
             fontPacksDataBase.flush()
 
-            val packFile = Platform.getData("resource_pack") / "font_packs" / fileName
+            val packFile = Platform.getData("module") / "private" / "eternal.future.fontpackextension" / "font_packs" / fileName
             if (fileSystem.exists(packFile)) {
                 fileSystem.delete(packFile)
             }
 
             val packId = fileName.removeSuffix(".zip")
-            val iconFile = Platform.getData("resource_pack") / "font_packs" / "icons" / "$packId.png"
+            val iconFile = Platform.getData("module") / "private" / "eternal.future.fontpackextension" / "font_packs" / "icons" / "$packId.png"
             if (fileSystem.exists(iconFile)) {
                 fileSystem.delete(iconFile)
             }

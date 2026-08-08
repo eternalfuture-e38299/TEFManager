@@ -1,5 +1,6 @@
 package eternal.future.tefmanager.ui.screen.shared.resourcepack
 
+import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.utils.resourcepack.LanguagePatchPackManager
 
 /*******************************************************************************
@@ -26,7 +27,5 @@ import eternal.future.tefmanager.utils.resourcepack.LanguagePatchPackManager
 
 object LanguagePatchPackScreen : BasePackScreen(
     manager = LanguagePatchPackManager,
-    title = "语言补丁包管理",
-    emptyMessage = "暂无语言补丁包",
-    emptyActionText = "请点击按钮安装语言补丁包"
+    title = { Strings.resource.languagePatch }
 )

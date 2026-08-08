@@ -8,6 +8,7 @@ import com.wind.meditor.core.ManifestEditor
 import com.wind.meditor.property.AttributeItem
 import com.wind.meditor.property.ModificationProperty
 import eternal.future.tefmanager.MainActivity
+import eternal.future.tefmanager.strings.StringsResource.Strings
 import org.w3c.dom.Document
 import org.w3c.dom.Element
 import java.io.ByteArrayInputStream
@@ -20,7 +21,6 @@ import javax.xml.transform.OutputKeys
 import javax.xml.transform.TransformerFactory
 import javax.xml.transform.dom.DOMSource
 import javax.xml.transform.stream.StreamResult
-
 
 /*******************************************************************************
  * TEFManager - Patcher
@@ -62,20 +62,20 @@ object Patcher {
         FAILED;
 
         override fun toString(): String = when (this) {
-            PREPARING -> "准备中"
-            OPENING_APK -> "正在打开APK文件"
-            UNZIP_DEX -> "正在提取DEX文件"
-            READING_MANIFEST -> "正在读取清单文件"
-            MODIFYING_APPLICATION -> "正在修改清单文件 - Application"
-            MODIFYING_APP_COMPONENT_FACTORY -> "正在修改清单文件 - AppComponentFactory"
-            ADDING_METADATA -> "正在添加元数据"
-            ADDING_PROVIDER -> "正在添加Provider"
-            REPLACING_MANIFEST -> "正在替换清单文件"
-            ADDING_DEX -> "正在添加DEX文件"
-            REPACKAGING_APK -> "正在重新打包APK"
-            SIGNING_APK -> "正在签名APK"
-            COMPLETED -> "补丁完成"
-            FAILED -> "补丁失败"
+            PREPARING -> Strings.home.patch.progress.preparing
+            OPENING_APK -> Strings.home.patch.progress.openApk
+            UNZIP_DEX -> Strings.home.patch.progress.unzipDex
+            READING_MANIFEST -> Strings.home.patch.progress.readingManifest
+            MODIFYING_APPLICATION -> Strings.home.patch.progress.modifyingApplication
+            MODIFYING_APP_COMPONENT_FACTORY -> Strings.home.patch.progress.modifyingAppComponentFactory
+            ADDING_METADATA -> Strings.home.patch.progress.addingMetadata
+            ADDING_PROVIDER -> Strings.home.patch.progress.addingProvider
+            REPLACING_MANIFEST -> Strings.home.patch.progress.replacingManifest
+            ADDING_DEX -> Strings.home.patch.progress.addingDex
+            REPACKAGING_APK -> Strings.home.patch.progress.repackagingApk
+            SIGNING_APK -> Strings.home.patch.progress.signingApk
+            COMPLETED -> Strings.home.patch.progress.completed
+            FAILED -> Strings.home.patch.progress.failed
         }
     }
 

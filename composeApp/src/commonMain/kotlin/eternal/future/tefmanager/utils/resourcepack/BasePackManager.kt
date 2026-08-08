@@ -2,7 +2,7 @@ package eternal.future.tefmanager.utils.resourcepack
 
 import androidx.compose.runtime.mutableStateListOf
 import eternal.future.tefmanager.Platform
-import eternal.future.tefmanager.ui.model.ResourcesPackItem
+import eternal.future.tefmanager.model.ResourcesPackItem
 import eternal.future.tefmanager.utils.AppLogger
 import eternal.future.tefmanager.utils.LightProtoStore
 import eternal.future.tefmanager.utils.resourcepack.ResourcePackManager.InstallProgress
@@ -13,8 +13,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import no.synth.kmpzip.okio.asSource
+import no.synth.kmpzip.zip.ZipFile
 import okio.FileSystem
-import okio.Path
 import okio.Path.Companion.toPath
 import okio.SYSTEM
 import okio.buffer
@@ -42,18 +43,10 @@ import okio.use
  * Created: 2026/6/21
  *******************************************************************************/
 
-data class PackManagerConfig(
-    val name: String,                          // 管理器名称
-    val packType: ResourcesPackItem.PackType,  // 包类型
-    val dbPath: Path,                          // 数据库路径
-    val configPath: Path,                      // 配置文件路径
-    val packSubDir: String                     // 包存放子目录
-)
-
 // ==================== 基类 ====================
 
 abstract class BasePackManager(
-    private val config: PackManagerConfig
+    private val config: ResourcePackManager.PackManagerConfig
 ) {
 
     private val fileSystem = FileSystem.SYSTEM
@@ -66,7 +59,7 @@ abstract class BasePackManager(
 
     // 数据库
     private val packsDataBase = LightProtoStore(
-        config.dbPath,
+        Platform.getData("module") / "private" / config.packName / config.packSubDir / "db",
         ResourcesPackItem.serializer(),
         config.name
     )
@@ -76,7 +69,7 @@ abstract class BasePackManager(
     val packs: List<ResourcesPackItem> = _packs
 
     // 配置文件
-    private val configFile = config.configPath
+    private val configFile = Platform.getData("module") / "private" / config.packName / config.configName
 
     @Serializable
     private data class PackConfig(
@@ -107,17 +100,17 @@ abstract class BasePackManager(
      * 分析包类型和元数据
      */
     fun analyzePack(
-        zip: FileSystem,
+        zip: ZipFile,
         progressCallback: ProgressCallback? = null
     ): PackAnalysisResult? {
         try {
             // 检查 TLPro 格式 (Settings.json)
-            val tlproSettingsPath = "Settings.json".toPath()
-            if (zip.exists(tlproSettingsPath)) {
+            val tlproSettingsEntry = zip.getEntry("Settings.json")
+            if (tlproSettingsEntry != null) {
                 logger.d("Detected TLPro format ${config.packType.displayName}")
                 progressCallback?.invoke(InstallProgress.PARSING_METADATA, null)
 
-                val settingsContent = zip.source(tlproSettingsPath).buffer().use { it.readUtf8() }
+                val settingsContent = zip.getInputStream(tlproSettingsEntry).asSource().buffer().use { it.readUtf8() }
                 val settingsJson = json.parseToJsonElement(settingsContent).jsonObject
 
                 val title = settingsJson["title"]?.jsonPrimitive?.content ?: "Unknown"
@@ -143,12 +136,12 @@ abstract class BasePackManager(
             }
 
             // 检查 Terraria 格式 (pack.json)
-            val terrariaPackPath = "pack.json".toPath()
-            if (zip.exists(terrariaPackPath)) {
+            val terrariaPackEntry = zip.getEntry("pack.json")
+            if (terrariaPackEntry != null) {
                 logger.d("Detected Terraria format ${config.packType.displayName}")
                 progressCallback?.invoke(InstallProgress.PARSING_METADATA, null)
 
-                val packContent = zip.source(terrariaPackPath).buffer().use { it.readUtf8() }
+                val packContent = zip.getInputStream(terrariaPackEntry).asSource().buffer().use { it.readUtf8() }
                 val packJson = json.parseToJsonElement(packContent).jsonObject
 
                 val name = packJson["Name"]?.jsonPrimitive?.content ?: "Unknown"
@@ -175,12 +168,12 @@ abstract class BasePackManager(
             }
 
             // 检查 TEFManager 格式 (pack_info.json)
-            val packInfoPath = "pack_info.json".toPath()
-            if (zip.exists(packInfoPath)) {
+            val packInfoEntry = zip.getEntry("pack_info.json")
+            if (packInfoEntry != null) {
                 logger.d("Detected pack_info.json format ${config.packType.displayName}")
                 progressCallback?.invoke(InstallProgress.PARSING_METADATA, null)
 
-                val packInfoContent = zip.source(packInfoPath).buffer().use { it.readUtf8() }
+                val packInfoContent = zip.getInputStream(packInfoEntry).asSource().buffer().use { it.readUtf8() }
                 val packInfoJson = json.parseToJsonElement(packInfoContent).jsonObject
 
                 val name = packInfoJson["name"]?.jsonPrimitive?.content
@@ -256,7 +249,7 @@ abstract class BasePackManager(
             packsDataBase.flush()
 
             // 删除文件
-            val packFile = Platform.getData("resource_pack") / config.packSubDir / fileName
+            val packFile = Platform.getData("module") / "private" / config.packName / config.packSubDir / fileName
             if (fileSystem.exists(packFile)) {
                 fileSystem.delete(packFile)
             }
@@ -264,7 +257,7 @@ abstract class BasePackManager(
             // 删除图标
             val packId = fileName.removeSuffix(".zip")
             val iconFile =
-                Platform.getData("resource_pack") / config.packSubDir / "icons" / "$packId.png"
+                Platform.getData("module") / "private" / config.packName / config.packSubDir / "icons" / "$packId.png"
             if (fileSystem.exists(iconFile)) {
                 fileSystem.delete(iconFile)
             }
@@ -422,20 +415,6 @@ abstract class BasePackManager(
         }
 
         logger.d("${config.packType.displayName}Manager initialized with ${_packs.size} packs")
-    }
-
-    /**
-     * 获取包数量
-     */
-    fun getPackCount(): Int = _packs.size
-
-    /**
-     * 获取已启用的包
-     */
-    fun getEnabledPacks(): List<ResourcesPackItem> {
-        val configs = readConfigs()
-        val enabledFiles = configs.filter { it.enable }.map { it.file }.toSet()
-        return _packs.filter { it.fileName in enabledFiles }
     }
 }
 

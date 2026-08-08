@@ -27,11 +27,13 @@ import java.io.File
 import java.util.Locale
 
 object StringsGenerator {
+    private const val INTERFACENAME = "LocaleStrings"
+
     /**
     ◦ 为指定模块生成字符串代码（遍历所有JSON文件，生成接口和实现）
      */
-    fun generateForModule(moduleDir: File, packageName: String = "eternal.future.tefmanager.strings.generated") {
-        val resourcesDir = File(moduleDir, "src/commonMain/resources")
+    fun generate(moduleDir: File, packageName: String = "eternal.future.tefmanager.strings.generated") {
+        val resourcesDir = File(moduleDir, "src/commonMain/strings-resources")
         val outputDir = File(moduleDir, "build/generated/strings")
 
         outputDir.deleteRecursively()
@@ -53,17 +55,18 @@ object StringsGenerator {
         }
 
         // 从第一个文件生成基础接口
-        val interfaceName = "LocaleStrings"
         val firstFileData = JSONObject(jsonFiles.first().readText()).toMap()
-        generateBaseInterface(firstFileData, outputDir, packageName, interfaceName)
+        generateBaseInterface(firstFileData, outputDir, packageName)
 
         // 为每个JSON文件生成object实现
         jsonFiles.forEach { jsonFile ->
             try {
                 val jsonData = JSONObject(jsonFile.readText()).toMap()
-                val className = jsonFile.nameWithoutExtension.capitalize(Locale.ROOT)
+                val className = jsonFile.nameWithoutExtension.replaceFirstChar {
+                    if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString()
+                }
 
-                generateObjectImplementation(jsonData, outputDir, packageName, className, interfaceName)
+                generateObjectImplementation(jsonData, outputDir, packageName, className)
                 println("✅ Generated strings object: $className from ${jsonFile.name}")
             } catch (e: Exception) {
                 println("❌ Error processing file ${jsonFile.name}: ${e.message}")
@@ -77,19 +80,18 @@ object StringsGenerator {
     private fun generateBaseInterface(
         data: Map<String, Any>,
         outputDir: File,
-        packageName: String,
-        interfaceName: String
+        packageName: String
     ) {
-        val interfaceBuilder = TypeSpec.interfaceBuilder(interfaceName)
+        val interfaceBuilder = TypeSpec.interfaceBuilder(INTERFACENAME)
 
-        processDataForInterface(data, interfaceBuilder, interfaceName)
+        processDataForInterface(data, interfaceBuilder, INTERFACENAME)
 
-        FileSpec.builder(packageName, interfaceName)
+        FileSpec.builder(packageName, INTERFACENAME)
             .addType(interfaceBuilder.build())
             .build()
             .writeTo(outputDir)
 
-        println("✅ Generated interface: $interfaceName")
+        println("✅ Generated interface: $INTERFACENAME")
     }
 
     private fun processDataForInterface(
@@ -110,7 +112,8 @@ object StringsGenerator {
         val groupedByFirstLevel = dottedKeys.keys.groupBy { it.split('.').first() }
 
         groupedByFirstLevel.forEach { (firstLevel, keys) ->
-            val nestedInterfaceName = firstLevel.capitalize(Locale.ROOT)
+            val nestedInterfaceName =
+                firstLevel.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
 
             // 创建嵌套接口
             val nestedBuilder = TypeSpec.interfaceBuilder(nestedInterfaceName)
@@ -165,9 +168,10 @@ object StringsGenerator {
                 }
             }
             is Map<*, *> -> {
-                val nestedName = key.capitalize(Locale.ROOT)
+                val nestedName =
+                    key.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
                 val nestedBuilder = TypeSpec.interfaceBuilder(nestedName)
-                processDataForInterface(value as Map<String, Any>, nestedBuilder, "$parentInterface.$nestedName")
+                processDataForInterface(value.castTo(), nestedBuilder, "$parentInterface.$nestedName")
                 builder.addType(nestedBuilder.build())
                 builder.addProperty(
                     PropertySpec.builder(key, ClassName("", nestedName))
@@ -187,13 +191,12 @@ object StringsGenerator {
         data: Map<String, Any>,
         outputDir: File,
         packageName: String,
-        className: String,
-        interfaceName: String
+        className: String
     ) {
         val objectBuilder = TypeSpec.objectBuilder(className)
-            .addSuperinterface(ClassName(packageName, interfaceName))
+            .addSuperinterface(ClassName(packageName, INTERFACENAME))
 
-        processDataForImplementation(data, objectBuilder, "$packageName.$interfaceName")
+        processDataForImplementation(data, objectBuilder, "$packageName.$INTERFACENAME")
 
         FileSpec.builder(packageName, className)
             .addType(objectBuilder.build())
@@ -219,7 +222,8 @@ object StringsGenerator {
         val groupedByFirstLevel = dottedKeys.keys.groupBy { it.split('.').first() }
 
         groupedByFirstLevel.forEach { (firstLevel, keys) ->
-            val nestedInterfaceName = firstLevel.capitalize(Locale.ROOT)
+            val nestedInterfaceName =
+                firstLevel.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
             val fullInterfacePath = "$interfacePath.$nestedInterfaceName"
 
             // 收集嵌套数据
@@ -276,9 +280,10 @@ object StringsGenerator {
                 }
             }
             is Map<*, *> -> {
-                val nestedInterfaceName = key.capitalize(Locale.ROOT)
+                val nestedInterfaceName =
+                    key.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
                 val fullInterfacePath = "$interfacePath.$nestedInterfaceName"
-                val nestedCode = generateNestedObjectCode(value as Map<String, Any>, fullInterfacePath, 1)
+                val nestedCode = generateNestedObjectCode(value.castTo(), fullInterfacePath, 1)
 
                 builder.addProperty(
                     PropertySpec.builder(key, ClassName.bestGuess(fullInterfacePath))
@@ -326,10 +331,11 @@ object StringsGenerator {
                     }
                 }
                 is Map<*, *> -> {
-                    val nestedInterfaceName = key.capitalize(Locale.ROOT)
+                    val nestedInterfaceName =
+                        key.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
                     val fullInterfacePath = "$interfacePath.$nestedInterfaceName"
                     sb.append("$indent  override val $key: $fullInterfacePath = ")
-                    sb.append(generateNestedObjectCode(value as Map<String, Any>, fullInterfacePath, indentLevel + 1))
+                    sb.append(generateNestedObjectCode(value.castTo(), fullInterfacePath, indentLevel + 1))
                     sb.append("\n")
                 }
                 is List<*> -> {
@@ -341,7 +347,8 @@ object StringsGenerator {
         // 处理带点键 - 按第一级分组
         val groupedByFirstLevel = dottedKeys.keys.groupBy { it.split('.').first() }
         groupedByFirstLevel.forEach { (firstLevel, keys) ->
-            val nestedInterfaceName = firstLevel.capitalize(Locale.ROOT)
+            val nestedInterfaceName =
+                firstLevel.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() }
             val fullInterfacePath = "$interfacePath.$nestedInterfaceName"
 
             val nestedData = mutableMapOf<String, Any>()
@@ -369,34 +376,12 @@ object StringsGenerator {
         val matches = regex.findAll(text)
         return matches.map {
             val group = it.groupValues[1]
-            if (group.isNotEmpty()) group else "param"
+            group.ifEmpty { "param" }
         }.toList()
     }
-}
 
-// JSONObject 扩展函数，转换为 Map
-private fun JSONObject.toMap(): Map<String, Any> {
-    val map = mutableMapOf<String, Any>()
-    keys().forEach { key ->
-        val value = get(key)
-        when (value) {
-            is JSONObject -> map[key] = value.toMap()
-            is org.json.JSONArray -> map[key] = value.toList()
-            else -> map[key] = value
-        }
+    @Suppress("UNCHECKED_CAST")
+    inline fun <reified K, reified V> Map<*, *>.castTo(): Map<K, V> {
+        return this as Map<K, V>
     }
-    return map
-}
-
-private fun org.json.JSONArray.toList(): List<Any> {
-    val list = mutableListOf<Any>()
-    for (i in 0 until length()) {
-        val value = get(i)
-        when (value) {
-            is JSONObject -> list.add(value.toMap())
-            is org.json.JSONArray -> list.add(value.toList())
-            else -> list.add(value)
-        }
-    }
-    return list
 }

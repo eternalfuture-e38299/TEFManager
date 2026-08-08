@@ -1,13 +1,14 @@
 package eternal.future.tefmanager.utils
 
 import eternal.future.tefmanager.Platform
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
+import no.synth.kmpzip.okio.ZipFile
+import no.synth.kmpzip.okio.asSource
+import no.synth.kmpzip.zip.ZipEntry
+import no.synth.kmpzip.zip.ZipFile
 import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
 import okio.buffer
-import okio.openZip
 import java.io.File
 
 /*******************************************************************************
@@ -33,107 +34,192 @@ import java.io.File
  *******************************************************************************/
 
 object GamePatcher {
-    private val files = FileSystem.SYSTEM;
 
-    fun patchViaDotNetGrafting(filePath: Path, addLoader: Boolean = true, architecture: String = Platform.getArchitecture()) {
-        val kernelDir = Platform.getData("tefkernel")
-        val tefloader = files.openZip(kernelDir / "tefloader.zip")
+    // ==================== Constants ====================
+    private const val DEFAULT_LOADER_FILENAME = "tefloader.zip"
+    private const val RUNTIME_WINDOWS = "net452/"
+    private const val RUNTIME_UNIX = "net472/"
+    private const val BINARY_PREFIX = "Terraria.bin."
+    private const val BINARY_TARGET_PREFIX = "tefloader.bin."
 
-        try {
-            val targetDir = filePath.parent
-            AppLogger.i("Starting .NET grafting patch process")
-            AppLogger.d("Target directory: $targetDir")
-            AppLogger.d("Add loader: $addLoader")
-            AppLogger.d("Architecture: $architecture")
+    private val files = FileSystem.SYSTEM
 
-            if (addLoader) {
-                val netRuntime = if (Platform.isWindows) "net452/" else "net472/"
-                AppLogger.i("Extracting .NET runtime: $netRuntime")
+    // ==================== Public API ====================
 
-                tefloader.list(netRuntime.toPath()).forEach { entry ->
-                    try {
-                        val entryNameWithoutPrefix = entry.name.removePrefix(netRuntime)
-                        val targetFile = targetDir!!.resolve(entryNameWithoutPrefix)
+    /**
+     * 通过 .NET 嫁接方式打补丁
+     * @param filePath 目标文件路径
+     * @param tefLoader 自定义 TEF 加载器路径（空字符串表示使用默认）
+     * @param architecture 目标架构（默认为当前系统架构）
+     */
+    fun patchViaDotNetGrafting(
+        filePath: Path,
+        tefLoader: String = "",
+        architecture: String = Platform.getArchitecture()
+    ) {
+        val targetDir = filePath.parent
+            ?: return AppLogger.e("Failed to get parent directory for: $filePath")
 
-                        files.sink(targetFile).buffer().use { sink ->
-                            tefloader.source(entry).use { source ->
-                                sink.writeAll(source)
-                            }
-                        }
+        val loaderPath = resolveLoaderPath(tefLoader)
+        val useCustomLoader = tefLoader.isNotEmpty()
+        val runtimePrefix = determineRuntimePrefix(useCustomLoader)
 
-                        // 对非Windows系统，为提取的文件设置可执行权限
-                        if (!Platform.isWindows) {
-                            try {
-                                val file = File(targetFile.toString())
-                                if (file.exists()) {
-                                    val result = file.setExecutable(true)
-                                    if (result) {
-                                        AppLogger.d("Set executable permission for: ${targetFile.name}")
-                                    } else {
-                                        AppLogger.w("Failed to set executable permission for: ${targetFile.name}")
-                                    }
-                                }
-                            } catch (e: SecurityException) {
-                                AppLogger.e("Security exception when setting executable permission for ${targetFile.name}", e)
-                            } catch (e: Exception) {
-                                AppLogger.e("Failed to set executable permission for ${targetFile.name}", e)
-                            }
-                        }
+        logGraftingStart(targetDir, loaderPath, architecture, runtimePrefix)
 
-                        AppLogger.d("Extracted: ${entry.name} -> $targetFile")
-                    } catch (e: Exception) {
-                        AppLogger.e("Failed to extract ${entry.name}", e)
-                    }
+        val zipFile = openZipFile(loaderPath)
+        extractLoaderFiles(zipFile, targetDir, runtimePrefix)
+
+        if (!Platform.isWindows) {
+            processBinaryFiles(targetDir)
+        }
+    }
+
+    // ==================== Private Methods ====================
+
+    /**
+     * 解析加载器路径
+     */
+    private fun resolveLoaderPath(customLoader: String): Path {
+        return if (customLoader.isNotEmpty()) {
+            customLoader.toPath()
+        } else {
+            Platform.getData("tefkernel") / DEFAULT_LOADER_FILENAME
+        }
+    }
+
+    /**
+     * 确定运行时前缀
+     */
+    private fun determineRuntimePrefix(useCustomLoader: Boolean): String {
+        return when {
+            useCustomLoader -> ""
+            Platform.isWindows -> RUNTIME_WINDOWS
+            else -> RUNTIME_UNIX
+        }
+    }
+
+    /**
+     * 打开 ZIP 文件
+     */
+    private fun openZipFile(path: Path): ZipFile {
+        return ZipFile(FileSystem.SYSTEM.openReadOnly(path))
+    }
+
+    /**
+     * 提取加载器文件
+     */
+    private fun extractLoaderFiles(
+        zipFile: ZipFile,
+        targetDir: Path,
+        runtimePrefix: String
+    ) {
+        zipFile.entries.forEach { entry ->
+            extractSingleEntry(zipFile, entry, targetDir, runtimePrefix)
+                .onSuccess { targetFile ->
+                    AppLogger.d("Extracted: ${entry.name} -> $targetFile")
                 }
-            }
-
-            if (!Platform.isWindows) {
-                AppLogger.i("Processing binary files for non-Windows platform")
-                val binFiles = files.list(targetDir!!).filter { file ->
-                    file.name.startsWith("Terraria.bin.")
+                .onFailure { e ->
+                    AppLogger.e("Failed to extract ${entry.name}", e)
                 }
+        }
+    }
 
-                AppLogger.d("Found ${binFiles.size} binary files to process")
+    /**
+     * 提取单个 ZIP 条目
+     */
+    private fun extractSingleEntry(
+        zipFile: ZipFile,
+        entry: ZipEntry,
+        targetDir: Path,
+        runtimePrefix: String
+    ): Result<Path> = runCatching {
+        val entryNameWithoutPrefix = entry.name.removePrefix(runtimePrefix)
+        val targetFile = targetDir.resolve(entryNameWithoutPrefix)
 
-                binFiles.forEach { sourceFile ->
-                    try {
-                        val sourceArchitecture = sourceFile.name.removePrefix("Terraria.bin.")
-                        val targetFile = targetDir.resolve("tefloader.bin.$sourceArchitecture")
+        // 写入文件
 
-                        files.copy(sourceFile, targetFile)
-
-                        try {
-                            val copiedFile = File(targetFile.toString())
-                            if (copiedFile.exists()) {
-                                val result = copiedFile.setExecutable(true)
-                                if (result) {
-                                    AppLogger.d("Set executable permission for copied binary: ${targetFile.name}")
-                                } else {
-                                    AppLogger.w("Failed to set executable permission for copied binary: ${targetFile.name}")
-                                }
-                            }
-                        } catch (e: SecurityException) {
-                            AppLogger.e("Security exception when setting executable permission for copied binary ${targetFile.name}", e)
-                        } catch (e: Exception) {
-                            AppLogger.e("Failed to set executable permission for copied binary ${targetFile.name}", e)
-                        }
-
-                        AppLogger.d("Copied binary: ${sourceFile.name} -> ${targetFile.name}")
-                    } catch (e: Exception) {
-                        AppLogger.e("Failed to copy binary ${sourceFile.name}", e)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            AppLogger.e("Error in patchViaDotNetGrafting", e)
-            throw e
-        } finally {
-            try {
-                tefloader.close()
-                AppLogger.i("Zip file closed successfully")
-            } catch (e: Exception) {
-                AppLogger.e("Error closing zip file", e)
+        files.sink(targetFile).buffer().use { sink ->
+            zipFile.getInputStream(entry).asSource().use { source ->
+                sink.writeAll(source)
             }
         }
+
+        // 设置执行权限（非 Windows）
+        setExecutablePermission(targetFile)
+
+        targetFile
+    }
+
+    /**
+     * 处理二进制文件（仅非 Windows 平台）
+     */
+    private fun processBinaryFiles(targetDir: Path) {
+        AppLogger.i("Processing binary files for non-Windows platform")
+
+        val binFiles = files.list(targetDir)
+            .filter { it.name.startsWith(BINARY_PREFIX) }
+
+        AppLogger.d("Found ${binFiles.size} binary files to process")
+
+        binFiles.forEach { sourceFile ->
+            processSingleBinaryFile(sourceFile, targetDir)
+        }
+    }
+
+    /**
+     * 处理单个二进制文件
+     */
+    private fun processSingleBinaryFile(sourceFile: Path, targetDir: Path) {
+        runCatching {
+            val architecture = sourceFile.name.removePrefix(BINARY_PREFIX)
+            val targetFile = targetDir.resolve("${BINARY_TARGET_PREFIX}$architecture")
+
+            files.copy(sourceFile, targetFile)
+            setExecutablePermission(targetFile)
+
+            AppLogger.d("Copied binary: ${sourceFile.name} -> ${targetFile.name}")
+        }.onFailure { e ->
+            AppLogger.e("Failed to copy binary ${sourceFile.name}", e)
+        }
+    }
+
+    /**
+     * 为文件设置可执行权限（非 Windows 系统）
+     */
+    private fun setExecutablePermission(filePath: Path) {
+        if (Platform.isWindows) return
+
+        runCatching {
+            val file = File(filePath.toString())
+            if (file.exists() && file.setExecutable(true)) {
+                AppLogger.d("Set executable permission for: ${filePath.name}")
+            } else {
+                AppLogger.w("Failed to set executable permission for: ${filePath.name}")
+            }
+        }.onFailure { e ->
+            when (e) {
+                is SecurityException -> AppLogger.e(
+                    "Security exception when setting executable permission for ${filePath.name}", e
+                )
+                else -> AppLogger.e(
+                    "Failed to set executable permission for ${filePath.name}", e
+                )
+            }
+        }
+    }
+
+    // ==================== Logging Helpers ====================
+
+    private fun logGraftingStart(
+        targetDir: Path,
+        loaderPath: Path,
+        architecture: String,
+        runtimePrefix: String
+    ) {
+        AppLogger.i("Starting .NET grafting patch process")
+        AppLogger.d("Target directory: $targetDir")
+        AppLogger.d("Loader path: $loaderPath")
+        AppLogger.d("Architecture: $architecture")
+        AppLogger.i("Extracting .NET runtime: $runtimePrefix")
     }
 }

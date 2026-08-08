@@ -26,7 +26,5 @@ import eternal.future.tefmanager.utils.resourcepack.AudioManager
 
 object AudioPackScreen : BasePackScreen(
     manager = AudioManager,
-    title = "音乐包管理",
-    emptyMessage = "暂无音乐包",
-    emptyActionText = "请点击按钮安装音乐包"
+    title = { "音乐包管理" }
 )

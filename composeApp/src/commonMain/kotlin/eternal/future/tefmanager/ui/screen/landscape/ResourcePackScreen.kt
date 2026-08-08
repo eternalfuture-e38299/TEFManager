@@ -19,13 +19,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Translate
@@ -53,10 +51,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import eternal.future.tefmanager.Platform
-import eternal.future.tefmanager.ui.component.ResourcePackInstallDialog
+import eternal.future.tefmanager.ui.dialogs.ResourcePackInstallDialog
 import eternal.future.tefmanager.ui.screen.shared.resourcepack.FontPackScreen
 import eternal.future.tefmanager.ui.screen.shared.resourcepack.LanguagePackScreen
-import eternal.future.tefmanager.ui.screen.shared.resourcepack.AudioPackScreen
 import eternal.future.tefmanager.ui.screen.shared.resourcepack.LanguagePatchPackScreen
 import eternal.future.tefmanager.ui.screen.shared.resourcepack.TexturePackScreen
 import io.github.vinceglb.filekit.dialogs.FileKitMode
@@ -71,6 +68,7 @@ import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
 import okio.SYSTEM
+import eternal.future.tefmanager.strings.StringsResource.Strings
 
 /*******************************************************************************
  * TEFManager - ResourcePackScreen
@@ -106,45 +104,52 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
     @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
-        val categories = remember {
-            listOf(
-                ResourceCategory(
+        val categories = mutableListOf(
+            ResourceCategory(
                 id = "language",
-                title = "语言包",
+                title = Strings.resource.language.title,
                 icon = Icons.Outlined.Translate,
                 iconFilled = Icons.Rounded.Translate,
                 screen = LanguagePackScreen
-                ),
-                ResourceCategory(
-                    id = "language_patch",
-                    title = "语言补丁包",
-                    icon = Icons.Outlined.Edit,
-                    iconFilled = Icons.Rounded.Edit,
-                    screen = LanguagePatchPackScreen
-                ),
-                ResourceCategory(
-                    id = "texture",
-                    title = "材质包",
-                    icon = Icons.Outlined.Palette,
-                    iconFilled = Icons.Rounded.Palette,
-                    screen = TexturePackScreen
-                ),
-                ResourceCategory(
-                    id = "font",
-                    title = "字体包",
-                    icon = Icons.Outlined.TextFields,
-                    iconFilled = Icons.Rounded.TextFields,
-                    screen = FontPackScreen
-                ),
+            ),
+            ResourceCategory(
+                id = "language_patch",
+                title = Strings.resource.languagePatch,
+                icon = Icons.Outlined.Edit,
+                iconFilled = Icons.Rounded.Edit,
+                screen = LanguagePatchPackScreen
+            )
+        )
+
+        if (Platform.isAndroid) {
+            categories.addAll(
+                listOf(
+                    ResourceCategory(
+                        id = "texture",
+                        title = Strings.resource.texture,
+                        icon = Icons.Outlined.Palette,
+                        iconFilled = Icons.Rounded.Palette,
+                        screen = TexturePackScreen
+                    ),
+                    ResourceCategory(
+                        id = "font",
+                        title = Strings.resource.font.title,
+                        icon = Icons.Outlined.TextFields,
+                        iconFilled = Icons.Rounded.TextFields,
+                        screen = FontPackScreen
+                    )/*,
                 ResourceCategory(
                     id = "music",
                     title = "音乐包",
                     icon = Icons.Outlined.MusicNote,
                     iconFilled = Icons.Rounded.MusicNote,
                     screen = AudioPackScreen
+                ) */
                 )
             )
         }
+
+
 
         var selectedTab by remember { mutableIntStateOf(0) }
         val pagerState = rememberPagerState(pageCount = { categories.size })
@@ -187,7 +192,7 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
                     }
 
                     Text(
-                        text = "资源包管理",
+                        text = Strings.resource.title,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface
@@ -333,7 +338,7 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
         ) { files ->
             installFiles.clear()
             files?.forEach { file ->
-                val tmp = kotlinx.io.files.Path((Platform.getData("install_tmp") / file.nameWithoutExtension).toString())
+                val tmp = kotlinx.io.files.Path((Platform.getDirectory("tmp") / "install_tmp" / file.nameWithoutExtension).toString())
                 tmp.parent?.let { SystemFileSystem.createDirectories(it) }
                 SystemFileSystem.sink(tmp).buffered().use { sink ->
                     sink.write(file.source(), file.size())
@@ -348,7 +353,7 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
             ResourcePackInstallDialog(
                 filePaths = installFiles,
                 onDismiss = {
-                    FileSystem.SYSTEM.deleteRecursively(Platform.getData("install_tmp"))
+                    FileSystem.SYSTEM.deleteRecursively(Platform.getDirectory("tmp") / "install_tmp")
                     installFiles.clear()
                     showInstallDialog = false
                 }
@@ -403,7 +408,7 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    "添加",
+                    Strings.resource.add(""),
                     style = MaterialTheme.typography.labelLarge
                 )
             }
@@ -411,5 +416,5 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
     }
 
     override val title: String
-        get() = "资源包管理"
+        get() = Strings.resource.title
 }

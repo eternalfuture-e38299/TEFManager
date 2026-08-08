@@ -1,6 +1,5 @@
 package eternal.future.tefmanager
 
-import eternal.future.tefmanager.utils.AddonManager
 import eternal.future.tefmanager.utils.AppLogger
 import eternal.future.tefmanager.utils.LightProtoStore
 import eternal.future.tefmanager.utils.TefPkgReader
@@ -233,7 +232,7 @@ class JvmTest {
         TexturePackManager.installTexturePack("/home/eternalfuture/Downloads/色彩boss雕像1.0.zip".toPath())
         TexturePackManager.installTexturePack("/home/eternalfuture/Downloads/Boss彩色圣杯.tl".toPath())
 
-        /*AddonManager.installOrUpdate("/home/eternalfuture/测试目录/test_mod/压缩文件.zip".toPath()) { progress, error ->
+        /*AddonManager.install("/home/eternalfuture/测试目录/test_mod/压缩文件.zip".toPath()) { progress, error ->
             when (progress) {
                 AddonManager.InstallProgress.STARTING -> println("Installation started")
                 AddonManager.InstallProgress.READING_MANIFEST -> println("Reading package manifest")

@@ -1,6 +1,7 @@
 package eternal.future.tefmanager.ui.screen.portrait
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -45,9 +47,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -55,30 +57,31 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import eternal.future.tefmanager.Platform
+import eternal.future.tefmanager.model.ModItem
+import eternal.future.tefmanager.model.ModLoaderItem
+import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.ui.component.ModItemCard
 import eternal.future.tefmanager.ui.component.ModLoaderItemCard
 import eternal.future.tefmanager.ui.component.ModuleItemCard
 import eternal.future.tefmanager.ui.component.PluginItemCard
 import eternal.future.tefmanager.ui.dialogs.AddonInstallOrUpdateDialog
-import eternal.future.tefmanager.ui.dialogs.ConfigManager
-import eternal.future.tefmanager.ui.dialogs.GlobalConfigEditor
-import eternal.future.tefmanager.ui.model.GlobalConfig
-import eternal.future.tefmanager.ui.model.ModItem
-import eternal.future.tefmanager.ui.model.ModLoaderItem
-import eternal.future.tefmanager.ui.model.ModuleItem
-import eternal.future.tefmanager.utils.AddonManager
+import eternal.future.tefmanager.utils.addon.AddonManager
+import eternal.future.tefmanager.utils.addon.ModLoaderManager
+import eternal.future.tefmanager.utils.addon.ModuleManager
+import eternal.future.tefmanager.utils.addon.PluginManager
 import eternal.future.tefmanager.utils.toFileUrlString
 import io.github.vinceglb.filekit.dialogs.FileKitMode
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
@@ -96,6 +99,7 @@ import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
 import okio.SYSTEM
+import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
 
 /*******************************************************************************
@@ -121,11 +125,6 @@ import kotlin.time.Duration.Companion.milliseconds
  *******************************************************************************/
 
 object ManagerScreen : Screen, MainScreen.TitledScreen {
-
-    private val kernelModules = AddonManager.modulesDataBase.getAllValues().toMutableStateList()
-    private val kernelPlugins = AddonManager.pluginsDataBase.getAllValues().toMutableStateList()
-    private val modLoaders = AddonManager.modLoaderDataBase.getAllValues().toMutableStateList()
-    private val modList = mutableStateMapOf<String, SnapshotStateList<ModItem>>()
     private var categories = mutableStateListOf<ManagerTab>()
 
     data class ManagerTab(
@@ -135,7 +134,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         val isKernel: Boolean = false,
         val isKernelPlugin: Boolean = false,
         val isModLoader: Boolean = false,
-        val fabText: String = "添加",
+        val fabText: String,
         val fabAction: () -> Unit = {},
         val iconPath: Path? = null
     )
@@ -149,7 +148,6 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         val pagerState = rememberPagerState(pageCount = { categories.size })
         val coroutineScope = rememberCoroutineScope()
 
-        val globalConfig = remember { mutableStateOf<GlobalConfig?>(null) }
         val showAddonInstallOrUpdateDialog = remember { mutableStateOf(false) }
 
         val installFiles = remember { mutableListOf<Path>() }
@@ -158,7 +156,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         ) { files ->
             installFiles.clear()
             files?.forEach { file ->
-                val tmp = kotlinx.io.files.Path((Platform.getData("install_tmp") / file.nameWithoutExtension).toString())
+                val tmp = kotlinx.io.files.Path((Platform.getDirectory("tmp") / "install_tmp" / file.nameWithoutExtension).toString())
 
                 tmp.parent?.let { SystemFileSystem.createDirectories(it) }
 
@@ -174,33 +172,33 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         categories = (listOf(
             ManagerTab(
                 id = "kernel",
-                title = "内核模块",
+                title = Strings.manager.module.title,
                 icon = Icons.Rounded.Memory,
                 isKernel = true,
-                fabText = "添加模块",
+                fabText = Strings.manager.module.add,
                 fabAction = { filePickerLauncher.launch() }
             ),
             ManagerTab(
                 id = "kernel_plugins",
-                title = "内核插件",
+                title = Strings.manager.plugin.title,
                 icon = Icons.Rounded.Extension,
                 isKernelPlugin = true,
-                fabText = "添加插件",
+                fabText = Strings.manager.plugin.add,
                 fabAction = { filePickerLauncher.launch() }
             ),
             ManagerTab(
                 id = "mod_loaders",
-                title = "模组加载器",
+                title = Strings.manager.modloader.title,
                 icon = Icons.Rounded.Dashboard,
                 isModLoader = true,
-                fabText = "添加加载器",
+                fabText = Strings.manager.modloader.add,
                 fabAction = { filePickerLauncher.launch() }
             )
-        ) + modLoaders.map { loader ->
+        ) + ModLoaderManager.packs.map { loader ->
             ManagerTab(
                 id = loader.pkgId,
                 title = loader.name,
-                fabText = "添加模组",
+                fabText = Strings.manager.mod.add,
                 fabAction = { filePickerLauncher.launch() },
                 iconPath = Platform.getData("modloader") / "icons" / "${loader.pkgId}.icon"
             )
@@ -208,32 +206,14 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
 
         if (showAddonInstallOrUpdateDialog.value) {
             AddonInstallOrUpdateDialog(installFiles) {
-                FileSystem.SYSTEM.deleteRecursively(Platform.getData("install_tmp"))
-
-                installFiles.clear()
-                showAddonInstallOrUpdateDialog.value = false
-
-                modLoaders.clear()
-                modLoaders.addAll(AddonManager.modLoaderDataBase.getAllValues())
-
-                kernelModules.clear()
-                kernelModules.addAll(AddonManager.modulesDataBase.getAllValues())
-
-                kernelPlugins.clear()
-                kernelPlugins.addAll(AddonManager.pluginsDataBase.getAllValues())
-
-                modList.forEach {
-                    it.value.clear()
-                    it.value.addAll(AddonManager.getOrCreateModDatabase(it.key)!!.getAllValues())
-                }
-
+                FileSystem.SYSTEM.deleteRecursively(Platform.getDirectory("tmp") / "install_tmp")
                 val newCategories = mutableListOf<ManagerTab>()
 
                 newCategories.addAll(categories.filter { tab ->
                     tab.id == "kernel" || tab.id == "kernel_plugins" || tab.id == "mod_loaders"
                 })
 
-                modLoaders.forEach { loader ->
+                ModLoaderManager.packs.forEach { loader ->
                     newCategories.add(ManagerTab(
                         id = loader.pkgId,
                         title = loader.name,
@@ -245,19 +225,9 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
 
                 categories.clear()
                 categories.addAll(newCategories)
-            }
-        }
 
-        if (globalConfig.value != null) {
-            GlobalConfigEditor(globalConfig.value!!,
-                ConfigManager.readConfigFile(globalConfig.value!!.generateFile),
-                {
-                    ConfigManager.writeConfigFile(globalConfig.value!!.generateFile, it)
-                },
-                {
-                    globalConfig.value = null
-                }
-            )
+                showAddonInstallOrUpdateDialog.value = false
+            }
         }
 
         val enabledLoaders = remember {
@@ -266,22 +236,10 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
 
         val currentCategory = categories.getOrNull(selectedTab)
 
-        LaunchedEffect(modLoaders) {
-            AddonManager.refreshModDatabases(modLoaders)
-            enabledLoaders.apply {
-                modLoaders.forEach {
-                    val enabled = AddonManager.isAddonEnabled("modloader", it.pkgId)
-                    put(
-                        it.pkgId,
-                        enabled
-                    )
-
-                    if (enabled) {
-                        AddonManager.modDataBaseList[it.pkgId]?.getAllValues()?.toMutableStateList()?.let { list ->
-                            modList[it.pkgId] = list
-                        }
-                    }
-                }
+        LaunchedEffect(ModLoaderManager.packs) {
+            AddonManager.refreshModManager(ModLoaderManager.packs)
+            ModLoaderManager.packs.forEach {
+                enabledLoaders[it.pkgId] = ModLoaderManager.isEnabled(it.pkgId)
             }
         }
 
@@ -318,26 +276,36 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                             coroutineScope.launch {
                                 pagerState.animateScrollToPage(index)
                             }
-                        },
-                        globalConfig = globalConfig
+                        }
                     )
                 } else {
                     SearchResultsView(
                         searchQuery = debouncedSearchQuery,
                         enabledLoaders = enabledLoaders
-                    ) {
-                        if (it.globalConfig.fileType != "null" && it.globalConfig.fileType.isNotEmpty())
-                            globalConfig.value = it.globalConfig
-                    }
+                    )
                 }
             }
 
             currentCategory?.let { category ->
+                var offsetX by remember { mutableFloatStateOf(0f) }
+                var offsetY by remember { mutableFloatStateOf(0f) }
+
                 ExtendedFloatingActionButton(
                     onClick = category.fabAction,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(16.dp),
+                        .padding(16.dp).offset {
+                            IntOffset(
+                                offsetX.roundToInt(),
+                                offsetY.roundToInt()
+                            )
+                        }
+                        .pointerInput(Unit) {
+                            detectDragGestures { _, dragAmount ->
+                                offsetX += dragAmount.x
+                                offsetY += dragAmount.y
+                            }
+                        },
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     shape = RoundedCornerShape(16.dp)
@@ -361,12 +329,16 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
     @Composable
     private fun SearchResultsView(
         searchQuery: String,
-        enabledLoaders: SnapshotStateMap<String, Boolean>,
-        configureCallback: ((ModItem) -> Unit)?
+        enabledLoaders: SnapshotStateMap<String, Boolean>
     ) {
         val query = searchQuery.trim()
 
-        val searchResults = remember(query, enabledLoaders, modList) {
+        // 获取所有启用的加载器包名列表
+        val enabledPackages = remember(enabledLoaders) {
+            enabledLoaders.filter { it.value }.keys.toList()
+        }
+
+        val searchResults = remember(query, enabledPackages) {
             derivedStateOf {
                 if (query.isEmpty()) {
                     emptyList()
@@ -374,17 +346,25 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                     val lowerQuery = query.lowercase()
                     val results = mutableListOf<Pair<ModLoaderItem, ModItem>>()
 
-                    modList.forEach {
-                        it.value.forEach { mod ->
-                            val matches = isModMatchingSearch(mod, lowerQuery)
-                            if (matches) {
-                                modLoaders.find { modLoader -> modLoader.pkgId == it.key }?.let { loader ->
-                                    results.add(loader to mod)
+                    // 遍历所有启用的加载器
+                    enabledPackages.forEach { pkgId ->
+                        // 从 AddonManager 获取对应的 ModManager
+                        val modManager = AddonManager.modManagersList[pkgId]
+                        if (modManager != null) {
+                            // 获取该管理器中的所有 Mod
+                            val mods = modManager.packs // 或 modManager.values
+                            mods.forEach { mod ->
+                                if (isModMatchingSearch(mod, lowerQuery)) {
+                                    ModLoaderManager.packs.find { it.pkgId == pkgId }
+                                        ?.let { loader ->
+                                            results.add(loader to mod)
+                                        }
                                 }
                             }
                         }
                     }
 
+                    // 按相关度排序
                     results.sortedByDescending { (_, mod) ->
                         calculateRelevance(mod, lowerQuery)
                     }
@@ -405,21 +385,21 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.SearchOff,
-                        contentDescription = "无结果",
+                        contentDescription = Strings.manager.search.noResults,
                         modifier = Modifier.size(72.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = if (query.isEmpty()) "输入关键词开始搜索" else "未找到相关模组",
+                        text = if (query.isEmpty()) Strings.manager.search.hint else Strings.manager.search.noResults,
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = if (query.isEmpty()) "搜索模组名称、作者、描述等关键词"
-                        else "尝试使用其他关键词，或确保相关加载器已启用",
+                        text = if (query.isEmpty()) Strings.manager.search.hintDesc
+                        else Strings.manager.search.tryOther,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
@@ -446,7 +426,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.Search,
-                                    contentDescription = "搜索结果",
+                                    contentDescription = null,
                                     modifier = Modifier.size(20.dp),
                                     tint = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
@@ -454,7 +434,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                         }
 
                         Text(
-                            text = "搜索结果",
+                            text = Strings.manager.search.results,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface
@@ -466,7 +446,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                             onClick = {},
                             label = {
                                 Text(
-                                    "${searchResults.size} 个结果",
+                                    Strings.manager.search.resultCount(searchResults.size),
                                     style = MaterialTheme.typography.labelSmall
                                 )
                             },
@@ -488,22 +468,33 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                             items = searchResults,
                             key = { (loader, mod) -> "${loader.pkgId}_${mod.pkgId}" }
                         ) { (loader, mod) ->
-                            ModItemCard(
-                                mod = mod,
-                                enabled = AddonManager.isAddonEnabled("mods", mod.pkgId, loader.pkgId),
-                                customIconPath = Platform.getData("mods") / loader.pkgId / "icons" / "${mod.pkgId}.icon",
-                                onEnableChange = { enable ->
-                                    if (enable) AddonManager.enableAddon("mods", mod.pkgId, loader.pkgId)
-                                    else AddonManager.disableAddon("mods", mod.pkgId, loader.pkgId)
-                                },
-                                onDelete = {
-                                    runBlocking {
-                                        AddonManager.deleteMod(mod.pkgId, loader.pkgId)
-                                        modList[loader.pkgId]?.remove(mod)
+                            val manager = AddonManager.modManagersList[loader.pkgId]
+                            if (manager != null) {
+                                // 检查 Mod 是否存在且已启用
+                                var enabled by remember {
+                                    mutableStateOf(manager.isEnabled(mod.pkgId))
+                                }
+
+                                ModItemCard(
+                                    mod = mod,
+                                    enabled = enabled,
+                                    customIconPath = manager.getIconFilePath(mod.pkgId),
+                                    onEnableChange = { enable ->
+                                        enabled = enable
+                                        if (enable) {
+                                            manager.enable(mod.pkgId)
+                                        } else {
+                                            manager.disable(mod.pkgId)
+                                        }
+                                    },
+                                    onDelete = {
+                                        // 删除 Mod
+                                        runBlocking {
+                                            manager.delete(mod.pkgId)
+                                        }
                                     }
-                                },
-                                configureCallback
-                            )
+                                )
+                            }
                         }
                     }
                 }
@@ -553,8 +544,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         selectedTab: Int,
         pagerState: PagerState,
         enabledLoaders: MutableMap<String, Boolean>,
-        onTabSelected: (Int) -> Unit,
-        globalConfig: MutableState<GlobalConfig?>
+        onTabSelected: (Int) -> Unit
     ) {
         val loaderStates by remember(enabledLoaders) {
             derivedStateOf { enabledLoaders.toMap() }
@@ -580,32 +570,25 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                 val tab = categories.getOrNull(page)
 
                 when {
-                    tab?.isKernel == true -> KernelModulesSection {
-                        globalConfig.value = it.globalConfig
-                    }
+                    tab?.isKernel == true -> KernelModulesSection()
                     tab?.isKernelPlugin == true -> KernelPluginsSection()
                     tab?.isModLoader == true -> ModLoadersSection(
                         enabledLoaders = enabledLoaders,
                         onLoaderToggle = { loaderId, enabled ->
                             enabledLoaders[loaderId] = enabled
                             if (enabled) {
-                                AddonManager.enableAddon("modloader", loaderId)
-                                modList[loaderId] = AddonManager.getOrCreateModDatabase(loaderId, true)!!.getAllValues()
-                                    .toMutableStateList()
+                                ModLoaderManager.enable(loaderId)
+                                AddonManager.getOrCreateModManager(loaderId, true)
                             } else {
-                                AddonManager.disableAddon("modloader", loaderId)
-                                AddonManager.closeModDatabase(loaderId)
-                                modList.remove(loaderId)
+                                ModLoaderManager.disable(loaderId)
+                                AddonManager.closeModManager(loaderId)
                             }
                         }
                     )
                     else -> {
-                        val loader = modLoaders.find { it.pkgId == tab?.id }
+                        val loader = ModLoaderManager.packs.find { it.pkgId == tab?.id }
                         if (loader != null && loaderStates[loader.pkgId] == true) {
                             ModListSection(loader = loader)
-                            {
-                                globalConfig.value = it.globalConfig
-                            }
                         } else {
                             DisabledLoaderSection(loader = loader)
                         }
@@ -751,17 +734,15 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
     }
 
     @Composable
-    private fun KernelModulesSection(
-        configureCallback: ((ModuleItem) -> Unit)?
-    ) {
+    private fun KernelModulesSection() {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         ) {
             SectionHeader(
-                title = "内核模块",
-                subtitle = "系统级核心模块，优化游戏运行性能",
+                title = Strings.manager.module.title,
+                subtitle = Strings.manager.module.subtitle,
                 icon = Icons.Rounded.Memory
             )
 
@@ -771,22 +752,23 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(kernelModules) { module ->
+                items(ModuleManager.packs) { module ->
+                    var enabled by remember { mutableStateOf(ModuleManager.isEnabled(module.pkgId)) }
+
                     ModuleItemCard(
                         module = module,
-                        AddonManager.isAddonEnabled("module", module.pkgId),
-                        customIconPath = Platform.getData("module") / "icons" / "${module.pkgId}.icon",
+                        enabled,
+                        customIconPath = ModuleManager.getIconFilePath(module.pkgId),
                         onEnableChange = {
-                            if (it) AddonManager.enableAddon("module", module.pkgId)
-                            else AddonManager.disableAddon("module", module.pkgId)
+                            enabled = it
+                            if (it) ModuleManager.enable(module.pkgId)
+                            else ModuleManager.disable(module.pkgId)
                         },
                         onDelete = {
                             runBlocking {
-                                AddonManager.deleteModule(module.pkgId)
-                                kernelModules.remove(module)
+                                ModuleManager.delete(module.pkgId)
                             }
-                        },
-                        onConfigure = configureCallback
+                        }
                     )
                 }
             }
@@ -801,8 +783,8 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                 .padding(horizontal = 16.dp)
         ) {
             SectionHeader(
-                title = "内核插件",
-                subtitle = "为模组加载器提供扩展功能，增强模组开发能力",
+                title = Strings.manager.plugin.title,
+                subtitle = Strings.manager.plugin.subtitle,
                 icon = Icons.Rounded.Extension
             )
 
@@ -812,14 +794,13 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(kernelPlugins) { plugin ->
+                items(PluginManager.packs) { plugin ->
                     PluginItemCard(
                         plugin = plugin,
-                        Platform.getData("plugin") / "icons" / "${plugin.pkgId}.icon"
+                        PluginManager.getIconFilePath(plugin.pkgId)
                     ) {
                         runBlocking {
-                            AddonManager.deletePlugin(plugin.pkgId)
-                            kernelPlugins.remove(plugin)
+                            PluginManager.delete(plugin.pkgId)
                         }
                     }
                 }
@@ -850,14 +831,14 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
-                        text = "模组加载器",
+                        text = Strings.manager.modloader.title,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
 
                     Text(
-                        text = "启用后可管理对应的模组",
+                        text = Strings.manager.modloader.titleDec,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -869,7 +850,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                     onClick = {},
                     label = {
                         Text(
-                            "${enabledCount}/${modLoaders.size} 已启用",
+                            Strings.manager.modloader.enabled("${enabledCount}/${ModLoaderManager.packs.size}"),
                             style = MaterialTheme.typography.labelSmall
                         )
                     },
@@ -897,13 +878,13 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Info,
-                        contentDescription = "提示",
+                        contentDescription = null,
                         modifier = Modifier.size(18.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
 
                     Text(
-                        text = "禁用加载器可隐藏其模组列表，减少内存占用",
+                        text = Strings.manager.modloader.prompt,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -916,11 +897,14 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(modLoaders) { loader ->
-                    val enabled = loaderStates[loader.pkgId] ?: AddonManager.isAddonEnabled(
-                        "modloader",
+                items(ModLoaderManager.packs) { loader ->
+                    val enabled by remember {
+                        mutableStateOf(
+                            loaderStates[loader.pkgId] ?: ModLoaderManager.isEnabled(
                         loader.pkgId
-                    )
+                            )
+                        )
+                    }
 
                     ModLoaderItemCard(
                         modLoader = loader,
@@ -929,10 +913,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                         onEnableChange = { onLoaderToggle(loader.pkgId, it) },
                         onDelete = {
                             runBlocking {
-                                AddonManager.deleteModLoader(loader.pkgId)
-                                AddonManager.closeModDatabase(loader.pkgId)
-                                modList.remove(loader.pkgId)
-                                modLoaders.remove(loader)
+                                ModLoaderManager.delete(loader.pkgId)
                                 categories.removeAll { it.id == loader.pkgId }
                             }
                         }
@@ -944,8 +925,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
 
     @Composable
     private fun ModListSection(
-        loader: ModLoaderItem,
-        configureCallback: ((ModItem) -> Unit)?
+        loader: ModLoaderItem
     ) {
         Column(
             modifier = Modifier
@@ -964,23 +944,25 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                modList[loader.pkgId]?.let { currentModList ->
-                    items(currentModList) { mod ->
+                AddonManager.modManagersList[loader.pkgId]?.let { currentModList ->
+                    items(currentModList.packs) { mod ->
+                        val manager = AddonManager.getOrCreateModManager(loader.pkgId)!!
+                        var enabled by remember { mutableStateOf(manager.isEnabled(mod.pkgId)) }
+
                         ModItemCard(
                             mod = mod,
-                            enabled = AddonManager.isAddonEnabled("mods", mod.pkgId, loader.pkgId),
-                            customIconPath = Platform.getData("mods") / loader.pkgId / "icons" / "${mod.pkgId}.icon",
+                            enabled = enabled,
+                            customIconPath = manager.getIconFilePath(mod.pkgId),
                             onEnableChange = { enable ->
-                                if (enable) AddonManager.enableAddon("mods", mod.pkgId, loader.pkgId)
-                                else AddonManager.disableAddon("mods", mod.pkgId, loader.pkgId)
+                                enabled = enable
+                                if (enable) manager.enable(mod.pkgId)
+                                else manager.disable(mod.pkgId)
                             },
                             onDelete = {
                                 runBlocking {
-                                    AddonManager.deleteMod(mod.pkgId, loader.pkgId)
-                                    modList[loader.pkgId]?.remove(mod)
+                                    manager.delete(mod.pkgId)
                                 }
-                            },
-                            configureCallback
+                            }
                         )
                     }
                 }
@@ -1049,7 +1031,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         ) {
             Icon(
                 imageVector = Icons.Rounded.ToggleOff,
-                contentDescription = "加载器已禁用",
+                contentDescription = null,
                 modifier = Modifier.size(72.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
             )
@@ -1057,7 +1039,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "加载器已禁用",
+                text = Strings.manager.modloader.disabled,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1066,7 +1048,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "在「模组加载器」页面中启用 ${loader?.name ?: "此加载器"}",
+                text = Strings.manager.modloader.disabledHint(loader?.name ?: ""),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
@@ -1087,7 +1069,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             placeholder = {
                 Text(
-                    "搜索模组...",
+                    Strings.manager.searchMod,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )
@@ -1095,7 +1077,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Rounded.Search,
-                    contentDescription = "搜索",
+                    contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
@@ -1104,7 +1086,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                     IconButton(onClick = { onQueryChange("") }) {
                         Icon(
                             imageVector = Icons.Rounded.Close,
-                            contentDescription = "清除",
+                            contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -1123,5 +1105,5 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
     }
 
     override val title: String
-        get() = "模组管理"
+        get() = Strings.manager.title
 }

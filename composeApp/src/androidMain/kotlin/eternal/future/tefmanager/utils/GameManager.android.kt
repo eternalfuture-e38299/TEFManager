@@ -9,7 +9,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import eternal.future.tefmanager.MainActivity
 import eternal.future.tefmanager.Platform
-import eternal.future.tefmanager.ui.model.GameItem
+import eternal.future.tefmanager.model.GameItem
 import java.io.File
 import java.security.MessageDigest
 

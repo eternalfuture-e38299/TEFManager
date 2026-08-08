@@ -1,6 +1,7 @@
 package eternal.future.tefmanager.ui.screen.portrait
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -17,13 +19,11 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Translate
@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,15 +46,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import eternal.future.tefmanager.Platform
-import eternal.future.tefmanager.ui.component.ResourcePackInstallDialog
+import eternal.future.tefmanager.ui.dialogs.ResourcePackInstallDialog
 import eternal.future.tefmanager.ui.screen.shared.resourcepack.FontPackScreen
 import eternal.future.tefmanager.ui.screen.shared.resourcepack.LanguagePackScreen
-import eternal.future.tefmanager.ui.screen.shared.resourcepack.AudioPackScreen
 import eternal.future.tefmanager.ui.screen.shared.resourcepack.LanguagePatchPackScreen
 import eternal.future.tefmanager.ui.screen.shared.resourcepack.TexturePackScreen
 import io.github.vinceglb.filekit.dialogs.FileKitMode
@@ -68,6 +70,8 @@ import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
 import okio.SYSTEM
+import eternal.future.tefmanager.strings.StringsResource.Strings
+import kotlin.math.roundToInt
 
 /*******************************************************************************
  * TEFManager - ResourcePackScreen
@@ -103,45 +107,51 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
     @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
-        val categories = remember {
-            listOf(
+        val categories = mutableListOf(
                 ResourceCategory(
                     id = "language",
-                    title = "语言包",
+                    title = Strings.resource.language.title,
                     icon = Icons.Outlined.Translate,
                     iconFilled = Icons.Rounded.Translate,
                     screen = LanguagePackScreen
                 ),
                 ResourceCategory(
                     id = "language_patch",
-                    title = "语言补丁包",
+                    title = Strings.resource.languagePatch,
                     icon = Icons.Outlined.Edit,
                     iconFilled = Icons.Rounded.Edit,
                     screen = LanguagePatchPackScreen
-                ),
-                ResourceCategory(
-                    id = "texture",
-                    title = "材质包",
-                    icon = Icons.Outlined.Palette,
-                    iconFilled = Icons.Rounded.Palette,
-                    screen = TexturePackScreen
-                ),
-                ResourceCategory(
-                    id = "font",
-                    title = "字体包",
-                    icon = Icons.Outlined.TextFields,
-                    iconFilled = Icons.Rounded.TextFields,
-                    screen = FontPackScreen
-                ),
+                )
+            )
+
+        if (Platform.isAndroid) {
+            categories.addAll(
+                listOf(
+                    ResourceCategory(
+                        id = "texture",
+                        title = Strings.resource.texture,
+                        icon = Icons.Outlined.Palette,
+                        iconFilled = Icons.Rounded.Palette,
+                        screen = TexturePackScreen
+                    ),
+                    ResourceCategory(
+                        id = "font",
+                        title = Strings.resource.font.title,
+                        icon = Icons.Outlined.TextFields,
+                        iconFilled = Icons.Rounded.TextFields,
+                        screen = FontPackScreen
+                    )/*,
                 ResourceCategory(
                     id = "music",
                     title = "音乐包",
                     icon = Icons.Outlined.MusicNote,
                     iconFilled = Icons.Rounded.MusicNote,
                     screen = AudioPackScreen
+                ) */
                 )
             )
         }
+
 
         var selectedTab by remember { mutableIntStateOf(0) }
         val pagerState = rememberPagerState(pageCount = { categories.size })
@@ -159,7 +169,7 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
         ) { files ->
             installFiles.clear()
             files?.forEach { file ->
-                val tmp = kotlinx.io.files.Path((Platform.getData("install_tmp") / file.nameWithoutExtension).toString())
+                val tmp = kotlinx.io.files.Path((Platform.getDirectory("tmp") / "install_tmp" / file.nameWithoutExtension).toString())
                 tmp.parent?.let { SystemFileSystem.createDirectories(it) }
                 SystemFileSystem.sink(tmp).buffered().use { sink ->
                     sink.write(file.source(), file.size())
@@ -174,87 +184,105 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
             ResourcePackInstallDialog(
                 filePaths = installFiles,
                 onDismiss = {
-                    FileSystem.SYSTEM.deleteRecursively(Platform.getData("install_tmp"))
+                    FileSystem.SYSTEM.deleteRecursively(Platform.getDirectory("tmp") / "install_tmp")
                     installFiles.clear()
                     showInstallDialog = false
                 }
             )
         }
 
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            floatingActionButton = {
-                ExtendedFloatingActionButton(
-                    onClick = { filePickerLauncher.launch() },
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    shape = RoundedCornerShape(16.dp),
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Rounded.Add,
-                            contentDescription = "添加",
-                            modifier = Modifier.size(20.dp)
-                        )
-                    },
-                    text = {
-                        Text(
-                            text = "添加${categories[selectedTab].title}",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                )
-            }
-        ) { _ ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp)
-            ) {
-                // M3E 标签栏 - 竖屏滚动版本
-                M3ETabRow(
-                    categories = categories,
-                    selectedTab = selectedTab,
-                    onTabSelected = { index ->
-                        selectedTab = index
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(index)
-                        }
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 水平分页器
-                HorizontalPager(
-                    state = pagerState,
+        Box(modifier = Modifier.fillMaxSize()) {
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+            ) { _ ->
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                ) { page ->
-                    val category = categories[page]
-                    Surface(
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp)
+                ) {
+                    // M3E 标签栏 - 竖屏滚动版本
+                    M3ETabRow(
+                        categories = categories,
+                        selectedTab = selectedTab,
+                        onTabSelected = { index ->
+                            selectedTab = index
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(index)
+                            }
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // 水平分页器
+                    HorizontalPager(
+                        state = pagerState,
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 4.dp),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Column(
+                            .fillMaxWidth()
+                            .weight(1f)
+                    ) { page ->
+                        val category = categories[page]
+                        Surface(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(vertical = 8.dp)
+                                .padding(horizontal = 4.dp),
+                            shape = RoundedCornerShape(16.dp)
                         ) {
-                            CategoryHeader(
-                                category = category
-                            )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(vertical = 8.dp)
+                            ) {
+                                CategoryHeader(
+                                    category = category
+                                )
 
-                            Spacer(modifier = Modifier.height(12.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
 
-                            categories[page].screen.Content()
+                                categories[page].screen.Content()
+                            }
                         }
                     }
                 }
             }
+
+            var offsetX by remember { mutableFloatStateOf(0f) }
+            var offsetY by remember { mutableFloatStateOf(0f) }
+
+            ExtendedFloatingActionButton(
+                onClick = { filePickerLauncher.launch() },
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shape = RoundedCornerShape(16.dp),
+                icon = {
+                    Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                text = {
+                    Text(
+                        text = Strings.resource.add(categories[selectedTab].title),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp).offset {
+                        IntOffset(
+                            offsetX.roundToInt(),
+                            offsetY.roundToInt()
+                        )
+                    }
+                    .pointerInput(Unit) {
+                        detectDragGestures { _, dragAmount ->
+                            offsetX += dragAmount.x
+                            offsetY += dragAmount.y
+                        }
+                    }
+            )
         }
     }
 
@@ -373,5 +401,5 @@ object ResourcePackScreen : Screen, MainScreen.TitledScreen {
     }
 
     override val title: String
-        get() = "资源包管理"
+        get() = Strings.resource.title
 }

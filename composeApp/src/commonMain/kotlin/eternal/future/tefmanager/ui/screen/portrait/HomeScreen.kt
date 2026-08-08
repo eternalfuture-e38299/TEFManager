@@ -1,37 +1,80 @@
 package eternal.future.tefmanager.ui.screen.portrait
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Gamepad
-import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import cafe.adriel.voyager.core.screen.Screen
-import eternal.future.tefmanager.strings.StringsResource.Strings
-import eternal.future.tefmanager.utils.GameManager
-import eternal.future.tefmanager.ui.dialogs.AddGameDialog
-import eternal.future.tefmanager.ui.model.GameItem
-import eternal.future.tefmanager.utils.GameLauncher
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Gamepad
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Fingerprint
+import androidx.compose.material.icons.rounded.Games
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Tag
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
+import cafe.adriel.voyager.core.screen.Screen
+import eternal.future.tefmanager.Platform
+import eternal.future.tefmanager.model.GameItem
+import eternal.future.tefmanager.strings.StringsResource.Strings
+import eternal.future.tefmanager.ui.dialogs.AddGameDialog
+import eternal.future.tefmanager.utils.GameLauncher
+import eternal.future.tefmanager.utils.GameManager
+import kotlin.math.roundToInt
 
 /*******************************************************************************
  * TEFManager - HomeScreen
@@ -92,6 +135,9 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                 }
             }
 
+            var offsetX by remember { mutableFloatStateOf(0f) }
+            var offsetY by remember { mutableFloatStateOf(0f) }
+
             // 浮动按钮 - 控制面板
             AnimatedVisibility(
                 visible = selectedItem != null,
@@ -102,19 +148,32 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                 ExtendedFloatingActionButton(
                     onClick = { showControlPanel.value = true },
                     modifier = Modifier
-                        .padding(16.dp),
+                        .padding(16.dp)
+                        .offset {
+                            IntOffset(
+                                offsetX.roundToInt(),
+                                offsetY.roundToInt()
+                            )
+                        }
+                        .align(Alignment.BottomEnd)
+                        .pointerInput(Unit) {
+                            detectDragGestures { _, dragAmount ->
+                                offsetX += dragAmount.x
+                                offsetY += dragAmount.y
+                            }
+                        },
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.PlayArrow,
-                        contentDescription = "控制面板",
+                        contentDescription = null,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "控制面板",
+                        text = Strings.home.game.control,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Medium
                     )
@@ -129,6 +188,14 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                 onStartGame = {
                     showControlPanel.value = false
                     GameLauncher.launch(selectedItem)
+                },
+                onStartGameServer = {
+                    showControlPanel.value = false
+                    GameLauncher.launch(selectedItem, true)
+                },
+                onRemoveGame = {
+                    showControlPanel.value = false
+                    selectedItem?.let { GameManager.removeGame(it.hash) }
                 },
                 onDismiss = { showControlPanel.value = false }
             )
@@ -172,7 +239,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                     }
 
                     Text(
-                        text = "我的游戏",
+                        text = Strings.home.game.title,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface
@@ -189,7 +256,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Add,
-                        contentDescription = "添加游戏",
+                        contentDescription = null,
                         modifier = Modifier.size(22.dp),
                         tint = MaterialTheme.colorScheme.onPrimaryContainer
                     )
@@ -228,7 +295,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
         ) {
             Icon(
                 imageVector = Icons.Rounded.Games,
-                contentDescription = "暂无游戏",
+                contentDescription = null,
                 modifier = Modifier.size(72.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
             )
@@ -236,7 +303,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "还没有添加游戏",
+                text = Strings.home.game.empty,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -245,7 +312,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "点击右上角「+」按钮添加游戏",
+                text = Strings.home.game.prompt,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
@@ -297,7 +364,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Gamepad,
-                            contentDescription = "游戏",
+                            contentDescription = null,
                             modifier = Modifier.size(22.dp),
                             tint = if (isSelected) {
                                 MaterialTheme.colorScheme.onPrimary
@@ -376,7 +443,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Check,
-                                contentDescription = "已选",
+                                contentDescription = null,
                                 modifier = Modifier.size(14.dp),
                                 tint = MaterialTheme.colorScheme.onPrimary
                             )
@@ -392,6 +459,8 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
     private fun ControlPanelSheet(
         selectedItem: GameItem?,
         onStartGame: () -> Unit,
+        onStartGameServer: () -> Unit,
+        onRemoveGame: () -> Unit,
         onDismiss: () -> Unit
     ) {
         ModalBottomSheet(
@@ -445,7 +514,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                         }
 
                         Text(
-                            text = "游戏控制",
+                            text = Strings.home.game.control,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface
@@ -458,7 +527,7 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Close,
-                            contentDescription = "关闭",
+                            contentDescription = null,
                             modifier = Modifier.size(22.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -474,10 +543,87 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
                     thickness = 0.5.dp
                 )
 
-                ControlButtonsSectionCompact(
-                    selectedItem = selectedItem,
-                    onStartGame = onStartGame
-                )
+                // 操作按钮区域
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    ControlButtonsSectionCompact(
+                        selectedItem = selectedItem,
+                        onStartGame = onStartGame
+                    )
+
+                    // 非Android平台：运行服务器按钮
+                    if (!Platform.isAndroid) {
+                        OutlinedButton(
+                            onClick = onStartGameServer,
+                            enabled = selectedItem != null,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (selectedItem != null) {
+                                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                },
+                                contentColor = if (selectedItem != null) {
+                                    MaterialTheme.colorScheme.secondary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                }
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Cloud,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = Strings.home.game.startServer,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    // 非Android平台：删除游戏按钮
+                    if (!Platform.isAndroid) {
+                        OutlinedButton(
+                            onClick = onRemoveGame,
+                            enabled = selectedItem != null,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (selectedItem != null) {
+                                    MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f)
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                },
+                                contentColor = if (selectedItem != null) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                }
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Delete,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = Strings.home.game.remove,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -497,21 +643,23 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
             ) {
                 LabeledInfoCompact(
                     icon = Icons.Rounded.Tag,
-                    label = "游戏版本",
+                    label = Strings.home.game.version,
                     value = selectedItem.version,
                     iconColor = MaterialTheme.colorScheme.primary
                 )
 
-                LabeledInfoCompact(
-                    icon = Icons.Rounded.Code,
-                    label = "版本代码",
-                    value = selectedItem.versionCode.toString(),
-                    iconColor = MaterialTheme.colorScheme.tertiary
-                )
+                if (Platform.isAndroid) {
+                    LabeledInfoCompact(
+                        icon = Icons.Rounded.Code,
+                        label = Strings.home.game.versionCode,
+                        value = selectedItem.versionCode.toString(),
+                        iconColor = MaterialTheme.colorScheme.tertiary
+                    )
+                }
 
                 LabeledInfoCompact(
                     icon = Icons.Rounded.Fingerprint,
-                    label = "哈希校验",
+                    label = Strings.home.game.hash,
                     value = selectedItem.hash.take(32) + "...",
                     iconColor = MaterialTheme.colorScheme.secondary
                 )
@@ -600,12 +748,12 @@ object HomeScreen : Screen, MainScreen.TitledScreen {
         ) {
             Icon(
                 imageVector = Icons.Rounded.PlayArrow,
-                contentDescription = "开始游戏",
+                contentDescription = null,
                 modifier = Modifier.size(22.dp)
             )
             Spacer(Modifier.width(10.dp))
             Text(
-                text = "开始游戏",
+                text = Strings.home.game.play,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Medium
             )

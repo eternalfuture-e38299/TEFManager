@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
+import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.ui.component.ResourcesPackCard
 import eternal.future.tefmanager.utils.resourcepack.LanguagePackManager
 import kotlinx.coroutines.CoroutineScope
@@ -76,7 +77,7 @@ object LanguagePackScreen : Screen {
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("正在加载语言包...")
+                        Text(Strings.loading)
                     }
                 }
                 LanguagePackManager.languagePacks.isEmpty() -> {
@@ -84,7 +85,7 @@ object LanguagePackScreen : Screen {
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("暂无语言包\n\n请点击右上角按钮安装语言包")
+                        Text("${Strings.resource.empty(Strings.resource.language.title)}\n\n${Strings.resource.emptyAction(Strings.resource.language.title)}")
                     }
                 }
                 else -> {
@@ -105,11 +106,11 @@ object LanguagePackScreen : Screen {
                             ) {
                                 Column {
                                     Text(
-                                        text = "语言包管理",
+                                        text = Strings.resource.language.hint,
                                         style = MaterialTheme.typography.titleMedium
                                     )
                                     Text(
-                                        text = "已启用 $enabledCount / $maxCount 个",
+                                        text = Strings.resource.language.enabled("$enabledCount / $maxCount"),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = if (enabledCount >= maxCount)
                                             MaterialTheme.colorScheme.error
@@ -119,7 +120,7 @@ object LanguagePackScreen : Screen {
                                 }
                                 if (enabledCount >= maxCount) {
                                     Text(
-                                        text = "已达到上限",
+                                        text = Strings.resource.language.max,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.error
                                     )

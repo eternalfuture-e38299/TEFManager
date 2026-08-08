@@ -1,6 +1,8 @@
 package eternal.future.tefmanager.utils
 
+import eternal.future.tefmanager.model.UpdateInfo
 import io.ktor.client.HttpClient
+import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.plugins.onDownload
@@ -22,11 +24,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.io.readByteArray
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
 import okio.FileSystem
 import okio.Path
 import okio.SYSTEM
 import okio.buffer
 import okio.use
+import kotlin.time.Duration.Companion.milliseconds
 
 /*******************************************************************************
  * TEFManager - NetworkService
@@ -86,6 +91,78 @@ class NetworkService {
         defaultRequest {
             header(HttpHeaders.UserAgent, "TEFManager-App/1.0")
         }
+    }
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
+    /**
+     * 从 GitHub 获取更新信息 JSON
+     * @param url GitHub 上的 JSON 文件原始链接
+     * @return UpdateInfo 对象，失败返回 null
+     */
+    private suspend fun fetchUpdateInfo(url: String): UpdateInfo? {
+        return try {
+            val response: HttpResponse = client.get(url) {
+                // 直接使用字符串常量，不需要 ContentType
+                header(HttpHeaders.Accept, "application/json")
+                header(HttpHeaders.UserAgent, "TEFManager-App/1.0")
+            }
+
+            if (response.status.value in 200..299) {
+                val jsonString = response.body<String>()
+                AppLogger.i("Successfully fetched update info")
+
+                // 解析 JSON
+                json.decodeFromString<UpdateInfo>(jsonString)
+            } else {
+                AppLogger.e("Failed to fetch update info: HTTP ${response.status}")
+                null
+            }
+        } catch (e: SerializationException) {
+            AppLogger.e("Failed to parse update JSON: ${e.message}", e)
+            null
+        } catch (e: Exception) {
+            AppLogger.e("Failed to fetch update info: ${e.message}", e)
+            null
+        }
+    }
+
+    /**
+     * 获取更新信息，带重试机制
+     * @param url GitHub 上的 JSON 文件原始链接
+     * @param maxRetries 最大重试次数
+     * @param retryDelayMs 重试延迟（毫秒）
+     * @return UpdateInfo 对象，失败返回 null
+     */
+    suspend fun fetchUpdateInfoWithRetry(
+        url: String,
+        maxRetries: Int = 3,
+        retryDelayMs: Long = 1000
+    ): UpdateInfo? {
+        var lastError: Exception? = null
+
+        repeat(maxRetries) { attempt ->
+            try {
+                val result = fetchUpdateInfo(url)
+                if (result != null) {
+                    return result
+                }
+            } catch (e: Exception) {
+                lastError = e
+                AppLogger.w("Fetch attempt ${attempt + 1} failed: ${e.message}")
+            }
+
+            // 如果不是最后一次尝试，等待后重试
+            if (attempt < maxRetries - 1) {
+                kotlinx.coroutines.delay(retryDelayMs.milliseconds)
+            }
+        }
+
+        AppLogger.e("All $maxRetries attempts failed", lastError)
+        return null
     }
 
     /**

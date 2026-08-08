@@ -11,14 +11,49 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-val generateStrings by tasks.registering {
-    description = "generated strings code"
-    val out = layout.buildDirectory.dir("generated/strings")
-    outputs.dir(out)
+object AppConfig {
+    const val VERSION_NAME : String = "1.0.0"
+    const val VERSION_CODE : Int = 2026080800
+    const val KERNEL_VERSION = "1.0.0"
+    const val TEFLOADER_VERSION = "1.0.0"
+    val MODULE_VERSIONS = mapOf(
+        "LanguagePackExtension" to "1.0.0",
+        "TexturePackExtension" to "1.0.0",
+        "FontPackExtension" to "1.0.0"
+    )
+}
 
-    StringsGenerator.generateForModule(
+val buildConfig = BuildConfigGenerator.BuildConfig(
+    AppConfig.VERSION_NAME,
+    AppConfig.VERSION_CODE,
+    AppConfig.KERNEL_VERSION,
+    AppConfig.TEFLOADER_VERSION,
+    AppConfig.MODULE_VERSIONS
+)
+
+val generateCode by tasks.registering {
+    description = "Generated strings and build config code"
+
+    // 设置输出目录
+    val stringsOutputDir = layout.buildDirectory.dir("generated/strings")
+    val buildConfigOutputDir = layout.buildDirectory.dir("generated/buildconfig")
+
+    outputs.dir(stringsOutputDir)
+    outputs.dir(buildConfigOutputDir)
+
+    // 执行生成任务
+
+    // 生成字符串代码
+    StringsGenerator.generate(
         moduleDir = layout.projectDirectory.asFile,
         packageName = "eternal.future.tefmanager.strings.generated"
+    )
+
+    // 生成 BuildConfig
+    BuildConfigGenerator.generate(
+        config = buildConfig,
+        outputDir = buildConfigOutputDir.get().asFile,
+        packageName = "eternal.future.tefmanager"
     )
 }
 
@@ -68,7 +103,7 @@ kotlin {
         }
         commonMain {
             kotlin {
-                srcDir(generateStrings.map { it.outputs })
+                srcDir(generateCode.map { it.outputs })
             }
             dependencies {
                 implementation(libs.kamel.image.default)
@@ -97,6 +132,7 @@ kotlin {
                 implementation(libs.filekit.coil)
                 implementation(libs.kmp.zip)
                 implementation(libs.kmp.zip.okio)
+                implementation(libs.kmp.zip.kotlinx)
             }
         }
         commonTest.dependencies {
@@ -125,8 +161,8 @@ androidApp.apply {
         applicationId = "eternal.future.tefmanager"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = AppConfig.VERSION_CODE
+        versionName = AppConfig.VERSION_NAME
     }
 
     buildTypes {
@@ -156,7 +192,21 @@ androidApp.apply {
 
     buildFeatures {
         compose = true
-        buildConfig = true
+    }
+
+    packaging {
+        resources {
+            // 排除冲突的 LICENSE 文件
+            excludes += "META-INF/LICENSE.md"
+            excludes += "META-INF/LICENSE"
+            excludes += "META-INF/NOTICE.md"
+            excludes += "META-INF/NOTICE"
+            excludes += "META-INF/*.md"
+            excludes += "META-INF/DEPENDENCIES"
+
+            // 如果某些文件需要保留，可以使用 pickFirsts
+            // pickFirsts += "META-INF/LICENSE.md"
+        }
     }
 }
 
@@ -168,17 +218,23 @@ compose.desktop {
     application {
         mainClass = "eternal.future.tefmanager.MainKt"
 
+        buildTypes.release.proguard {
+            // 启用 ProGuard
+            isEnabled.set(true)
+            obfuscate.set(true)
+            optimize.set(true)
+            configurationFiles.from(project.file("proguard-rules-jvm.pro"))
+        }
+
         nativeDistributions {
             targetFormats(
                 TargetFormat.Dmg,    // macOS
                 TargetFormat.Msi,    // Windows
-                // TargetFormat.Deb,    // Linux Debian
-                // TargetFormat.Rpm,    // Linux RPM
                 TargetFormat.AppImage // Linux AppImage
             )
 
             packageName = "TEFManager"
-            packageVersion = "1.0.0"
+            packageVersion = AppConfig.VERSION_NAME
 
             // macOS 配置
             macOS {
@@ -194,7 +250,7 @@ compose.desktop {
 
             // Linux 配置
             linux {
-                iconFile.set(File("src/jvmMain/resources/icon.png"))
+                iconFile.set(File("src/jvmMain/resources/icon.webp"))
                 menuGroup = "TEFManager"
             }
         }

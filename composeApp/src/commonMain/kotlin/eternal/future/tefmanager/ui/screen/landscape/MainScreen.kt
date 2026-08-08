@@ -56,7 +56,7 @@ import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.ui.component.RefreshIconButton
 import org.jetbrains.compose.resources.painterResource
 import tefmanager.composeapp.generated.resources.Res
-import tefmanager.composeapp.generated.resources.icon
+import tefmanager.composeapp.generated.resources.tefmanager_logo
 
 /*******************************************************************************
  * TEFManager - MainScreen
@@ -120,19 +120,20 @@ object MainScreen : Screen {
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.primaryContainer)
+                                    Surface(
+                                        modifier = Modifier.size(36.dp)
                                             .padding(6.dp),
-                                        contentAlignment = Alignment.Center
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.onPrimary
                                     ) {
-                                        Image(
-                                            painter = painterResource(Res.drawable.icon),
-                                            contentDescription = "App Icon",
-                                            modifier = Modifier.size(20.dp)
-                                        )
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                painter = painterResource(Res.drawable.tefmanager_logo),
+                                                contentDescription = "Logo",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
                                     }
 
                                     Text(
@@ -208,13 +209,13 @@ object MainScreen : Screen {
                     screen = ResourcePackScreen,
                     selectedIcon = Icons.Rounded.Palette,
                     unselectedIcon = Icons.Outlined.Palette,
-                    label = "资源包"
+                    label = Strings.resource.title
             ),
             NavigationItem(
                 screen = ManagerScreen,
                 selectedIcon = Icons.Rounded.Widgets,
                 unselectedIcon = Icons.Outlined.Widgets,
-                label = "管理"
+                label = Strings.manager.title
             ),
             NavigationItem(
                 screen = SettingsScreen,

@@ -2,7 +2,7 @@ package eternal.future.tefmanager.utils
 
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
-import eternal.future.tefmanager.ui.model.GameItem
+import eternal.future.tefmanager.model.GameItem
 
 actual object GameManager {
     private val _games: SnapshotStateList<GameItem> = GameStorage.serializableGames.toMutableStateList()

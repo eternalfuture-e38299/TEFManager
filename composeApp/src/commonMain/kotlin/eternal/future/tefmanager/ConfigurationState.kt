@@ -5,10 +5,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Color
 import eternal.future.tefmanager.strings.StringsResource
 import eternal.future.tefmanager.strings.StringsResource.Strings
-import eternal.future.tefmanager.ui.model.PluginItem
 import eternal.future.tefmanager.utils.AppLogger
 import eternal.future.tefmanager.utils.ConfigManager
-import eternal.future.tefmanager.utils.LightProtoStore
 import kotlinx.serialization.Serializable
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KMutableProperty1
@@ -39,6 +37,8 @@ import kotlin.reflect.KProperty
 object ConfigurationState {
     @Serializable
     data class AppConfig(
+        var initialized: Boolean = false,
+        var kernelVersion: String = BuildConfig.KERNEL_VERSION,
         var language: StringsResource.Language = StringsResource.Language.System,
         var themeMode: ThemeMode = ThemeMode.SYSTEM,
         var themeSeedColor: ULong = Color(0xFF2196F3).value,
@@ -49,7 +49,7 @@ object ConfigurationState {
         var autoCleanLogs: Boolean = true,
         var autoCleanTime: Int = 60, // 分钟
         var maxAppLogFiles: Int = 10,
-        var maxAppLogSizeMB: Int = 10,
+        var maxAppLogSizeMB: Int = 5,
         var modSupportEnabled: Boolean = true,
         var redirectSavesEnabled: Boolean = false
         ) {
@@ -109,6 +109,8 @@ object ConfigurationState {
         AppConfig::themeSeedColor
     )
 
+    var initialized by AutoConfigDelegate(AppConfig::initialized)
+    var kernelVersion by AutoConfigDelegate(AppConfig::kernelVersion)
     var language by AutoConfigDelegate(AppConfig::language) {
         StringsResource.setLanguage(it)
     }
@@ -126,6 +128,4 @@ object ConfigurationState {
     var autoCleanTime by AutoConfigDelegate(AppConfig::autoCleanTime)
     var maxAppLogFiles by AutoConfigDelegate(AppConfig::maxAppLogFiles)
     var maxAppLogSizeMB by AutoConfigDelegate(AppConfig::maxAppLogSizeMB)
-    var modSupportEnabled by AutoConfigDelegate(AppConfig::modSupportEnabled)
-    var redirectSavesEnabled by AutoConfigDelegate(AppConfig::redirectSavesEnabled)
 }

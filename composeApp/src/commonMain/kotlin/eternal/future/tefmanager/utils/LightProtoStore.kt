@@ -24,6 +24,7 @@ import okio.use
 import kotlin.contracts.ExperimentalContracts
 import kotlin.math.min
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 
 /*******************************************************************************
  * TEFManager - LightProtoStore (Fixed Index & Metadata Saving)
@@ -52,10 +53,7 @@ class LightProtoStore<T>(
     private val dataDir: Path,
     private val serializer: KSerializer<T>,
     private val storeName: String = "default",
-    private val autoCompactThreshold: Double = 0.5, // 提高触发阈值，降低压缩频率
-    private val minRecordsForCompact: Int = 100, // 新增：最小记录数才触发压缩
-
-    private val batchWriteSize: Int = 1000,
+    private val batchWriteSize: Int = 100,
     private val indexSaveDebounceMs: Long = 5000L,
     private val coroutineScope: CoroutineScope? = null
 ) {
@@ -68,12 +66,11 @@ class LightProtoStore<T>(
     private val mutex = Mutex()
 
     @Serializable
-    data class RecordPointer(val offset: Long, val length: Int, val isDeleted: Boolean = false)
+    data class RecordPointer(val offset: Long, val length: Int)
 
     @Serializable
     data class DatabaseMetadata(
         val totalRecords: Long = 0L,
-        val deletedRecords: Long = 0L,
         val version: Int = 1,
         val lastModified: Long = Clock.System.now().toEpochMilliseconds(),
         val dataFileSize: Long = 0L,
@@ -109,7 +106,7 @@ class LightProtoStore<T>(
     private var metadata = DatabaseMetadata()
     private var currentDataFileSize: Long = 0
 
-    // 写入缓冲区
+    // 写入缓冲区 - 存储待写入的数据
     private val writeBuffer = mutableListOf<Pair<String, T>>()
     private var bufferSize = 0
 
@@ -134,110 +131,50 @@ class LightProtoStore<T>(
             loadMetadata()
             initAsyncTasks()
 
-            AppLogger.i("[$storeName] Database initialized - Total: ${metadata.totalRecords}, Deleted: ${metadata.deletedRecords}")
+            AppLogger.i("[$storeName] Database initialized - Total: ${metadata.totalRecords}")
         } catch (e: Exception) {
             AppLogger.e("[$storeName] Failed to initialize database", e)
             throw e
         }
     }
 
-    // --- 公开的压缩函数 ---
-    suspend fun compact() {
-        try {
-            mutex.withLock {
-                if (metadata.deletedRecords == 0L) {
-                    AppLogger.i("[$storeName] No need to compact - no deleted records")
-                    return
-                }
-
-                AppLogger.i("[$storeName] Starting manual compaction...")
-
-                val tempDataPath = dataDir / "data.tmp.bin"
-                var newOffset = 0L
-                var newTotal = 0L
-
-                // 创建新数据文件
-                fileSystem.sink(tempDataPath).buffer().use { dataSink ->
-                    // 遍历所有有效记录
-                    memoryIndex.entries.forEach { (key, pointer) ->
-                        if (!pointer.isDeleted) {
-                            try {
-                                // 如果偏移量为-1，说明数据在缓冲区中
-                                if (pointer.offset == -1L) {
-                                    val bufferedRecord = writeBuffer.find { it.first == key }
-                                    if (bufferedRecord != null) {
-                                        val bytes = protobuf.encodeToByteArray(serializer, bufferedRecord.second)
-                                        val length = bytes.size
-
-                                        dataSink.writeInt(length)
-                                        dataSink.write(bytes)
-
-                                        memoryIndex[key] = RecordPointer(newOffset, length, false)
-                                        newOffset += length + 4
-                                        newTotal++
-                                    }
-                                } else {
-                                    val data = readData(pointer.offset, pointer.length)
-                                    val bytes = protobuf.encodeToByteArray(serializer, data)
-                                    val length = bytes.size
-
-                                    dataSink.writeInt(length)
-                                    dataSink.write(bytes)
-
-                                    memoryIndex[key] = RecordPointer(newOffset, length, false)
-                                    newOffset += length + 4
-                                    newTotal++
-                                }
-                            } catch (e: Exception) {
-                                AppLogger.w("[$storeName] Failed to compact record: $key", e)
-                            }
-                        }
-                    }
-                }
-
-                // 替换数据文件
-                fileSystem.delete(dataFilePath)
-                fileSystem.atomicMove(tempDataPath, dataFilePath)
-
-                // 更新统计
-                metadata = metadata.copy(
-                    deletedRecords = 0L,
-                    totalRecords = newTotal,
-                    dataFileSize = newOffset,
-                    lastModified = Clock.System.now().toEpochMilliseconds()
-                )
-                currentDataFileSize = newOffset
-
-                // 清理索引和保存
-                cleanupIndex()
-                saveIndex()
-                saveMetadata()
-
-                AppLogger.i("[$storeName] Manual compaction completed - new total: $newTotal")
-            }
-        } catch (e: Exception) {
-            AppLogger.e("[$storeName] Manual compaction failed", e)
-            throw e
-        }
-    }
-
     // --- 核心操作 ---
 
+    /**
+     * 存储或更新记录
+     * 如果key已存在，会先删除旧数据再写入新数据
+     */
     suspend fun put(key: String, value: T) {
         try {
             mutex.withLock {
-                val existingIndex = writeBuffer.indexOfFirst { it.first == key }
-                if (existingIndex != -1) {
-                    writeBuffer[existingIndex] = key to value
-                } else {
-                    writeBuffer.add(key to value)
-                    bufferSize++
+                // 检查key是否已存在
+                val existingPointer = memoryIndex[key]
+                val existingInBuffer = writeBuffer.indexOfFirst { it.first == key }
+
+                if (existingInBuffer != -1) {
+                    // 更新缓冲区中的值
+                    writeBuffer[existingInBuffer] = key to value
+                    AppLogger.d("[$storeName] Updated existing key in buffer: $key")
+                    triggerAsyncSaves()
+                    return@withLock
                 }
 
-                memoryIndex[key] = RecordPointer(-1, -1, false)
-
-                if (existingIndex == -1) {
+                if (existingPointer != null) {
+                    // 已存在的记录，需要先移除旧数据
+                    // 但暂时不立即重写文件，而是将新数据放入缓冲区
+                    // 等到flush时统一重写
+                    writeBuffer.add(key to value)
+                    bufferSize++
+                    // 标记索引指向缓冲区
+                    memoryIndex[key] = RecordPointer(-1, -1)
+                    AppLogger.d("[$storeName] Updated existing key (will replace old data): $key")
+                } else {
+                    // 新记录
+                    writeBuffer.add(key to value)
+                    bufferSize++
+                    memoryIndex[key] = RecordPointer(-1, -1)
                     metadata = metadata.copy(totalRecords = metadata.totalRecords + 1)
+                    AppLogger.d("[$storeName] Added new key: $key")
                 }
 
                 if (bufferSize >= batchWriteSize) {
@@ -252,41 +189,110 @@ class LightProtoStore<T>(
         }
     }
 
+    /**
+     * 刷新缓冲区到磁盘 - 重写整个数据文件
+     * 这样可以确保没有重复数据
+     */
     private fun flushBuffer() {
         if (writeBuffer.isEmpty()) return
 
         try {
-            fileSystem.appendingSink(dataFilePath).buffer().use { sink ->
-                writeBuffer.forEach { (key, value) ->
-                    val bytes = protobuf.encodeToByteArray(serializer, value)
-                    val length = bytes.size
-                    val offset = currentDataFileSize
+            // 获取所有有效记录（包括缓冲区中的和已在文件中的）
+            val allRecords = mutableMapOf<String, Pair<RecordPointer?, T>>()
 
-                    sink.writeInt(length)
-                    sink.write(bytes)
-
-                    memoryIndex[key] = RecordPointer(offset, length, false)
-                    currentDataFileSize += 4 + length
+            // 先从内存索引中获取所有非缓冲区的记录
+            memoryIndex.forEach { (key, pointer) ->
+                if (pointer.offset != -1L) {
+                    try {
+                        val value = readData(pointer.offset, pointer.length)
+                        allRecords[key] = pointer to value
+                    } catch (e: Exception) {
+                        AppLogger.w("[$storeName] Failed to read record for flush: $key", e)
+                    }
                 }
-                sink.flush()
             }
 
+            // 用缓冲区中的数据覆盖
+            writeBuffer.forEach { (key, value) ->
+                allRecords[key] = null to value // null表示这是新数据或更新
+            }
+
+            // 如果没有记录，清空文件
+            if (allRecords.isEmpty()) {
+                if (fileSystem.exists(dataFilePath)) {
+                    fileSystem.delete(dataFilePath)
+                }
+                currentDataFileSize = 0
+                memoryIndex.clear()
+                writeBuffer.clear()
+                bufferSize = 0
+                metadata = metadata.copy(totalRecords = 0, dataFileSize = 0)
+                return
+            }
+
+            // 重写数据文件
+            val tempDataPath = dataDir / "data.tmp.bin"
+            var newOffset = 0L
+            val newIndex = mutableMapOf<String, RecordPointer>()
+            var validCount = 0L
+
+            fileSystem.sink(tempDataPath).buffer().use { dataSink ->
+                allRecords.forEach { (key, pair) ->
+                    val (_, value) = pair
+                    try {
+                        val bytes = protobuf.encodeToByteArray(serializer, value)
+                        val length = bytes.size
+
+                        dataSink.writeInt(length)
+                        dataSink.write(bytes)
+
+                        newIndex[key] = RecordPointer(newOffset, length)
+                        newOffset += length + 4
+                        validCount++
+                    } catch (e: Exception) {
+                        AppLogger.w("[$storeName] Failed to write record during flush: $key", e)
+                    }
+                }
+            }
+
+            // 替换数据文件
+            if (fileSystem.exists(dataFilePath)) {
+                fileSystem.delete(dataFilePath)
+            }
+            fileSystem.atomicMove(tempDataPath, dataFilePath)
+
+            // 更新内存索引和统计
+            memoryIndex.clear()
+            memoryIndex.putAll(newIndex)
+            currentDataFileSize = newOffset
             writeBuffer.clear()
             bufferSize = 0
+            metadata = metadata.copy(
+                totalRecords = validCount,
+                dataFileSize = newOffset,
+                lastModified = Clock.System.now().toEpochMilliseconds()
+            )
+
+            AppLogger.d("[$storeName] Flushed ${validCount} records to disk (rewrote entire file)")
         } catch (e: Exception) {
             AppLogger.e("[$storeName] Failed to flush buffer", e)
             throw e
         }
     }
 
+    /**
+     * 获取记录
+     */
     fun get(key: String): T? {
         try {
-            val pointer = memoryIndex[key] ?: return null
-            if (pointer.isDeleted) return null
-
-            if (pointer.offset == -1L) {
-                return writeBuffer.find { it.first == key }?.second
+            // 先检查缓冲区
+            writeBuffer.find { it.first == key }?.let {
+                return it.second
             }
+
+            // 再检查文件索引
+            val pointer = memoryIndex[key] ?: return null
+            if (pointer.offset == -1L) return null // 标记为待删除
 
             return readData(pointer.offset, pointer.length)
         } catch (e: Exception) {
@@ -296,10 +302,7 @@ class LightProtoStore<T>(
     }
 
     /**
-     * 编辑一个已存在的记录
-     * @param key 记录的唯一键
-     * @param editor 编辑函数，传入当前值，返回新的值。返回null表示不修改
-     * @return 编辑后的新值，如果记录不存在或编辑失败则返回null
+     * 编辑记录
      */
     suspend fun edit(key: String, editor: (T) -> T?): T? {
         return try {
@@ -316,15 +319,12 @@ class LightProtoStore<T>(
                     return@withLock currentValue
                 }
 
-                // 检查值是否真的改变了
                 if (currentValue == newValue) {
                     AppLogger.d("[$storeName] No changes detected for key: $key")
                     return@withLock currentValue
                 }
 
-                // 使用put方法进行更新
                 put(key, newValue)
-
                 AppLogger.d("[$storeName] Edited key: $key")
                 newValue
             }
@@ -335,11 +335,7 @@ class LightProtoStore<T>(
     }
 
     /**
-     * 条件编辑 - 只有满足条件时才进行编辑
-     * @param key 记录的唯一键
-     * @param condition 条件判断函数，返回true时才执行编辑
-     * @param editor 编辑函数，接收当前值并返回新值
-     * @return 是否成功编辑
+     * 条件编辑
      */
     suspend fun editIf(key: String, condition: (T) -> Boolean, editor: (T) -> T): Boolean {
         return try {
@@ -350,23 +346,18 @@ class LightProtoStore<T>(
                     return@withLock false
                 }
 
-                // 检查条件
                 if (!condition(currentValue)) {
                     AppLogger.d("[$storeName] Condition not satisfied for key: $key")
                     return@withLock false
                 }
 
                 val newValue = editor(currentValue)
-
-                // 检查值是否真的改变了
                 if (currentValue == newValue) {
                     AppLogger.d("[$storeName] No changes detected (values equal) for key: $key")
-                    return@withLock true  // 条件满足但值未变，也算成功
+                    return@withLock true
                 }
 
-                // 执行更新
                 put(key, newValue)
-
                 AppLogger.d("[$storeName] Conditionally edited key: $key")
                 true
             }
@@ -376,59 +367,184 @@ class LightProtoStore<T>(
         }
     }
 
+    /**
+     * 删除记录 - 真正从数据库中移除
+     */
     suspend fun delete(key: String): Boolean {
-        try {
+        return try {
             mutex.withLock {
-                val pointer = memoryIndex[key] ?: return false
-                if (pointer.isDeleted) return false
+                // 从缓冲区移除
+                val removedFromBuffer = writeBuffer.removeAll { it.first == key }
+                if (removedFromBuffer) {
+                    bufferSize = writeBuffer.size
+                    // 从索引中移除
+                    memoryIndex.remove(key)
+                    metadata = metadata.copy(totalRecords = metadata.totalRecords - 1)
 
-                memoryIndex[key] = pointer.copy(isDeleted = true)
-                metadata = metadata.copy(deletedRecords = metadata.deletedRecords + 1)
+                    // 如果有缓冲区数据，一起刷新
+                    if (writeBuffer.isNotEmpty()) {
+                        flushBuffer()
+                    } else {
+                        // 没有缓冲区数据，直接重写文件移除该记录
+                        rewriteDataFile()
+                    }
 
-                writeBuffer.removeAll { it.first == key }
-                bufferSize = writeBuffer.size
+                    saveIndex()
+                    saveMetadata()
 
-                triggerAsyncSaves()
-
-                // 降低触发概率：需要满足最小记录数和阈值
-                if (shouldCompact()) {
-                    AppLogger.i("[$storeName] Auto-compact triggered (deletion rate: ${getDeletionRate()})")
-                    launchCompactAsync()
+                    AppLogger.d("[$storeName] Deleted key from buffer and file: $key")
+                    return@withLock true
                 }
 
-                AppLogger.d("[$storeName] Deleted key: $key")
-                return true
+                // 从索引中移除
+                memoryIndex.remove(key)
+                metadata = metadata.copy(totalRecords = metadata.totalRecords - 1)
+
+                // 重写数据文件，移除该记录
+                rewriteDataFile()
+
+                // 保存索引和元数据
+                saveIndex()
+                saveMetadata()
+
+                AppLogger.d("[$storeName] Permanently deleted key: $key")
+                true
             }
         } catch (e: Exception) {
             AppLogger.e("[$storeName] Failed to delete key: $key", e)
-            return false
+            false
+        }
+    }
+
+    /**
+     * 批量删除
+     */
+    suspend fun deleteBatch(keys: List<String>): Map<String, Boolean> {
+        return try {
+            mutex.withLock {
+                val results = mutableMapOf<String, Boolean>()
+                var deletedCount = 0
+
+                keys.forEach { key ->
+                    // 从缓冲区移除
+                    val removedFromBuffer = writeBuffer.removeAll { it.first == key }
+                    if (removedFromBuffer) {
+                        bufferSize = writeBuffer.size
+                    }
+
+                    // 从索引中移除
+                    val pointer = memoryIndex.remove(key)
+                    if (pointer != null || removedFromBuffer) {
+                        deletedCount++
+                        results[key] = true
+                        AppLogger.d("[$storeName] Marked key for deletion in batch: $key")
+                    } else {
+                        results[key] = false
+                    }
+                }
+
+                if (deletedCount > 0) {
+                    metadata = metadata.copy(totalRecords = metadata.totalRecords - deletedCount)
+
+                    // 如果有缓冲区数据，一起刷新
+                    if (writeBuffer.isNotEmpty()) {
+                        flushBuffer()
+                    } else {
+                        // 重写数据文件
+                        rewriteDataFile()
+                    }
+
+                    saveIndex()
+                    saveMetadata()
+
+                    AppLogger.i("[$storeName] Batch deletion completed: $deletedCount keys deleted")
+                }
+
+                results
+            }
+        } catch (e: Exception) {
+            AppLogger.e("[$storeName] Batch deletion failed", e)
+            keys.associateWith { false }
+        }
+    }
+
+    /**
+     * 重写数据文件 - 只保留索引中的有效记录
+     */
+    private suspend fun rewriteDataFile() {
+        try {
+            val validRecords = memoryIndex.filter { it.value.offset != -1L }
+
+            if (validRecords.isEmpty()) {
+                // 如果没有有效记录，清空文件
+                if (fileSystem.exists(dataFilePath)) {
+                    fileSystem.delete(dataFilePath)
+                }
+                currentDataFileSize = 0
+                memoryIndex.clear()
+                return
+            }
+
+            val tempDataPath = dataDir / "data.tmp.bin"
+            var newOffset = 0L
+            val newIndex = mutableMapOf<String, RecordPointer>()
+
+            // 创建新数据文件
+            fileSystem.sink(tempDataPath).buffer().use { dataSink ->
+                validRecords.forEach { (key, pointer) ->
+                    try {
+                        val data = readData(pointer.offset, pointer.length)
+                        val bytes = protobuf.encodeToByteArray(serializer, data)
+                        val length = bytes.size
+
+                        dataSink.writeInt(length)
+                        dataSink.write(bytes)
+
+                        newIndex[key] = RecordPointer(newOffset, length)
+                        newOffset += length + 4
+                    } catch (e: Exception) {
+                        AppLogger.w("[$storeName] Failed to rewrite record: $key", e)
+                    }
+                }
+            }
+
+            // 替换数据文件
+            if (fileSystem.exists(dataFilePath)) {
+                fileSystem.delete(dataFilePath)
+            }
+            fileSystem.atomicMove(tempDataPath, dataFilePath)
+
+            // 更新内存索引和统计
+            memoryIndex.clear()
+            memoryIndex.putAll(newIndex)
+            currentDataFileSize = newOffset
+            metadata = metadata.copy(dataFileSize = newOffset)
+
+            AppLogger.d("[$storeName] Rewrote data file with ${newIndex.size} records")
+        } catch (e: Exception) {
+            AppLogger.e("[$storeName] Failed to rewrite data file", e)
+            throw e
         }
     }
 
     fun contains(key: String): Boolean {
+        // 检查缓冲区
+        if (writeBuffer.any { it.first == key }) return true
+
+        // 检查文件索引
         val pointer = memoryIndex[key]
-        return pointer != null && !pointer.isDeleted
+        return pointer != null && pointer.offset != -1L
     }
 
-    // --- 索引清理功能 ---
-
-    private fun cleanupIndex() {
-        val entriesToRemove = memoryIndex.filter { it.value.isDeleted }.keys.toList()
-        if (entriesToRemove.isNotEmpty()) {
-            entriesToRemove.forEach { key ->
-                memoryIndex.remove(key)
-            }
-            AppLogger.d("[$storeName] Cleaned up ${entriesToRemove.size} deleted index entries")
-        }
-    }
+    // --- 索引操作 ---
 
     private fun saveIndex() {
         try {
-            // 先清理索引
-            cleanupIndex()
+            // 过滤掉无效的索引（offset为-1的表示在缓冲区中）
+            val validIndex = memoryIndex.filter { it.value.offset != -1L }
 
             fileSystem.sink(indexPath).buffer().use { sink ->
-                memoryIndex.forEach { (key, pointer) ->
+                validIndex.forEach { (key, pointer) ->
                     val keyBytes = key.encodeToByteArray()
                     val pointerBytes = protobuf.encodeToByteArray(RecordPointer.serializer(), pointer)
 
@@ -440,8 +556,11 @@ class LightProtoStore<T>(
                 sink.flush()
             }
 
-            metadata = metadata.copy(indexEntries = memoryIndex.size.toLong())
-            AppLogger.d("[$storeName] Saved index with ${memoryIndex.size} entries")
+            metadata = metadata.copy(
+                indexEntries = validIndex.size.toLong(),
+                indexFileSize = if (fileSystem.exists(indexPath)) fileSystem.metadata(indexPath).size ?: 0 else 0
+            )
+            AppLogger.d("[$storeName] Saved index with ${validIndex.size} entries")
         } catch (e: Exception) {
             AppLogger.e("[$storeName] Failed to save index", e)
         }
@@ -468,41 +587,16 @@ class LightProtoStore<T>(
         }
     }
 
-    private fun launchCompactAsync() {
-        val scope = coroutineScope ?: return
-        scope.launch {
-            try {
-                compact()
-            } catch (e: Exception) {
-                AppLogger.e("[$storeName] Async compaction failed", e)
-            }
-        }
-    }
-
-    private fun shouldCompact(): Boolean {
-        // 降低触发概率：需要满足最小记录数和阈值
-        return metadata.totalRecords >= minRecordsForCompact &&
-                getDeletionRate() > autoCompactThreshold
-    }
-
-    private fun getDeletionRate(): Double {
-        return if (metadata.totalRecords > 0) {
-            metadata.deletedRecords.toDouble() / metadata.totalRecords
-        } else {
-            0.0
-        }
-    }
-
     @OptIn(FlowPreview::class)
     private fun initAsyncTasks() {
         val scope = coroutineScope ?: return
 
         indexSaveJob = scope.launch {
-            indexSaveTrigger.debounce(indexSaveDebounceMs).collectLatest { saveIndex() }
+            indexSaveTrigger.debounce(indexSaveDebounceMs.milliseconds).collectLatest { saveIndex() }
         }
 
         metadataSaveJob = scope.launch {
-            metadataSaveTrigger.debounce(3000L).collectLatest { saveMetadata() }
+            metadataSaveTrigger.debounce(3000L.milliseconds).collectLatest { saveMetadata() }
         }
     }
 
@@ -556,8 +650,6 @@ class LightProtoStore<T>(
         try {
             metadata = metadata.copy(
                 dataFileSize = currentDataFileSize,
-                indexFileSize = if (fileSystem.exists(indexPath)) fileSystem.metadata(indexPath).size ?: 0 else 0,
-                indexEntries = memoryIndex.size.toLong(),
                 lastModified = Clock.System.now().toEpochMilliseconds()
             )
 
@@ -574,38 +666,35 @@ class LightProtoStore<T>(
 
     fun getStats(): Map<String, Any> = mapOf(
         "totalRecords" to metadata.totalRecords,
-        "deletedRecords" to metadata.deletedRecords,
-        "deletionRate" to getDeletionRate(),
         "memoryIndexSize" to memoryIndex.size,
         "dataFileSize" to currentDataFileSize,
         "indexFileSize" to (if (fileSystem.exists(indexPath)) fileSystem.metadata(indexPath).size ?: 0 else 0),
         "indexEntries" to metadata.indexEntries,
         "writeBufferSize" to bufferSize,
         "version" to metadata.version,
-        "lastModified" to metadata.lastModified,
-        "autoCompactThreshold" to autoCompactThreshold,
-        "minRecordsForCompact" to minRecordsForCompact
+        "lastModified" to metadata.lastModified
     )
 
     suspend fun query(config: QueryConfig<T> = QueryConfig()): QueryResult<T> {
         return withContext(Dispatchers.IO) {
             mutex.withLock {
                 try {
-                    val allRecords = mutableListOf<Pair<String, T>>()
-
-                    // 处理缓冲区记录
-                    writeBuffer.forEach { (key, value) ->
-                        if (config.filter == null || config.filter(key, value)) {
-                            allRecords.add(key to value)
-                        }
+                    // 如果有缓冲区数据，先刷新确保一致性
+                    if (writeBuffer.isNotEmpty()) {
+                        flushBuffer()
                     }
 
-                    // 处理文件记录
+                    val allRecords = mutableListOf<Pair<String, T>>()
+
                     memoryIndex.forEach { (key, pointer) ->
-                        if (!pointer.isDeleted && pointer.offset != -1L) {
-                            val value = get(key)
-                            if (value != null && (config.filter == null || config.filter(key, value))) {
-                                allRecords.add(key to value)
+                        if (pointer.offset != -1L) {
+                            try {
+                                val value = readData(pointer.offset, pointer.length)
+                                if (config.filter == null || config.filter(key, value)) {
+                                    allRecords.add(key to value)
+                                }
+                            } catch (e: Exception) {
+                                AppLogger.w("[$storeName] Failed to read record for query: $key", e)
                             }
                         }
                     }
@@ -645,27 +734,23 @@ class LightProtoStore<T>(
         return query(QueryConfig(offset = offset, limit = limit, filter = filter))
     }
 
-    /**
-     * 获取所有有效的值
-     * @return 所有未删除的值的列表
-     */
     fun getAllValues(): List<T> {
         return try {
             val values = mutableListOf<T>()
 
-            // 处理缓冲区记录
+            // 先检查缓冲区
             writeBuffer.forEach { (_, value) ->
                 values.add(value)
             }
 
-            // 处理文件记录
+            // 再检查文件
             memoryIndex.forEach { (key, pointer) ->
-                if (!pointer.isDeleted) { // 只包含未删除的
-                    if (pointer.offset != -1L) { // 不在缓冲区中
-                        val value = get(key)
-                        if (value != null) {
-                            values.add(value)
-                        }
+                if (pointer.offset != -1L) {
+                    try {
+                        val value = readData(pointer.offset, pointer.length)
+                        values.add(value)
+                    } catch (e: Exception) {
+                        AppLogger.w("[$storeName] Failed to read record for getAllValues: $key", e)
                     }
                 }
             }
@@ -677,10 +762,45 @@ class LightProtoStore<T>(
         }
     }
 
+    fun forceSync() {
+        try {
+            kotlinx.coroutines.runBlocking {
+                mutex.withLock {
+                    if (writeBuffer.isNotEmpty()) {
+                        flushBuffer()
+                    }
+                    saveIndex()
+                    saveMetadata()
+                    AppLogger.d("[$storeName] Force sync completed")
+                }
+            }
+        } catch (e: Exception) {
+            AppLogger.e("[$storeName] Force sync failed", e)
+        }
+    }
+
+    fun flush() {
+        try {
+            kotlinx.coroutines.runBlocking {
+                mutex.withLock {
+                    if (writeBuffer.isNotEmpty()) {
+                        flushBuffer()
+                    }
+                }
+            }
+
+            saveIndex()
+            saveMetadata()
+            AppLogger.d("[$storeName] Flush completed")
+        } catch (e: Exception) {
+            AppLogger.e("[$storeName] Flush failed", e)
+        }
+    }
+
     private fun close() {
         try {
             if (writeBuffer.isNotEmpty()) {
-                runBlocking { flushBuffer() }
+                kotlinx.coroutines.runBlocking { flushBuffer() }
             }
             saveIndex()
             saveMetadata()
@@ -696,46 +816,5 @@ class LightProtoStore<T>(
         close()
         memoryIndex.clear()
         writeBuffer.clear()
-    }
-
-    private fun <T> runBlocking(block: suspend () -> T): T {
-        return kotlinx.coroutines.runBlocking { block() }
-    }
-
-    fun flush() {
-        try {
-            if (writeBuffer.isNotEmpty()) {
-                // 同步执行写入操作
-                kotlinx.coroutines.runBlocking {
-                    mutex.withLock {
-                        fileSystem.appendingSink(dataFilePath).buffer().use { sink ->
-                            writeBuffer.forEach { (key, value) ->
-                                val bytes = protobuf.encodeToByteArray(serializer, value)
-                                val length = bytes.size
-                                val offset = currentDataFileSize
-
-                                sink.writeInt(length)
-                                sink.write(bytes)
-
-                                memoryIndex[key] = RecordPointer(offset, length, false)
-                                currentDataFileSize += 4 + length
-                            }
-                            sink.flush()
-                        }
-
-                        writeBuffer.clear()
-                        bufferSize = 0
-                    }
-                }
-            }
-
-            // 无论是否有缓冲数据，都强制保存索引和元数据
-            saveIndex()
-            saveMetadata()
-
-            AppLogger.d("[$storeName] Flush completed - buffer cleared, index and metadata saved")
-        } catch (e: Exception) {
-            AppLogger.e("[$storeName] Flush failed", e)
-        }
     }
 }
