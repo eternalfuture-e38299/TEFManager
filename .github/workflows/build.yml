@@ -1,4 +1,4 @@
-name: Manual Build Desktop
+name: Manual Build App
 
 on:
   workflow_dispatch:
@@ -41,7 +41,7 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Android Unsigned Release APK
+      - name: Build Android Release APK
         run: |
           ./gradlew :composeApp:assembleRelease \
             -Pandroid.enableR8.fullMode=true \
