@@ -391,7 +391,7 @@ object ResourcePackManager {
     private fun extractIcon(zip: ZipFile, packId: String, targetDir: Path): String? {
         return try {
             logger.d("Extracting icon for pack: $packId")
-            val iconEntry = zip.getEntry("Icon.png")
+            val iconEntry = zip.getEntry("Icon.png") ?: zip.getEntry("icon.png")
             if (iconEntry == null) {
                 logger.d("No icon found in resource pack")
                 return null
