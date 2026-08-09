@@ -1,4 +1,4 @@
-name: Manual Build All Platforms
+name: Manual Build Desktop
 
 on:
   workflow_dispatch:
@@ -41,13 +41,13 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Android Unsigned Release APK (with R8)
+      - name: Build Android Unsigned Release APK
         run: |
           ./gradlew :composeApp:assembleRelease \
             -Pandroid.enableR8.fullMode=true \
             --no-daemon
 
-      - name: Rename APK to TEFManager.apk
+      - name: Rename APK
         run: |
           APK_PATH=$(find composeApp/build/outputs/apk/release -name "*.apk" | head -1)
           if [ -n "$APK_PATH" ]; then
@@ -65,31 +65,21 @@ jobs:
           path: composeApp/build/outputs/apk/release/TEFManager.apk
           retention-days: 90
 
-  build-jvm:
-    name: Build JVM JAR (${{ matrix.os_name }} ${{ matrix.arch }})
+  build-desktop:
+    name: Build Desktop (${{ matrix.os_name }})
     strategy:
       fail-fast: false
       matrix:
         include:
           - runner: windows-latest
             os_name: Windows
-            arch: x64
-            jar_suffix: Windows.x64
-          - runner: ubuntu-latest
-            os_name: Linux
-            arch: x64
-            jar_suffix: Linux.x64
+            jar_suffix: Windows
           - runner: macos-latest
             os_name: macOS
-            arch: x64
-            jar_suffix: macOS.x64
-          - runner: macos-latest
-            os_name: macOS
-            arch: arm64
-            jar_suffix: macOS.arm64
+            jar_suffix: macOS
     
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     
     steps:
       - name: Checkout code
@@ -114,39 +104,51 @@ jobs:
         if: runner.os != 'Windows'
         run: chmod +x gradlew
 
-      - name: Build JVM JAR (${{ matrix.os_name }} ${{ matrix.arch }})
+      - name: Build Uber JAR
         run: |
           ./gradlew :composeApp:packageReleaseUberJarForCurrentOS \
             --no-daemon
         shell: bash
 
-      - name: Rename JAR with platform info
+      - name: Rename and copy JAR
         shell: bash
         run: |
           JARS_DIR="composeApp/build/compose/jars"
+          OUTPUT_DIR="dist"
+          mkdir -p "$OUTPUT_DIR"
+          
           if [ -d "$JARS_DIR" ] && ls "$JARS_DIR"/*.jar 1>/dev/null 2>&1; then
             for jar in "$JARS_DIR"/*.jar; do
               if [ -f "$jar" ]; then
-                NEW_NAME="$JARS_DIR/TEFManager.${{ matrix.jar_suffix }}.jar"
-                mv "$jar" "$NEW_NAME"
-                echo "Renamed to: $NEW_NAME"
+                NEW_NAME="$OUTPUT_DIR/TEFManager.${{ matrix.jar_suffix }}.jar"
+                cp "$jar" "$NEW_NAME"
+                echo "Copied to: $NEW_NAME"
               fi
             done
           else
             echo "Warning: No JAR files found in $JARS_DIR"
+            # Fallback: try to find the jar elsewhere
+            FOUND_JAR=$(find . -name "*.jar" -path "*/release/*" | head -1)
+            if [ -n "$FOUND_JAR" ]; then
+              cp "$FOUND_JAR" "$OUTPUT_DIR/TEFManager.${{ matrix.jar_suffix }}.jar"
+              echo "Fallback copied: $FOUND_JAR"
+            else
+              echo "Error: No JAR found anywhere"
+              exit 1
+            fi
           fi
 
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
-          name: jvm-jar-${{ matrix.jar_suffix }}
-          path: composeApp/build/compose/jars/TEFManager.${{ matrix.jar_suffix }}.jar
+          name: desktop-jar-${{ matrix.jar_suffix }}
+          path: dist/TEFManager.${{ matrix.jar_suffix }}.jar
           retention-days: 90
-          if-no-files-found: warn
+          if-no-files-found: error
 
   summary:
     name: Build Summary
-    needs: [build-android, build-jvm]
+    needs: [build-android, build-desktop]
     runs-on: ubuntu-latest
     if: always()
     
@@ -157,25 +159,23 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## 📦 Build Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Platform | Architecture | Artifact | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|--------------|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Artifact | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|----------|--------|" >> $GITHUB_STEP_SUMMARY
           
-          if [ "${{ needs.build-android.result }}" == "success" ]; then
-            echo "| Android | - | TEFManager.apk (unsigned) | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          ANDROID_STATUS="${{ needs.build-android.result }}"
+          DESKTOP_STATUS="${{ needs.build-desktop.result }}"
+          
+          if [ "$ANDROID_STATUS" == "success" ]; then
+            echo "| Android | TEFManager.apk (unsigned) | ✅ Success |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| Android | - | TEFManager.apk (unsigned) | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+            echo "| Android | TEFManager.apk (unsigned) | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
           fi
           
-          if [ "${{ needs.build-jvm.result }}" == "success" ]; then
-            echo "| JVM (Windows) | x64 | TEFManager.Windows.x64.jar | ✅ Success |" >> $GITHUB_STEP_SUMMAR
-            echo "| JVM (Linux) | x64 | TEFManager.Linux.x64.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
-            echo "| JVM (macOS) | x64 | TEFManager.macOS.x64.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
-            echo "| JVM (macOS) | ARM64 | TEFManager.macOS.arm64.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+          if [ "$DESKTOP_STATUS" == "success" ]; then
+            echo "| Windows | TEFManager.Windows.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
+            echo "| macOS | TEFManager.macOS.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| JVM (Windows) | x64 | TEFManager.Windows.x64.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
-            echo "| JVM (Linux) | x64 | TEFManager.Linux.x64.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
-            echo "| JVM (macOS) | x64 | TEFManager.macOS.x64.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
-            echo "| JVM (macOS) | ARM64 | TEFManager.macOS.arm64.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
+            echo "| Desktop | TEFManager.*.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
           fi
           
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -185,8 +185,10 @@ jobs:
           echo "- **Description:** ${{ github.event.inputs.build_description }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Time:** $(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
           echo "- **R8:** ✅ Enabled for Android" >> $GITHUB_STEP_SUMMARY
-          echo "- **Signing:** ❌ Not signed (sign manually with Termux)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Signing:** ❌ Not signed (sign manually)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## 📥 Download" >> $GITHUB_STEP_SUMMARY
-          echo "Download artifacts from the **Artifacts** section below." >> $GITHUB_STEP_SUMMARY
+          echo "## 💡 Post-build Instructions" >> $GITHUB_STEP_SUMMARY
+          echo "- Download both JARs (Windows + macOS)" >> $GITHUB_STEP_SUMMARY
+          echo "- Merge them using: \`java --decompress ...\` or fat-jar tool" >> $GITHUB_STEP_SUMMARY
+          echo "- The merged JAR will run on Windows, macOS (x64+arm64), and Linux" >> $GITHUB_STEP_SUMMARY
 
