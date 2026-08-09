@@ -221,8 +221,8 @@ object ResourcePackManager {
         logger.d("Starting resource pack analysis...")
         progressCallback?.invoke(InstallProgress.PARSING_METADATA, null)
 
-        val hasContent = zip.getEntry("Content") != null
-        val hasModified = zip.getEntry("Modified") != null
+        val hasContent = zip.hasDirectory("Content")
+        val hasModified = zip.hasDirectory("Modified")
         logger.d("Content directory exists: $hasContent")
         logger.d("Modified directory exists: $hasModified")
 
@@ -234,13 +234,11 @@ object ResourcePackManager {
 
             // 检查是否存在 Music 或 Images 文件夹
             val musicFolder = contentPath.resolve("Music").toString()
-            val musicFolderEntry = zip.getEntry(musicFolder);
-            val hasMusicFolder = musicFolderEntry != null && musicFolderEntry.isDirectory
+            val hasMusicFolder = zip.hasDirectory(musicFolder)
             logger.d("Music folder exists: $hasMusicFolder")
 
             val imagesFolder = contentPath.resolve("Images").toString()
-            val imagesFolderEntry = zip.getEntry(imagesFolder)
-            val hasImagesFolder = imagesFolderEntry != null && imagesFolderEntry.isDirectory
+            val hasImagesFolder = zip.hasDirectory(imagesFolder)
             logger.d("Images folder exists: $hasImagesFolder")
 
             packType = when {
@@ -376,18 +374,18 @@ object ResourcePackManager {
 
     private fun hasFilesWithExtension(zip: ZipFile, extension: String): Boolean {
         return try {
-            val entry = zip.getEntry("Modified")
-            if (entry != null && entry.isDirectory) {
-                zip.entries.any { file ->
-                    file.name.endsWith(".$extension", ignoreCase = true) &&
-                            !file.isDirectory
-                }
-            } else {
-                false
+            zip.entries.any { file ->
+                file.name.endsWith(".$extension", ignoreCase = true) &&
+                        !file.isDirectory
             }
         } catch (_: Exception) {
             false
         }
+    }
+
+    private fun ZipFile.hasDirectory(dirName: String): Boolean {
+        val dir = dirName.trimEnd('/')
+        return entries.any { it.name == dir || it.name == "$dir/" || it.name.startsWith("$dir/") }
     }
 
     private fun extractIcon(zip: ZipFile, packId: String, targetDir: Path): String? {
