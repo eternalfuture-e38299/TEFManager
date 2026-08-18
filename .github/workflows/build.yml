@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build-android:
-    name: Build Android
+    name: Build Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 60
     
@@ -41,45 +41,28 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Create keystore file
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > composeApp/tefmanager.p12
+          echo "Keystore created"
+
       - name: Build Android Release APK
         run: |
           ./gradlew :composeApp:assembleRelease \
             -Pandroid.enableR8.fullMode=true \
             --no-daemon
 
-      - name: Rename APK
-        run: |
-          APK_PATH=$(find composeApp/build/outputs/apk/release -name "*.apk" | head -1)
-          if [ -n "$APK_PATH" ]; then
-            cp "$APK_PATH" composeApp/build/outputs/apk/release/TEFManager.apk
-            echo "APK renamed to TEFManager.apk"
-          else
-            echo "No APK found!"
-            exit 1
-          fi
-
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk
-          path: composeApp/build/outputs/apk/release/TEFManager.apk
+          name: TEFManager.apk
+          path: composeApp/build/outputs/apk/release/*.apk
           retention-days: 90
 
-  build-desktop:
-    name: Build Desktop (${{ matrix.os_name }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: windows-latest
-            os_name: Windows
-            jar_suffix: Windows
-          - runner: macos-latest
-            os_name: macOS
-            jar_suffix: macOS
-    
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 45
+  build-desktop-windows:
+    name: Build Windows MSI
+    runs-on: windows-latest
+    timeout-minutes: 60
     
     steps:
       - name: Checkout code
@@ -100,9 +83,136 @@ jobs:
           gradle-version: wrapper
           cache-read-only: false
 
-      - name: Grant execute permission for gradlew (Unix)
-        if: runner.os != 'Windows'
+      - name: Build Windows MSI
+        run: |
+          ./gradlew :composeApp:packageReleaseMsi \
+            --no-daemon
+        shell: bash
+
+      - name: Upload MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: TEFManager.msi
+          path: composeApp/build/compose/binaries/main-release/msi/*.msi
+          retention-days: 90
+
+  build-desktop-macos:
+    name: Build macOS DMG
+    runs-on: macos-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: wrapper
+          cache-read-only: false
+
+      - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+
+      - name: Build macOS DMG
+        run: |
+          ./gradlew :composeApp:packageReleaseDmg \
+            --no-daemon
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: TEFManager.dmg
+          path: composeApp/build/compose/binaries/main-release/dmg/*.dmg
+          retention-days: 90
+
+  build-desktop-linux:
+    name: Build Linux AppImage
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: wrapper
+          cache-read-only: false
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libx11-dev libxrandr-dev libxrender-dev libxext-dev \
+            libxtst-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcb1-dev libxcb-shm0-dev libxxf86vm-dev libxkbcommon-x11-dev \
+            libxkbcommon0 libpulse-dev libasound2-dev libudev-dev
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Linux AppImage
+        run: |
+          ./gradlew :composeApp:packageReleaseAppImage \
+            --no-daemon
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: TEFManager.AppImage
+          path: composeApp/build/compose/binaries/main-release/appimage/*.AppImage
+          retention-days: 90
+
+  build-jar:
+    name: Build JAR (Windows & macOS)
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            suffix: Windows
+          - runner: macos-latest
+            suffix: macOS
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: wrapper
+          cache-read-only: false
 
       - name: Build Uber JAR
         run: |
@@ -110,45 +220,16 @@ jobs:
             --no-daemon
         shell: bash
 
-      - name: Rename and copy JAR
-        shell: bash
-        run: |
-          JARS_DIR="composeApp/build/compose/jars"
-          OUTPUT_DIR="dist"
-          mkdir -p "$OUTPUT_DIR"
-          
-          if [ -d "$JARS_DIR" ] && ls "$JARS_DIR"/*.jar 1>/dev/null 2>&1; then
-            for jar in "$JARS_DIR"/*.jar; do
-              if [ -f "$jar" ]; then
-                NEW_NAME="$OUTPUT_DIR/TEFManager.${{ matrix.jar_suffix }}.jar"
-                cp "$jar" "$NEW_NAME"
-                echo "Copied to: $NEW_NAME"
-              fi
-            done
-          else
-            echo "Warning: No JAR files found in $JARS_DIR"
-            # Fallback: try to find the jar elsewhere
-            FOUND_JAR=$(find . -name "*.jar" -path "*/release/*" | head -1)
-            if [ -n "$FOUND_JAR" ]; then
-              cp "$FOUND_JAR" "$OUTPUT_DIR/TEFManager.${{ matrix.jar_suffix }}.jar"
-              echo "Fallback copied: $FOUND_JAR"
-            else
-              echo "Error: No JAR found anywhere"
-              exit 1
-            fi
-          fi
-
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
-          name: desktop-jar-${{ matrix.jar_suffix }}
-          path: dist/TEFManager.${{ matrix.jar_suffix }}.jar
+          name: TEFManager-${{ matrix.suffix }}.jar
+          path: composeApp/build/compose/jars/*.jar
           retention-days: 90
-          if-no-files-found: error
 
   summary:
     name: Build Summary
-    needs: [build-android, build-desktop]
+    needs: [build-android, build-desktop-windows, build-desktop-macos, build-desktop-linux, build-jar]
     runs-on: ubuntu-latest
     if: always()
     
@@ -157,38 +238,28 @@ jobs:
         run: |
           echo "# 🎉 Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## 📦 Build Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "## 📦 Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Platform | Artifact | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | File | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|------|--------|" >> $GITHUB_STEP_SUMMARY
           
-          ANDROID_STATUS="${{ needs.build-android.result }}"
-          DESKTOP_STATUS="${{ needs.build-desktop.result }}"
+          [ "${{ needs.build-android.result }}" == "success" ] && STATUS="✅" || STATUS="❌"
+          echo "| Android | TEFManager.apk | $STATUS |" >> $GITHUB_STEP_SUMMARY
           
-          if [ "$ANDROID_STATUS" == "success" ]; then
-            echo "| Android | TEFManager.apk (unsigned) | ✅ Success |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| Android | TEFManager.apk (unsigned) | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
-          fi
+          [ "${{ needs.build-desktop-windows.result }}" == "success" ] && STATUS="✅" || STATUS="❌"
+          echo "| Windows | TEFManager.msi | $STATUS |" >> $GITHUB_STEP_SUMMARY
           
-          if [ "$DESKTOP_STATUS" == "success" ]; then
-            echo "| Windows | TEFManager.Windows.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
-            echo "| macOS | TEFManager.macOS.jar | ✅ Success |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "| Desktop | TEFManager.*.jar | ⚠️ Partial/Failed |" >> $GITHUB_STEP_SUMMARY
-          fi
+          [ "${{ needs.build-desktop-macos.result }}" == "success" ] && STATUS="✅" || STATUS="❌"
+          echo "| macOS | TEFManager.dmg | $STATUS |" >> $GITHUB_STEP_SUMMARY
+          
+          [ "${{ needs.build-desktop-linux.result }}" == "success" ] && STATUS="✅" || STATUS="❌"
+          echo "| Linux | TEFManager.AppImage | $STATUS |" >> $GITHUB_STEP_SUMMARY
+          
+          [ "${{ needs.build-jar.result }}" == "success" ] && STATUS="✅" || STATUS="❌"
+          echo "| JAR | TEFManager-*.jar | $STATUS |" >> $GITHUB_STEP_SUMMARY
           
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## 📝 Build Info" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "## 📝 Info" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Description:** ${{ github.event.inputs.build_description }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Time:** $(date '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-          echo "- **R8:** ✅ Enabled for Android" >> $GITHUB_STEP_SUMMARY
-          echo "- **Signing:** ❌ Not signed (sign manually)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## 💡 Post-build Instructions" >> $GITHUB_STEP_SUMMARY
-          echo "- Download both JARs (Windows + macOS)" >> $GITHUB_STEP_SUMMARY
-          echo "- Merge them using: \`java --decompress ...\` or fat-jar tool" >> $GITHUB_STEP_SUMMARY
-          echo "- The merged JAR will run on Windows, macOS (x64+arm64), and Linux" >> $GITHUB_STEP_SUMMARY
-
