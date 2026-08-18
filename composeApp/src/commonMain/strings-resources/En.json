@@ -333,5 +333,11 @@
 
   "onboarding.desktop.tips1": "Windows users must use the x32 version. To use the x64 version, you need to download the TEFKernel source code, modify it, and recompile it.",
   "onboarding.desktop.tips2": "tefloader does not inject directly into the game assembly. The vanilla game can be launched via file or Steam.",
-  "onboarding.desktop.tips3": "Using unofficial clients may require a custom tefloader."
+  "onboarding.desktop.tips3": "Using unofficial clients may require a custom tefloader.",
+
+  "validation.dialog.title": "Verification Failed",
+  "validation.dialog.text1": "No supported Terraria International Edition (Android) is installed on the current device",
+  "validation.dialog.text2": "This tool contains the Terraria game files, but requires a legitimate license file to run. You must first install the official Terraria International Edition via Google Play or other official channels before this tool can function properly",
+  "validation.dialog.text3": "⚠ Disclaimer and Terms of Use:\\n1. The Terraria game files included in this tool are for technical compatibility purposes only and do not constitute any infringement of Terraria copyright;\\n2. You must own a legitimate Terraria license to use this tool, otherwise please delete it immediately;\\n3. This tool is an independent third-party tool and has no affiliation with Re-Logic or its authorized parties;\\n4. Users assume all risks associated with using this tool, and the developer shall not be held liable for any direct or indirect damages;\\n5. This tool is intended solely for technical research on legally licensed versions and is strictly prohibited for commercial use or game balance disruption;\\n6. If you did not obtain a Terraria International Edition license via Google Play or other official channels, please cease use immediately and delete this tool.",
+  "validation.dialog.confirm": "Acknowledge and Exit"
 }

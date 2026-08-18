@@ -20,9 +20,14 @@
  * Created: 2026/8/6
  *******************************************************************************/
 
-import com.squareup.kotlinpoet.*
+import com.squareup.kotlinpoet.AnnotationSpec
+import com.squareup.kotlinpoet.FileSpec
+import com.squareup.kotlinpoet.FunSpec
+import com.squareup.kotlinpoet.KModifier
+import com.squareup.kotlinpoet.PropertySpec
+import com.squareup.kotlinpoet.TypeSpec
+import com.squareup.kotlinpoet.asClassName
 import java.io.File
-import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -37,7 +42,10 @@ object BuildConfigGenerator {
         val kernelVersion: String,
         val tefloaderVersion: String,
         val moduleVersions: Map<String, String>,
-        val buildTime: LocalDateTime = LocalDateTime.now()
+        val buildTime: LocalDateTime = LocalDateTime.now(),
+        val isInlineGame: Boolean,
+        val inlineGameVersion: String = "1.0.0",
+        val inlineGameVersionCode: Int = 0
     )
 
     fun generate(
@@ -59,6 +67,9 @@ object BuildConfigGenerator {
         println("   Kernel: ${config.kernelVersion}")
         println("   Modules: ${config.moduleVersions.size}")
         println("   Build Date: ${config.buildTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))}")
+        println("   Is Inline Game: ${config.isInlineGame}")
+        println("   Inline Game Version: ${config.inlineGameVersion}")
+        println("   Inline Game Version Code: ${config.inlineGameVersionCode}")
     }
 
     private fun createBuildConfigFile(
@@ -80,6 +91,9 @@ object BuildConfigGenerator {
         // 版本信息 - 注意字符串需要用 %S 格式化，会自动添加引号
         addConstant(objectBuilder, "VERSION_NAME", config.versionName, String::class)
         addConstant(objectBuilder, "VERSION_CODE", config.versionCode, Int::class)
+        addConstant(objectBuilder, "IS_INLINE_GAME", config.isInlineGame, Boolean::class)
+        addConstant(objectBuilder, "INLINE_GAME_VERSION", config.inlineGameVersion, String::class)
+        addConstant(objectBuilder, "INLINE_GAME_VERSION_CODE", config.inlineGameVersionCode, Int::class)
 
         // 内核版本
         addConstant(objectBuilder, "KERNEL_VERSION", config.kernelVersion, String::class)

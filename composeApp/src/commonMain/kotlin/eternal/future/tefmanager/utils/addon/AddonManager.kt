@@ -100,6 +100,13 @@ object AddonManager {
 
     fun installKernel(filePath: Path) {
         val outDir = Platform.getData("tefkernel")
+
+        // 确保输出目录存在
+        if (!fileSystem.exists(outDir)) {
+            fileSystem.createDirectories(outDir)
+            logger.i("Created kernel directory: $outDir")
+        }
+
         val zip = ZipFile(fileSystem.openReadOnly(filePath))
 
         val files = if (Platform.isAndroid) listOf(
@@ -114,9 +121,9 @@ object AddonManager {
                 "libtefkernel.linux.x86.so",
                 "libtefkernel.linux.x86_64.so"
             ) else listOf(
-                "libtefkernel.mac.arm64.so",
-                "libtefkernel.mac.x86_64.so"
-            )
+            "libtefkernel.mac.arm64.so",
+            "libtefkernel.mac.x86_64.so"
+        )
 
         val infoString = zip.getInputStream("info.json").asSource().buffer().readUtf8()
         val version = json.parseToJsonElement(infoString).jsonObject["version"]?.jsonPrimitive?.content!!
@@ -126,12 +133,10 @@ object AddonManager {
             if (entry != null) {
                 zip.getInputStream(entry).asSource().buffer().use { input ->
                     fileSystem
-                        .sink(outDir / name)
+                        .sink(outDir / name)  // 现在目录已存在
                         .buffer()
                         .use { output ->
-                            output.writeAll(
-                                input
-                            )
+                            output.writeAll(input)
                         }
                 }
             }
@@ -540,31 +545,6 @@ object AddonManager {
                 it.flush()
             }
         }
-    }
-
-    /**
-     * 计算相对路径（处理 okio.Path 类型）
-     */
-    private fun calculateRelativePath(fullPath: Path, basePath: Path): Path {
-        // 将路径转换为字符串进行比较
-        val fullPathStr = fullPath.toString()
-        val basePathStr = basePath.toString()
-
-        // 如果完整路径以基础路径开头，则计算相对部分
-        val relativeStr = if (fullPathStr.startsWith(basePathStr)) {
-            // 去掉基础路径部分
-            var relative = fullPathStr.substring(basePathStr.length)
-            // 移除开头的路径分隔符
-            while (relative.startsWith("/") || relative.startsWith("\\")) {
-                relative = relative.substring(1)
-            }
-            relative
-        } else {
-            // 如果不是以基础路径开头，返回完整路径的名称
-            fullPath.name
-        }
-
-        return relativeStr.toPath()
     }
 
     /**

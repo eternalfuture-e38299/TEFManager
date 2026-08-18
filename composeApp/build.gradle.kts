@@ -13,14 +13,17 @@ plugins {
 
 object AppConfig {
     const val VERSION_NAME : String = "1.0.0"
-    const val VERSION_CODE : Int = 2026080800
+    const val VERSION_CODE : Int = 2026081700
     const val KERNEL_VERSION = "1.0.0"
     const val TEFLOADER_VERSION = "1.0.0"
     val MODULE_VERSIONS = mapOf(
-        "LanguagePackExtension" to "1.0.0",
-        "TexturePackExtension" to "1.0.0",
+        "LanguagePackExtension" to "1.0.3",
+        "TexturePackExtension" to "1.0.1",
         "FontPackExtension" to "1.0.0"
     )
+    const val IS_INLINE_GAME = false
+    const val INLINE_GAME_VERSION = "1.4.5.6.4"
+    const val INLINE_GAME_VERSION_CODE = 301543
 }
 
 val buildConfig = BuildConfigGenerator.BuildConfig(
@@ -28,7 +31,10 @@ val buildConfig = BuildConfigGenerator.BuildConfig(
     AppConfig.VERSION_CODE,
     AppConfig.KERNEL_VERSION,
     AppConfig.TEFLOADER_VERSION,
-    AppConfig.MODULE_VERSIONS
+    AppConfig.MODULE_VERSIONS,
+    isInlineGame = AppConfig.IS_INLINE_GAME,
+    inlineGameVersion = AppConfig.INLINE_GAME_VERSION,
+    inlineGameVersionCode = AppConfig.INLINE_GAME_VERSION_CODE
 )
 
 val generateCode by tasks.registering {
@@ -99,6 +105,10 @@ kotlin {
                 // implementation(fileTree(mapOf("dir" to "libs/android", "include" to listOf("*.jar", "*.aar"))))
                 implementation(project(":composeApp:libs:android:aXML"))
                 implementation(files("libs/android/ManifestEditor-2.0.jar"))
+
+                if (AppConfig.IS_INLINE_GAME) {
+                    implementation(files("libs/android/terraria.jar"))
+                }
             }
         }
         commonMain {
@@ -142,7 +152,12 @@ kotlin {
             implementation(libs.kotlin.test)
         }
         jvmMain.dependencies {
-            implementation(compose.desktop.currentOs)
+            implementation(libs.desktop.jvm.linux.x64)
+            implementation(libs.desktop.jvm.macos.x64)
+            implementation(libs.desktop.jvm.windows.x64)
+            implementation(libs.desktop.jvm.macos.arm64)
+
+            // implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
             implementation(libs.ktor.client.cio)
         }
@@ -163,6 +178,12 @@ androidApp.apply {
         targetSdk = 37
         versionCode = AppConfig.VERSION_CODE
         versionName = AppConfig.VERSION_NAME
+
+        if (AppConfig.IS_INLINE_GAME) {
+            ndk {
+                abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a"))
+            }
+        }
     }
 
     buildTypes {
@@ -196,6 +217,19 @@ androidApp.apply {
     }
 
     packaging {
+        if (!AppConfig.IS_INLINE_GAME) {
+            jniLibs {
+                excludes += listOf(
+                    "**/libil2cpp.so",
+                    "**/libmain.so",
+                    "**/libunity.so",
+                    "**/libc++_shared.so"
+                )
+            }
+
+            resources.excludes += "assets/bin/Data/**"
+        }
+
         resources {
             // 排除冲突的 LICENSE 文件
             excludes += "META-INF/LICENSE.md"
@@ -204,12 +238,23 @@ androidApp.apply {
             excludes += "META-INF/NOTICE"
             excludes += "META-INF/*.md"
             excludes += "META-INF/DEPENDENCIES"
-
             // 如果某些文件需要保留，可以使用 pickFirsts
             // pickFirsts += "META-INF/LICENSE.md"
         }
     }
+
+
+    if (AppConfig.IS_INLINE_GAME) {
+        androidResources {
+            noCompress += mutableListOf(
+                "assets/bin/Data/data.unity3d",
+                "assets/bin/Data/resources.resource",
+                "assets/bin/Data/unity default resources"
+            )
+        }
+    }
 }
+
 
 dependencies {
     debugImplementation(libs.compose.uiTooling)

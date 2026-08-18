@@ -86,7 +86,8 @@ fun GeneralSettings() {
                     val languages = listOf(
                         StringsResource.Language.System,
                         StringsResource.Language.ZhHans,
-                        StringsResource.Language.En
+                        StringsResource.Language.En,
+                        StringsResource.Language.Ru
                     )
 
                     Box {

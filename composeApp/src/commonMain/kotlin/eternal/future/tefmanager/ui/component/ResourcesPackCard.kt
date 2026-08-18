@@ -27,8 +27,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Texture
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -39,8 +37,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -235,29 +231,7 @@ fun ResourcesPackCard(
                 Switch(
                     checked = isEnabled,
                     onCheckedChange = onEnableChange,
-                    enabled = switchEnabled,  // 使用传入的参数
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = MaterialTheme.colorScheme.primary,
-                        checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
-                        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                    ),
-                    thumbContent = {
-                        Icon(
-                            imageVector = if (isEnabled) {
-                                Icons.Rounded.Check
-                            } else {
-                                Icons.Rounded.Close
-                            },
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = if (isEnabled) {
-                                MaterialTheme.colorScheme.onPrimary
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant
-                            }
-                        )
-                    }
+                    enabled = switchEnabled
                 )
 
                 // 展开按钮

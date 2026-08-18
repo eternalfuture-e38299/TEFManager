@@ -18,11 +18,38 @@ actual object GameLauncher {
         AppLogger.d("Attempting to launch game: ${item.apkPackName} version ${item.version}")
 
         try {
-            val context = MainActivity.context
-            if (context == null) {
-                AppLogger.e("MainActivity context is null, cannot proceed with launch")
+            val context = MainActivity.context!!
+
+/*
+            if (BuildConfig.IS_INLINE_GAME) {
+                AppLogger.d("Starting inline game launch process")
+
+                val soFile = File(context.getExternalFilesDir(null), "tefkernel/libtefkernel.android.${Build.SUPPORTED_ABIS.first()}.so")
+                val target = File(context.dataDir, "libtefkernel.so")
+
+                val configFile = File(context.filesDir, "tefkernel_working_dir")
+                if (!configFile.exists()) configFile.writeText(context.getExternalFilesDir(null)!!.absolutePath)
+
+                // 复制文件
+                soFile.copyTo(target, overwrite = true)
+
+                // 设置 target 的权限（不是 soFile！）
+                target.setExecutable(true)
+                target.setWritable(false)  // 关键：设置为不可写
+
+                // 现在可以安全加载
+                System.load(target.absolutePath)
+
+                // 加载完成后可以恢复权限（如果需要）
+                // target.setWritable(true)
+
+                val intent = Intent(context, UnityPlayerActivity::class.java)
+                context.startActivity(intent)
+
+                configFile.delete()
                 return
             }
+*/
 
             if (!Platform.isAndroidModuleActive) {
                 AppLogger.d("Android module is not active, starting FileProviderForegroundService")

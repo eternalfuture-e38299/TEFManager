@@ -7,6 +7,7 @@ import android.os.Build
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
+import eternal.future.tefmanager.BuildConfig
 import eternal.future.tefmanager.MainActivity
 import eternal.future.tefmanager.Platform
 import eternal.future.tefmanager.model.GameItem
@@ -38,54 +39,69 @@ actual object GameManager {
      * 根据模块激活状态决定是否需要检查元数据
      */
     fun loadGamesWithMetaData(): MutableList<GameItem> {
-        try {
-            val packageManager = MainActivity.context!!.packageManager
-            val filteredGames = mutableListOf<GameItem>()
+        if (!BuildConfig.IS_INLINE_GAME) {
+            try {
+                val packageManager = MainActivity.context!!.packageManager
+                val filteredGames = mutableListOf<GameItem>()
 
-            // 检查模块激活状态
-            val moduleActive = checkModuleActiveState()
-            AppLogger.i("Module active state: $moduleActive")
+                // 检查模块激活状态
+                val moduleActive = checkModuleActiveState()
+                AppLogger.i("Module active state: $moduleActive")
 
-            targetPackages.forEach { packageName ->
-                try {
-                    val packageInfo = packageManager.getPackageInfo(packageName,
-                        PackageManager.GET_META_DATA or PackageManager.GET_ACTIVITIES)
+                targetPackages.forEach { packageName ->
+                    try {
+                        val packageInfo = packageManager.getPackageInfo(
+                            packageName,
+                            PackageManager.GET_META_DATA or PackageManager.GET_ACTIVITIES
+                        )
 
-                    val shouldInclude: Boolean
+                        val shouldInclude: Boolean
 
-                    if (moduleActive) {
-                        // 模块已激活，不需要检查元数据，直接包含
-                        shouldInclude = true
-                        AppLogger.d("Module active, auto-include: $packageName")
-                    } else {
-                        // 模块未激活，需要检查元数据
-                        shouldInclude = hasRequiredMetaData(packageInfo.applicationInfo)
-                        if (shouldInclude) {
-                            AppLogger.d("Module inactive, but has metadata: $packageName")
+                        if (moduleActive) {
+                            // 模块已激活，不需要检查元数据，直接包含
+                            shouldInclude = true
+                            AppLogger.d("Module active, auto-include: $packageName")
                         } else {
-                            AppLogger.d("Module inactive, no metadata: $packageName")
+                            // 模块未激活，需要检查元数据
+                            shouldInclude = hasRequiredMetaData(packageInfo.applicationInfo)
+                            if (shouldInclude) {
+                                AppLogger.d("Module inactive, but has metadata: $packageName")
+                            } else {
+                                AppLogger.d("Module inactive, no metadata: $packageName")
+                            }
                         }
-                    }
 
-                    if (shouldInclude) {
-                        createGameItemFromPackageInfo(packageInfo)?.let {
-                            filteredGames.add(it)
-                            AppLogger.i("Found game: ${packageInfo.packageName} (module active: $moduleActive)")
+                        if (shouldInclude) {
+                            createGameItemFromPackageInfo(packageInfo)?.let {
+                                filteredGames.add(it)
+                                AppLogger.i("Found game: ${packageInfo.packageName} (module active: $moduleActive)")
+                            }
                         }
-                    }
 
-                } catch (_: PackageManager.NameNotFoundException) {
-                    AppLogger.d("App not installed: $packageName")
-                } catch (e: Exception) {
-                    AppLogger.e("Error occurred while checking the application: $packageName", e)
+                    } catch (_: PackageManager.NameNotFoundException) {
+                        AppLogger.d("App not installed: $packageName")
+                    } catch (e: Exception) {
+                        AppLogger.e(
+                            "Error occurred while checking the application: $packageName",
+                            e
+                        )
+                    }
                 }
+
+                AppLogger.i("Loaded ${filteredGames.size} games. Module active: $moduleActive")
+                return filteredGames
+
+            } catch (e: Exception) {
+                AppLogger.e("Failed to load games", e)
             }
+        } else {
+            val context = MainActivity.context!!
+            val packageInfo = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_META_DATA or PackageManager.GET_ACTIVITIES)
 
-            AppLogger.i("Loaded ${filteredGames.size} games. Module active: $moduleActive")
-            return filteredGames
-
-        } catch (e: Exception) {
-            AppLogger.e("Failed to load games", e)
+            return mutableStateListOf(createGameItemFromPackageInfo(packageInfo)!!.copy(
+                version = BuildConfig.INLINE_GAME_VERSION,
+                versionCode = BuildConfig.INLINE_GAME_VERSION_CODE
+            ))
         }
 
         return mutableStateListOf()

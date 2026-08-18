@@ -7,7 +7,6 @@ import eternal.future.tefmanager.ConfigurationState
 import eternal.future.tefmanager.Platform
 import eternal.future.tefmanager.strings.generated.*
 
-
 /*******************************************************************************
  * TEFManager - StringsResource
  * Copyright (C) 2026 eternalfuture-e38299
@@ -43,18 +42,20 @@ object StringsResource {
         Strings = when (code) {
             Language.ZhHans -> ZhHans
             Language.En -> En
+            Language.Ru -> Ru
             else -> ZhHans
         }
     }
 
     enum class Language {
-        System, ZhHans, En;
+        System, ZhHans, En, Ru;  // Добавлен Ru
 
         override fun toString(): String {
             return when(this) {
                 System -> Strings.settings.followSystem
                 ZhHans -> "简体中文"
                 En -> "English"
+                Ru -> "Русский"
             }
         }
     }
@@ -68,6 +69,7 @@ object StringsResource {
         return when (language) {
             "zh" if (region in simplifiedChineseRegions) -> Language.ZhHans
             "en" -> Language.En
+            "ru" -> Language.Ru
             else -> Language.En
         }
     }

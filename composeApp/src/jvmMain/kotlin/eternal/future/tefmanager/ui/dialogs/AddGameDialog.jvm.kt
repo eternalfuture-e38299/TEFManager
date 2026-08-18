@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -82,6 +84,7 @@ actual object AddGameDialog {
         var gameVersion by remember { mutableStateOf("") }
         var architecture by remember { mutableStateOf(ArchitectureType.defaultForCurrentPlatform()) }
         var errorMessage by remember { mutableStateOf<String?>(null) }
+        var isProcessing by remember { mutableStateOf(false) }
 
         val scrollState = rememberScrollState()
 
@@ -92,7 +95,7 @@ actual object AddGameDialog {
         )
 
         val tefLoaderPicker = rememberFilePickerLauncher(
-            type = FileKitType.File("*.dll"),
+            type = FileKitType.File("*.dll | *.zip"),
             onResult = { file -> file?.let { tefLoaderPath = it.path } }
         )
 
@@ -106,7 +109,9 @@ actual object AddGameDialog {
         }
 
         Dialog(
-            onDismissRequest = { onResult(null) },
+            onDismissRequest = {
+                if (!isProcessing) onResult(null)
+            },
             properties = DialogProperties(usePlatformDefaultWidth = false)
         ) {
             Surface(
@@ -124,12 +129,12 @@ actual object AddGameDialog {
                 ) {
                     // 标题
                     Text(
-                        text = Strings.home.add.title,  // "添加游戏"
+                        text = Strings.home.add.title,
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = Strings.home.add.subtitle,  // "选择游戏文件并配置启动选项"
+                        text = Strings.home.add.subtitle,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp, bottom = 24.dp)
@@ -260,7 +265,10 @@ actual object AddGameDialog {
                             .padding(top = 24.dp),
                         horizontalArrangement = Arrangement.End
                     ) {
-                        TextButton(onClick = { onResult(null) }) {
+                        TextButton(
+                            onClick = { if (!isProcessing) onResult(null) },
+                            enabled = !isProcessing
+                        ) {
                             Text(Strings.cancel)
                         }
 
@@ -282,37 +290,54 @@ actual object AddGameDialog {
                                     }
                                 }
 
+                                isProcessing = true
+                                errorMessage = null
+
                                 try {
                                     val versionCode = convertVersionToCode(gameVersion)
+
+                                    // 执行补丁并获取生成的二进制路径
+                                    val binaryPath = GamePatcher.patchViaDotNetGrafting(
+                                            gameFilePath.toPath(),
+                                            tefLoaderPath,
+                                            architecture.toString().lowercase()
+                                        ).toString()
+
+                                    if (binaryPath.isEmpty()) {
+                                        errorMessage = Strings.home.add.error.invalidTefLoader
+                                        return@Button
+                                    }
+
                                     val gameItem = GameItem(
                                         apkPackName = "",
                                         filePath = gameFilePath,
-                                        tefloaderPath = if (useCustomTefLoader) tefLoaderPath else "",
+                                        tefloaderPath = binaryPath,  // 保存生成的二进制路径
                                         version = gameVersion,
                                         versionCode = versionCode,
                                         architecture = architecture.toString(),
                                         hash = calculateFileHash(gameFile)
                                     )
 
-                                    if (!useCustomTefLoader) {
-                                        GamePatcher.patchViaDotNetGrafting(
-                                            gameFilePath.toPath(),
-                                            tefLoaderPath,
-                                            architecture.toString()
-                                        )
-                                    }
-
                                     onResult(gameItem)
                                 } catch (e: Exception) {
                                     errorMessage = Strings.error.title(e.message ?: Strings.error.unknown)
+                                    isProcessing = false
                                 }
                             },
-                            enabled = gameFilePath.isNotBlank() &&
+                            enabled = !isProcessing &&
+                                    gameFilePath.isNotBlank() &&
                                     File(gameFilePath).exists() &&
                                     (!useCustomTefLoader ||
                                             (tefLoaderPath.isNotBlank() && File(tefLoaderPath).exists()))
                         ) {
-                            Text(Strings.home.game.add)
+                            if (isProcessing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            Text(if (isProcessing) Strings.home.add.patching else Strings.home.game.add)
                         }
                     }
                 }

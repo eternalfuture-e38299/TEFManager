@@ -11,10 +11,8 @@ actual object GameLauncher {
             return
         }
 
-        val executablePath = buildExecutablePath(item.tefloaderPath, item.architecture)
-
         val command = mutableListOf(
-            executablePath,
+            item.tefloaderPath,
             "-k", (Platform.getData("tefkernel") / Platform.getDynamicLibraryName("tefkernel.${Platform.osName.lowercase()}.${item.architecture.lowercase()}")).toString(),
             "-w", (Platform.getData(null)).toString()
         )
@@ -25,38 +23,20 @@ actual object GameLauncher {
         AppLogger.i("Launching: ${command.joinToString(" ")}")
 
         try {
-            ProcessBuilder(command)
-                .inheritIO()
-                .start()
+            val processBuilder = ProcessBuilder(command)
+                .redirectOutput(ProcessBuilder.Redirect.INHERIT)
+                .redirectError(ProcessBuilder.Redirect.INHERIT)
+
+            // 启动进程但不等待
+            processBuilder.start()
+
+            // 分离进程，不调用 waitFor()
+            // 在 JVM 退出时子进程可以继续运行
+            processBuilder.redirectErrorStream()
+
             AppLogger.i("Game launched successfully: $command")
         } catch (e: Exception) {
             AppLogger.e("Failed to launch game: ${e.message}")
-        }
-    }
-
-    private fun buildExecutablePath(basePath: String, architecture: String): String {
-        val withoutExe = if (basePath.endsWith(".exe")) {
-            basePath.substring(0, basePath.length - 4)
-        } else {
-            basePath
-        }
-
-        val arch = if (architecture.isNotEmpty()) {
-            when (architecture.lowercase()) {
-                "arm64-v8a", "arm64" -> "arm64"
-                "armeabi-v7a", "armv7a" -> "armv7"
-                "x86_64", "amd64" -> "x86_64"
-                "x86" -> "x86"
-                else -> architecture
-            }
-        } else {
-            Platform.getArchitecture()
-        }
-
-        return if (Platform.isWindows) {
-            "$withoutExe.exe"
-        } else {
-            "$withoutExe.bin.$arch"
         }
     }
 }

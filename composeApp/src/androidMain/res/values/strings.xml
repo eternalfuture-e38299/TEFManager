@@ -1,4 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">TEFManager</string>
+
+    <string name="FreeformWindowOrientation_landscape" />
+    <string name="FreeformWindowOrientation_portrait" />
+    <string name="FreeformWindowSize_maximize" />
+    <string name="FreeformWindowSize_phone" />
+    <string name="FreeformWindowSize_tablet" />
+    <string name="game_view_content_description">Game view</string>
+    <string name="gpdeku_split_title">gpdeku</string>
 </resources>

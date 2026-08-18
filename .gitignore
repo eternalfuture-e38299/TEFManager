@@ -34,3 +34,8 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# Terraria resourse
+composeApp/src/androidMain/resources/assets
+composeApp/src/androidMain/jniLibs/
+composeApp/libs/android/terraria.jar

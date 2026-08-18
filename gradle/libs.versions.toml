@@ -12,6 +12,10 @@ bcpkixJdk18on = "1.85"
 colorpickerCompose = "1.2.0"
 composeHotReload = "1.2.0"
 composeMultiplatform = "1.11.1"
+desktopJvmLinuxX64 = "1.11.1"
+desktopJvmMacosX64 = "1.11.1"
+desktopJvmWindowsX64 = "1.11.1"
+desktopJvmMacosArm64 = "1.11.1"
 filekitCore = "0.14.2"
 filekitDialogsCompose = "0.14.2"
 filekitCoil = "0.14.2"
@@ -34,6 +38,8 @@ okioFakefilesystem = "3.18.1"
 voyagerNavigator = "2.2.21-1.10.3"
 jetbrainsKotlinJvm = "2.4.10"
 material = "1.14.0"
+androidBuiltInKotlin = "9.2.1"
+androidBuiltInKotlinVersion = "9.2.1"
 
 [libraries]
 apksig = { module = "com.android.tools.build:apksig", version.ref = "apksig" }
@@ -41,6 +47,10 @@ apkzlib = { module = "com.android.tools.build:apkzlib", version.ref = "apksig" }
 bcpkix-jdk18on = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bcpkixJdk18on" }
 bcprov-jdk18on = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bcprovJdk18on" }
 colorpicker-compose = { module = "com.github.skydoves:colorpicker-compose", version.ref = "colorpickerCompose" }
+desktop-jvm-macos-arm64 = { module = "org.jetbrains.compose.desktop:desktop-jvm-macos-arm64", version.ref = "desktopJvmMacosArm64" }
+desktop-jvm-windows-x64 = { module = "org.jetbrains.compose.desktop:desktop-jvm-windows-x64", version.ref = "desktopJvmWindowsX64" }
+desktop-jvm-macos-x64 = { module = "org.jetbrains.compose.desktop:desktop-jvm-macos-x64", version.ref = "desktopJvmMacosX64" }
+desktop-jvm-linux-x64 = { module = "org.jetbrains.compose.desktop:desktop-jvm-linux-x64", version.ref = "desktopJvmLinuxX64" }
 filekit-coil = { module = "io.github.vinceglb:filekit-coil", version.ref = "filekitCoil" }
 filekit-dialogs-compose = { module = "io.github.vinceglb:filekit-dialogs-compose", version.ref = "filekitDialogsCompose" }
 filekit-core = { module = "io.github.vinceglb:filekit-core", version.ref = "filekitCore" }
