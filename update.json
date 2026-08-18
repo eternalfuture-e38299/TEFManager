@@ -1,11 +1,17 @@
 {
+  "tefmanager": null,
+  "tefkernel": null,
+  "tefloader": null,
+  "language": null,
   "texture": {
     "fileName": "TexturePackExtension.zip",
     "moduleName": "TexturePackExtension",
     "newVersion": "1.0.2",
     "description": "修复大部分UI透明Bug | Fixed most of the UI transparency bugs",
     "downloadUrl": "https://github.com/eternalfuture-e38299/TEFManager-TexturePack-Extension/releases/download/1.0.2/TexturePackExtension.zip",
-    "externalUrl": "",
-    "fileSize": "846 kb"
-  }
+    "externalUrl": "https://github.com/eternalfuture-e38299/TEFManager-TexturePack-Extension/releases/tag/1.0.2",
+    "fileSize": "846 KB"
+  },
+  "font": null,
+  "music": null
 }
