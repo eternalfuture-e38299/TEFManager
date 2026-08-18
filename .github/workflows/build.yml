@@ -135,10 +135,10 @@ jobs:
           path: composeApp/build/compose/binaries/main-release/dmg/*.dmg
           retention-days: 90
 
-  build-desktop-linux:
-    name: Build Linux AppImage
+  build-jar:
+    name: Build Cross-Platform JAR
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     
     steps:
       - name: Checkout code
@@ -158,78 +158,25 @@ jobs:
         with:
           gradle-version: wrapper
           cache-read-only: false
-
-      - name: Install Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libx11-dev libxrandr-dev libxrender-dev libxext-dev \
-            libxtst-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev \
-            libxcb1-dev libxcb-shm0-dev libxxf86vm-dev libxkbcommon-x11-dev \
-            libxkbcommon0 libpulse-dev libasound2-dev libudev-dev
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
-
-      - name: Build Linux AppImage
-        run: |
-          ./gradlew :composeApp:packageReleaseAppImage \
-            --no-daemon
-
-      - name: Upload AppImage
-        uses: actions/upload-artifact@v4
-        with:
-          name: TEFManager.AppImage
-          path: composeApp/build/compose/binaries/main-release/appimage/*.AppImage
-          retention-days: 90
-
-  build-jar:
-    name: Build JAR (Windows & macOS)
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: windows-latest
-            suffix: Windows
-          - runner: macos-latest
-            suffix: macOS
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: wrapper
-          cache-read-only: false
 
       - name: Build Uber JAR
         run: |
           ./gradlew :composeApp:packageReleaseUberJarForCurrentOS \
             --no-daemon
-        shell: bash
 
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
-          name: TEFManager-${{ matrix.suffix }}.jar
+          name: TEFManager.jar
           path: composeApp/build/compose/jars/*.jar
           retention-days: 90
 
   summary:
     name: Build Summary
-    needs: [build-android, build-desktop-windows, build-desktop-macos, build-desktop-linux, build-jar]
+    needs: [build-android, build-desktop-windows, build-desktop-macos, build-jar]
     runs-on: ubuntu-latest
     if: always()
     
@@ -252,11 +199,8 @@ jobs:
           [ "${{ needs.build-desktop-macos.result }}" == "success" ] && STATUS="✅" || STATUS="❌"
           echo "| macOS | TEFManager.dmg | $STATUS |" >> $GITHUB_STEP_SUMMARY
           
-          [ "${{ needs.build-desktop-linux.result }}" == "success" ] && STATUS="✅" || STATUS="❌"
-          echo "| Linux | TEFManager.AppImage | $STATUS |" >> $GITHUB_STEP_SUMMARY
-          
           [ "${{ needs.build-jar.result }}" == "success" ] && STATUS="✅" || STATUS="❌"
-          echo "| JAR | TEFManager-*.jar | $STATUS |" >> $GITHUB_STEP_SUMMARY
+          echo "| JAR (Cross-Platform) | TEFManager.jar | $STATUS |" >> $GITHUB_STEP_SUMMARY
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## 📝 Info" >> $GITHUB_STEP_SUMMARY
