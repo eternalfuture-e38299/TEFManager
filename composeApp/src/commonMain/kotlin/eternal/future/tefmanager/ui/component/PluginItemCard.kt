@@ -178,23 +178,6 @@ fun PluginItemCard(
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
-
-                        // 自定义图标标记
-                        if (hasCustomIcon) {
-                            Surface(
-                                shape = MaterialTheme.shapes.small,
-                                tonalElevation = 1.dp,
-                                color = MaterialTheme.colorScheme.tertiaryContainer
-                            ) {
-                                Text(
-                                    text = Strings.manager.custom,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontSize = 10.sp,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
                     }
 
                     // ID和作者信息

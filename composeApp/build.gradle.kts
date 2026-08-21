@@ -12,13 +12,13 @@ plugins {
 }
 
 object AppConfig {
-    const val VERSION_NAME : String = "1.0.0"
-    const val VERSION_CODE : Int = 2026081700
-    const val KERNEL_VERSION = "1.0.0"
-    const val TEFLOADER_VERSION = "1.0.0"
+    const val VERSION_NAME : String = "1.1.0"
+    const val VERSION_CODE : Int = 2026082100
+    const val KERNEL_VERSION = "1.0.1"
+    const val TEFLOADER_VERSION = "1.0.1"
     val MODULE_VERSIONS = mapOf(
-        "LanguagePackExtension" to "1.0.3",
-        "TexturePackExtension" to "1.0.1",
+        "LanguagePackExtension" to "1.0.2",
+        "TexturePackExtension" to "1.0.2",
         "FontPackExtension" to "1.0.0"
     )
     const val IS_INLINE_GAME = false

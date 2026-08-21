@@ -93,7 +93,6 @@
 
   "manager.title": "管理",
   "manager.searchMod": "搜索模组...",
-  "manager.custom": "自定义",
   "manager.details": "详细信息",
   "manager.dependency": "依赖项",
   "manager.dependencyVersion": "版本: ${version}",
@@ -257,6 +256,9 @@
   "update.redownload": "重新下载",
   "update.status.completed": "已下载",
 
+  "update.outdated.title": "正在更新过时组件...",
+  "update.outdated.tip": "请稍候，不要关闭应用",
+
   "common.checkingUpdate": "正在检查更新...",
   "common.latestVersion": "已是最新版本",
   "common.updateFailed": "检查更新失败: ${error}",
@@ -339,5 +341,11 @@
   "validation.dialog.text1": "检测到当前设备未安装受支持的 Terraria 国际版（Android）",
   "validation.dialog.text2": "本工具包含 Terraria 游戏本体，但需配合正版授权文件方可运行，您必须先通过 Google Play 或其他官方渠道安装正版 Terraria 国际版，本工具才能正常启动",
   "validation.dialog.text3": "⚠ 免责与使用条款：\\n1. 本工具包含的 Terraria 游戏文件仅为技术兼容之用，不构成对 Terraria 版权的侵犯；\\n2. 您必须在拥有正版 Terraria 授权的前提下使用本工具，否则请立即删除；\\n3. 本工具为独立第三方工具，与 Re-Logic 及其授权方无任何关联；\\n4. 用户需自行承担使用本工具的一切风险，开发者不对任何直接或间接损失负责；\\n5. 本工具仅用于合法授权版本的技术研究，严禁用于商业用途或破坏游戏平衡；\\n6. 若您非通过 Google Play 或其他官方渠道获取 Terraria 国际版授权，请立即停止使用并删除本工具。",
-  "validation.dialog.confirm": "了解并退出"
+  "validation.dialog.confirm": "了解并退出",
+
+  "root.dialog.title": "需要 Root 权限",
+  "root.dialog.message": "请授予软件 Root 权限，否则无法启动游戏。",
+  "root.dialog.description": "需要 Root 权限来修改私有目录权限，以便游戏能够访问资源包文件。",
+  "root.dialog.warning": "未授予 Root 权限将导致游戏无法正常启动",
+  "root.dialog.confirm": "退出应用"
 }

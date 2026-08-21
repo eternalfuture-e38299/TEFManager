@@ -38,10 +38,11 @@ object ConfigurationState {
     @Serializable
     data class AppConfig(
         var initialized: Boolean = false,
-        var kernelVersion: String = BuildConfig.KERNEL_VERSION,
+        var kernelVersion: String = "1.0.0",
         var language: StringsResource.Language = StringsResource.Language.System,
         var themeMode: ThemeMode = ThemeMode.SYSTEM,
         var themeSeedColor: ULong = Color(0xFF2196F3).value,
+        var fontSizeScale: Float = 1.0f,
         var autoUpdate: Boolean = true,
         var dynamicColor: Boolean = Platform.dynamicColor,
         var kernelLogEnabled: Boolean = true,
@@ -120,6 +121,7 @@ object ConfigurationState {
         set(value) {
             _themeSeedColorULong = value.value
         }
+    var fontSizeScale by AutoConfigDelegate(AppConfig::fontSizeScale)
     var autoUpdate by AutoConfigDelegate(AppConfig::autoUpdate)
     var dynamicColor by AutoConfigDelegate(AppConfig::dynamicColor)
     var kernelLogEnabled by AutoConfigDelegate(AppConfig::kernelLogEnabled)

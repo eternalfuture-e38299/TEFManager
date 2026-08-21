@@ -46,7 +46,7 @@ import okio.use
 // ==================== 基类 ====================
 
 abstract class BasePackManager(
-    private val config: ResourcePackManager.PackManagerConfig
+    val config: ResourcePackManager.PackManagerConfig
 ) {
 
     private val fileSystem = FileSystem.SYSTEM

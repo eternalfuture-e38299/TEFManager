@@ -93,7 +93,6 @@
 
   "manager.title": "Management",
   "manager.searchMod": "Search mods...",
-  "manager.custom": "Custom",
   "manager.details": "Details",
   "manager.dependency": "Dependencies",
   "manager.dependencyVersion": "Version: ${version}",
@@ -256,6 +255,8 @@
   "update.retry": "Retry",
   "update.redownload": "Redownload",
   "update.status.completed": "Downloaded",
+  "update.outdated.title": "Updating outdated components...",
+  "update.outdated.tip": "Please wait, do not close the application",
 
   "common.checkingUpdate": "Checking for updates...",
   "common.latestVersion": "Already up to date",
@@ -339,5 +340,11 @@
   "validation.dialog.text1": "No supported Terraria International Edition (Android) is installed on the current device",
   "validation.dialog.text2": "This tool contains the Terraria game files, but requires a legitimate license file to run. You must first install the official Terraria International Edition via Google Play or other official channels before this tool can function properly",
   "validation.dialog.text3": "⚠ Disclaimer and Terms of Use:\\n1. The Terraria game files included in this tool are for technical compatibility purposes only and do not constitute any infringement of Terraria copyright;\\n2. You must own a legitimate Terraria license to use this tool, otherwise please delete it immediately;\\n3. This tool is an independent third-party tool and has no affiliation with Re-Logic or its authorized parties;\\n4. Users assume all risks associated with using this tool, and the developer shall not be held liable for any direct or indirect damages;\\n5. This tool is intended solely for technical research on legally licensed versions and is strictly prohibited for commercial use or game balance disruption;\\n6. If you did not obtain a Terraria International Edition license via Google Play or other official channels, please cease use immediately and delete this tool.",
-  "validation.dialog.confirm": "Acknowledge and Exit"
+  "validation.dialog.confirm": "Acknowledge and Exit",
+
+  "root.dialog.title": "Root Permission Required",
+  "root.dialog.message": "Please grant Root permission to the app, otherwise the game will not start.",
+  "root.dialog.description": "Root permission is required to modify private directory permissions so that the game can access resource pack files.",
+  "root.dialog.warning": "Failure to grant Root permission will prevent the game from starting normally",
+  "root.dialog.confirm": "Exit App"
 }

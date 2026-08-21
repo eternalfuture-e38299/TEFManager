@@ -36,6 +36,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +55,8 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.transitions.FadeTransition
 import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.ui.component.RefreshIconButton
+import eternal.future.tefmanager.ui.dialogs.UpdateOutdatedDialog
+import eternal.future.tefmanager.utils.addon.AddonManager
 import org.jetbrains.compose.resources.painterResource
 import tefmanager.composeapp.generated.resources.Res
 import tefmanager.composeapp.generated.resources.tefmanager_logo
@@ -99,6 +102,19 @@ object MainScreen : Screen {
     @OptIn(InternalVoyagerApi::class)
     @Composable
     override fun Content() {
+        var showUpdateOutdatedDialog by remember { mutableStateOf(false) }
+
+        LaunchedEffect(Unit) {
+            AddonManager.updateOutdatedComponents(
+                onNeedUpdate = {
+                    showUpdateOutdatedDialog = true
+                },
+                onUpdateComplete = {
+                    showUpdateOutdatedDialog = false
+                }
+            )
+        }
+
         Navigator(
             screen = HomeScreen,
             key = "main_navigator"
@@ -166,6 +182,9 @@ object MainScreen : Screen {
                     }
                 }
             ) { paddingValues ->
+
+                if (showUpdateOutdatedDialog) UpdateOutdatedDialog {}
+
                 Row(
                     modifier = Modifier
                         .fillMaxSize()

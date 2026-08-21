@@ -1,6 +1,8 @@
 package eternal.future.tefmanager.ui.theme
 
 import androidx.compose.material3.Typography
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.sp
 
 /*******************************************************************************
  * TEFManager - Type
@@ -25,3 +27,29 @@ import androidx.compose.material3.Typography
  *******************************************************************************/
 
 val Typography = Typography()
+
+fun Typography.getScaled(scale: Float): Typography {
+    if (scale == 1.0f) return this
+
+    fun scaleTextStyle(style: TextStyle): TextStyle {
+        return style.copy(fontSize = (style.fontSize.value * scale).sp)
+    }
+
+    return Typography(
+        displayLarge = scaleTextStyle(displayLarge),
+        displayMedium = scaleTextStyle(displayMedium),
+        displaySmall = scaleTextStyle(displaySmall),
+        headlineLarge = scaleTextStyle(headlineLarge),
+        headlineMedium = scaleTextStyle(headlineMedium),
+        headlineSmall = scaleTextStyle(headlineSmall),
+        titleLarge = scaleTextStyle(titleLarge),
+        titleMedium = scaleTextStyle(titleMedium),
+        titleSmall = scaleTextStyle(titleSmall),
+        bodyLarge = scaleTextStyle(bodyLarge),
+        bodyMedium = scaleTextStyle(bodyMedium),
+        bodySmall = scaleTextStyle(bodySmall),
+        labelLarge = scaleTextStyle(labelLarge),
+        labelMedium = scaleTextStyle(labelMedium),
+        labelSmall = scaleTextStyle(labelSmall)
+    )
+}

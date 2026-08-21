@@ -70,4 +70,26 @@ object PermissionManager {
         executeRootCommand("chown -R :$targetUid \"$dirPath\"")
         executeRootCommand("chmod -R 2770 \"$dirPath\"")  // owner:rwx group:rwx other:---
     }
+
+    /**
+     * 检查是否有 Root 权限
+     */
+    fun hasRootPermission(): Boolean {
+        return try {
+            // 尝试执行 su 命令
+            val process = Runtime.getRuntime().exec("su -c echo test")
+            val exitCode = process.waitFor()
+
+            if (exitCode == 0) {
+                AppLogger.d("Root permission check: granted")
+                return true
+            }
+
+            AppLogger.d("Root permission check: denied (exit code: $exitCode)")
+            false
+        } catch (e: Exception) {
+            AppLogger.d("Root permission check: failed - ${e.message}")
+            false
+        }
+    }
 }

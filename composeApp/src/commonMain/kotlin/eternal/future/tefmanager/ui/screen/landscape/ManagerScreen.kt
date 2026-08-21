@@ -59,7 +59,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
-import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -148,32 +147,56 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
 
         val showAddonInstallOrUpdateDialog = remember { mutableStateOf(false) }
 
-        categories = (listOf(
-            ManagerTab(
-                id = "kernel",
-                title = Strings.manager.module.title,
-                icon = Icons.Rounded.Memory,
-                isKernel = true
-            ),
-            ManagerTab(
-                id = "kernel_plugins",
-                title = Strings.manager.plugin.title,
-                icon = Icons.Rounded.Extension,
-                isKernelPlugin = true
-            ),
-            ManagerTab(
-                id = "mod_loaders",
-                title = Strings.manager.modloader.title,
-                icon = Icons.Rounded.Dashboard,
-                isModLoader = true
-            )
-        ) + ModLoaderManager.packs.map { loader ->
-            ManagerTab(
-                id = loader.pkgId,
-                title = loader.name,
-                iconPath = Platform.getData("modloader") / "icons" / "${loader.pkgId}.icon"
-            )
-        }).toMutableStateList()
+        // 在 categories 初始化之后添加
+        LaunchedEffect(ModLoaderManager.packs) {
+            // 保存当前选中的 tab id
+            val currentTabId = categories.getOrNull(selectedTab)?.id
+
+            val newCategories = mutableListOf<ManagerTab>()
+            newCategories.addAll(listOf(
+                ManagerTab(
+                    id = "kernel",
+                    title = Strings.manager.module.title,
+                    icon = Icons.Rounded.Memory,
+                    isKernel = true
+                ),
+                ManagerTab(
+                    id = "kernel_plugins",
+                    title = Strings.manager.plugin.title,
+                    icon = Icons.Rounded.Extension,
+                    isKernelPlugin = true
+                ),
+                ManagerTab(
+                    id = "mod_loaders",
+                    title = Strings.manager.modloader.title,
+                    icon = Icons.Rounded.Dashboard,
+                    isModLoader = true
+                )
+            ))
+
+            ModLoaderManager.packs.forEach { loader ->
+                newCategories.add(ManagerTab(
+                    id = loader.pkgId,
+                    title = loader.name,
+                    iconPath = Platform.getData("modloader") / "icons" / "${loader.pkgId}.icon"
+                ))
+            }
+
+            // 查找之前选中的 tab 的新索引
+            val newIndex = newCategories.indexOfFirst { it.id == currentTabId }
+                .takeIf { it >= 0 } ?: 0
+
+            categories.clear()
+            categories.addAll(newCategories)
+
+            // 如果选中的索引变化了，更新 selectedTab 和 pagerState
+            if (selectedTab != newIndex) {
+                selectedTab = newIndex
+                coroutineScope.launch {
+                    pagerState.scrollToPage(newIndex)
+                }
+            }
+        }
 
         LaunchedEffect(searchQuery) {
             delay(300.milliseconds)

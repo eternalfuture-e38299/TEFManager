@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.FontDownload
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -26,6 +27,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -171,7 +173,6 @@ fun AppearanceSettings() {
                 title = appearance.themeColor,
                 description = appearance.themeColorDec,
                 enabled = !ConfigurationState.dynamicColor,
-                showDivider = false,
                 trailingContent = {
                     Surface(
                         shape = CircleShape,
@@ -187,6 +188,34 @@ fun AppearanceSettings() {
                             }
                     ) {}
                 }
+            )
+
+            // 字体大小设置
+            SettingItem(
+                icon = Icons.Rounded.FontDownload,
+                title = Strings.settings.appearance.fontSize,
+                description = Strings.settings.appearance.fontSizeDec,
+                showDivider = false,
+                trailingContent = {
+                    Text(
+                        text = "${(ConfigurationState.fontSizeScale * 100).toInt()}%",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            )
+
+            // 滑块
+            Slider(
+                value = ConfigurationState.fontSizeScale,
+                onValueChange = { newScale ->
+                    ConfigurationState.fontSizeScale = newScale.coerceIn(0.5f, 2.0f)
+                },
+                valueRange = 0.5f..2.0f,
+                steps = 32,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
             )
         }
     }

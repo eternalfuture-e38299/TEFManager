@@ -80,6 +80,12 @@ actual object GameLauncher {
                 }
                 AppLogger.d("FileProviderForegroundService started successfully")
             } else {
+                if (!PermissionManager.hasRootPermission()) {
+                    AppLogger.w("Root permission not granted, showing dialog")
+                    MainActivity.showNeedRootDialog.value = true
+                    return
+                }
+
                 AppLogger.d("Android module is active, granting permissions to package: ${item.apkPackName}")
                 PermissionManager.grantReadWriteAccess(context, item.apkPackName)
                 AppLogger.d("Permissions granted successfully to package: ${item.apkPackName}")

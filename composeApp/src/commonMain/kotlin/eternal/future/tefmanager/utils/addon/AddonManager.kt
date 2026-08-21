@@ -1,10 +1,13 @@
 package eternal.future.tefmanager.utils.addon
 
 import androidx.compose.runtime.mutableStateMapOf
+import eternal.future.tefmanager.BuildConfig
 import eternal.future.tefmanager.ConfigurationState
 import eternal.future.tefmanager.Platform
 import eternal.future.tefmanager.model.ModLoaderItem
+import eternal.future.tefmanager.ui.screen.shared.releaseResourceToTmp
 import eternal.future.tefmanager.utils.AppLogger
+import eternal.future.tefmanager.utils.isVersionGreater
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
@@ -20,7 +23,6 @@ import no.synth.kmpzip.zip.ZipFile
 import okio.FileSystem
 import okio.IOException
 import okio.Path
-import okio.Path.Companion.toPath
 import okio.SYSTEM
 import okio.buffer
 import okio.use
@@ -98,51 +100,123 @@ object AddonManager {
 
     val modManagersList = mutableStateMapOf<String, ModManager>()
 
-    fun installKernel(filePath: Path) {
-        val outDir = Platform.getData("tefkernel")
+    suspend fun updateOutdatedComponents(
+        onNeedUpdate: () -> Unit,
+        onUpdateComplete: () -> Unit
+    ) {
+        // Kernel
+        logger.i("Kernel: current=${ConfigurationState.kernelVersion}, latest=${BuildConfig.KERNEL_VERSION}")
+        if (isVersionGreater(BuildConfig.KERNEL_VERSION, ConfigurationState.kernelVersion)) {
+            logger.i("Updating kernel...")
+            onNeedUpdate()
+            val kernelTmpPath = releaseResourceToTmp("tefkernel.zip")
+            installKernel(kernelTmpPath)
+            FileSystem.SYSTEM.delete(kernelTmpPath)
+            logger.i("Kernel updated")
 
-        // 确保输出目录存在
-        if (!fileSystem.exists(outDir)) {
-            fileSystem.createDirectories(outDir)
-            logger.i("Created kernel directory: $outDir")
+            if (Platform.isDesktop) {
+                val tefloaderTmpPath = releaseResourceToTmp("tefloader.zip")
+                FileSystem.SYSTEM.copy(
+                    tefloaderTmpPath,
+                    Platform.getData("tefkernel") / "tefloader.zip"
+                )
+                FileSystem.SYSTEM.delete(tefloaderTmpPath)
+                logger.d("tefloader updated")
+            }
+        } else {
+            logger.d("Kernel up to date")
         }
 
-        val zip = ZipFile(fileSystem.openReadOnly(filePath))
+        // Language Pack
+        val langVersion = ModuleManager.getPackItem("eternal.future.languagepackextension")?.version ?: "none"
+        logger.i("LanguagePack: current=$langVersion, latest=${BuildConfig.LANGUAGEPACKEXTENSION}")
+        if (isVersionGreater(BuildConfig.LANGUAGEPACKEXTENSION, langVersion)) {
+            logger.i("Updating LanguagePack...")
+            onNeedUpdate()
+            val tmpPath = releaseResourceToTmp("LanguagePackExtension.zip")
+            install(tmpPath)
+            FileSystem.SYSTEM.delete(tmpPath)
+            logger.i("LanguagePack updated")
+        } else {
+            logger.d("LanguagePack up to date")
+        }
+
+        // Android-only modules
+        if (Platform.isAndroid) {
+            val fontVersion = ModuleManager.getPackItem("eternal.future.fontpackextension")?.version ?: "none"
+            logger.i("FontPack: current=$fontVersion, latest=${BuildConfig.FONTPACKEXTENSION}")
+            if (isVersionGreater(BuildConfig.FONTPACKEXTENSION, fontVersion)) {
+                logger.i("Updating FontPack...")
+                onNeedUpdate()
+                val tmpPath = releaseResourceToTmp("FontPackExtension.zip")
+                install(tmpPath)
+                FileSystem.SYSTEM.delete(tmpPath)
+                logger.i("FontPack updated")
+            } else {
+                logger.d("FontPack up to date")
+            }
+
+            val texVersion = ModuleManager.getPackItem("eternal.future.texturepackextension")?.version ?: "none"
+            logger.i("TexturePack: current=$texVersion, latest=${BuildConfig.TEXTUREPACKEXTENSION}")
+            if (isVersionGreater(BuildConfig.TEXTUREPACKEXTENSION, texVersion)) {
+                logger.i("Updating TexturePack...")
+                onNeedUpdate()
+                val tmpPath = releaseResourceToTmp("TexturePackExtension.zip")
+                install(tmpPath)
+                FileSystem.SYSTEM.delete(tmpPath)
+                logger.i("TexturePack updated")
+            } else {
+                logger.d("TexturePack up to date")
+            }
+        }
+
+        onUpdateComplete()
+    }
+
+    fun installKernel(filePath: Path) {
+        val outDir = Platform.getData("tefkernel")
+        logger.i("Installing kernel to: $outDir")
+
+        if (!fileSystem.exists(outDir)) {
+            fileSystem.createDirectories(outDir)
+        }
 
         val files = if (Platform.isAndroid) listOf(
             "libtefkernel.android.arm64-v8a.so",
             "libtefkernel.android.armeabi-v7a.so"
-        )
-        else if(Platform.isWindows) listOf(
+        ) else if(Platform.isWindows) listOf(
             "libtefkernel.windows.x86_64.dll",
             "libtefkernel.windows.x86.dll"
-        ) else if (Platform.isLinux)
-            listOf(
-                "libtefkernel.linux.x86.so",
-                "libtefkernel.linux.x86_64.so"
-            ) else listOf(
+        ) else if (Platform.isLinux) listOf(
+            "libtefkernel.linux.x86.so",
+            "libtefkernel.linux.x86_64.so"
+        ) else listOf(
             "libtefkernel.mac.arm64.so",
             "libtefkernel.mac.x86_64.so"
         )
 
-        val infoString = zip.getInputStream("info.json").asSource().buffer().readUtf8()
-        val version = json.parseToJsonElement(infoString).jsonObject["version"]?.jsonPrimitive?.content!!
+        ZipFile(fileSystem.openReadOnly(filePath)).use { zip ->
+            val infoString = zip.getInputStream("info.json").asSource().buffer().readUtf8()
+            val version = json.parseToJsonElement(infoString).jsonObject["version"]?.jsonPrimitive?.content!!
+            logger.d("Kernel version: $version")
 
-        files.forEach { name ->
-            val entry = zip.getEntry(name)
-            if (entry != null) {
-                zip.getInputStream(entry).asSource().buffer().use { input ->
-                    fileSystem
-                        .sink(outDir / name)  // 现在目录已存在
-                        .buffer()
-                        .use { output ->
+            files.forEach { name ->
+                val entry = zip.getEntry(name)
+                if (entry != null) {
+                    logger.d("Extracting: $name")
+                    zip.getInputStream(entry).asSource().buffer().use { input ->
+                        fileSystem.sink(outDir / name).buffer().use { output ->
                             output.writeAll(input)
                         }
+                    }
+                } else {
+                    logger.w("File not found: $name")
                 }
             }
-        }
 
-        ConfigurationState.kernelVersion = version
+            ConfigurationState.kernelVersion = version
+            logger.i("Kernel $version installed")
+        }
     }
 
     /**
@@ -154,99 +228,99 @@ object AddonManager {
         logger.d("Starting install for file: $filePath")
         progressCallback?.invoke(InstallProgress.STARTING, null)
 
-        val zip = ZipFile(fileSystem.openReadOnly(filePath))
-        var currentError: Throwable? = null
+        ZipFile(fileSystem.openReadOnly(filePath)).use { zip ->
 
-        try {
-            progressCallback?.invoke(InstallProgress.OPENING_PACKAGE, null)
+            var currentError: Throwable? = null
 
-            progressCallback?.invoke(InstallProgress.READING_MANIFEST, null)
-            val manifestEntry = zip.getEntry("Manifest.json")
-            if (manifestEntry == null) {
-                val error = IllegalArgumentException("No Manifest.json found in zip file: $filePath")
-                logger.w(error.message ?: "No manifest found")
-                progressCallback?.invoke(InstallProgress.ERROR, error)
-                return
-            }
+            try {
+                progressCallback?.invoke(InstallProgress.OPENING_PACKAGE, null)
 
-            val manifest = json.parseToJsonElement(
-                zip.getInputStream(manifestEntry).asSource().buffer().readUtf8()
-            ).jsonObject
-            val type = manifest["type"]?.jsonPrimitive?.content?.lowercase()
-
-            logger.d("Detected addon type: $type")
-
-            when (type) {
-                "plugin" -> {
-                    logger.i("Installing/updating plugin")
-                    progressCallback?.invoke(InstallProgress.STARTING, null)
-                    try {
-                        PluginManager.install(zip, manifest, progressCallback)
-                    } catch (e: Exception) {
-                        currentError = e
-                        logger.e("Plugin installation failed", e)
-                        progressCallback?.invoke(InstallProgress.ERROR, e)
-                        throw e
-                    }
-                }
-                "module" -> {
-                    logger.i("Installing/updating module")
-                    progressCallback?.invoke(InstallProgress.STARTING, null)
-                    try {
-                        ModuleManager.install(zip, manifest, progressCallback)
-                    } catch (e: Exception) {
-                        currentError = e
-                        logger.e("Module installation failed", e)
-                        progressCallback?.invoke(InstallProgress.ERROR, e)
-                        throw e
-                    }
-                }
-                "modloader" -> {
-                    logger.i("Installing/updating modloader")
-                    progressCallback?.invoke(InstallProgress.STARTING, null)
-                    try {
-                        ModLoaderManager.install(zip, manifest, progressCallback)
-                    } catch (e: Exception) {
-                        currentError = e
-                        logger.e("ModLoader installation failed", e)
-                        progressCallback?.invoke(InstallProgress.ERROR, e)
-                        throw e
-                    }
-                }
-                "mod" -> {
-                    logger.i("Installing/updating mod")
-                    progressCallback?.invoke(InstallProgress.STARTING, null)
-                    try {
-                        installMod(zip, manifest, progressCallback)
-                        // installOrUpdateMod(zip, manifest, progressCallback)
-                    } catch (e: Exception) {
-                        currentError = e
-                        logger.e("Mod installation failed", e)
-                        progressCallback?.invoke(InstallProgress.ERROR, e)
-                        throw e
-                    }
-                }
-                else -> {
-                    val error = IllegalArgumentException("Unknown addon type: $type")
-                    logger.w("Unknown addon type: $type")
+                progressCallback?.invoke(InstallProgress.READING_MANIFEST, null)
+                val manifestEntry = zip.getEntry("Manifest.json")
+                if (manifestEntry == null) {
+                    val error = IllegalArgumentException("No Manifest.json found in zip file: $filePath")
+                    logger.w(error.message ?: "No manifest found")
                     progressCallback?.invoke(InstallProgress.ERROR, error)
                     return
                 }
-            }
 
-            if (currentError == null) {
-                progressCallback?.invoke(InstallProgress.FINISHING, null)
-                logger.i("Successfully processed addon: $filePath")
-                progressCallback?.invoke(InstallProgress.COMPLETED, null)
+                val manifest = json.parseToJsonElement(
+                    zip.getInputStream(manifestEntry).asSource().buffer().readUtf8()
+                ).jsonObject
+                val type = manifest["type"]?.jsonPrimitive?.content?.lowercase()
+
+                logger.d("Detected addon type: $type")
+
+                when (type) {
+                    "plugin" -> {
+                        logger.i("Installing/updating plugin")
+                        progressCallback?.invoke(InstallProgress.STARTING, null)
+                        try {
+                            PluginManager.install(zip, manifest, progressCallback)
+                        } catch (e: Exception) {
+                            currentError = e
+                            logger.e("Plugin installation failed", e)
+                            progressCallback?.invoke(InstallProgress.ERROR, e)
+                            throw e
+                        }
+                    }
+                    "module" -> {
+                        logger.i("Installing/updating module")
+                        progressCallback?.invoke(InstallProgress.STARTING, null)
+                        try {
+                            ModuleManager.install(zip, manifest, progressCallback)
+                        } catch (e: Exception) {
+                            currentError = e
+                            logger.e("Module installation failed", e)
+                            progressCallback?.invoke(InstallProgress.ERROR, e)
+                            throw e
+                        }
+                    }
+                    "modloader" -> {
+                        logger.i("Installing/updating modloader")
+                        progressCallback?.invoke(InstallProgress.STARTING, null)
+                        try {
+                            ModLoaderManager.install(zip, manifest, progressCallback)
+                        } catch (e: Exception) {
+                            currentError = e
+                            logger.e("ModLoader installation failed", e)
+                            progressCallback?.invoke(InstallProgress.ERROR, e)
+                            throw e
+                        }
+                    }
+                    "mod" -> {
+                        logger.i("Installing/updating mod")
+                        progressCallback?.invoke(InstallProgress.STARTING, null)
+                        try {
+                            installMod(zip, manifest, progressCallback)
+                            // installOrUpdateMod(zip, manifest, progressCallback)
+                        } catch (e: Exception) {
+                            currentError = e
+                            logger.e("Mod installation failed", e)
+                            progressCallback?.invoke(InstallProgress.ERROR, e)
+                            throw e
+                        }
+                    }
+                    else -> {
+                        val error = IllegalArgumentException("Unknown addon type: $type")
+                        logger.w("Unknown addon type: $type")
+                        progressCallback?.invoke(InstallProgress.ERROR, error)
+                        return
+                    }
+                }
+
+                if (currentError == null) {
+                    progressCallback?.invoke(InstallProgress.FINISHING, null)
+                    logger.i("Successfully processed addon: $filePath")
+                    progressCallback?.invoke(InstallProgress.COMPLETED, null)
+                }
+            } catch (e: Exception) {
+                if (currentError == null) {
+                    logger.e("Error processing addon: $filePath", e)
+                    progressCallback?.invoke(InstallProgress.ERROR, e)
+                }
+                throw e
             }
-        } catch (e: Exception) {
-            if (currentError == null) {
-                logger.e("Error processing addon: $filePath", e)
-                progressCallback?.invoke(InstallProgress.ERROR, e)
-            }
-            throw e
-        } finally {
-            zip.close()
         }
     }
 

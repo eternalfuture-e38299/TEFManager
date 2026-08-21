@@ -15,7 +15,6 @@ import okio.Path.Companion.toPath
 import okio.SYSTEM
 import okio.buffer
 import okio.use
-import kotlin.time.Clock
 
 /*******************************************************************************
  * TEFManager - ResourcePackManager
@@ -128,16 +127,12 @@ object ResourcePackManager {
                 fileSystem.createDirectories(targetDir)
             }
 
-            // Use timestamp for unique filename
-            val timestamp = Clock.System.now()
-            val originalFileName = filePath.name
-            val fileExtension = if (originalFileName.contains('.')) {
-                originalFileName.substringAfterLast('.')
-            } else {
-                "zip"
-            }
-            val targetFileName = "pack_$timestamp.$fileExtension"
-            logger.d("Generated unique filename: $targetFileName (based on timestamp: $timestamp)")
+            val targetFileName = generatePackFileName(
+                packType = packInfo.packType,
+                name = packInfo.name,
+                author = packInfo.author
+            )
+            logger.d("Generated filename: $targetFileName")
 
             val targetPath = targetDir / targetFileName
             logger.d("Target file path: $targetPath")
@@ -149,7 +144,7 @@ object ResourcePackManager {
 
             progressCallback?.invoke(InstallProgress.EXTRACTING_ICON, null)
             logger.d("Extracting icon...")
-            val iconPackId = "pack_$timestamp"
+            val iconPackId = targetFileName.removeSuffix(".zip")
             val iconPath = extractIcon(zip, iconPackId, targetPath.parent!!)
             if (iconPath != null) {
                 logger.d("Icon extracted successfully: $iconPath")
@@ -422,6 +417,60 @@ object ResourcePackManager {
             logger.e("Failed to extract icon", e)
             null
         }
+    }
+
+    /**
+     * 生成包文件名
+     * 格式: {type}_{name}-{author}.zip
+     * 示例: tex_FantasyPack-JohnDoe.zip
+     *
+     * 相同 name + author 的包会使用同一个文件名，实现覆盖更新
+     */
+    private fun generatePackFileName(
+        packType: ResourcesPackItem.PackType,
+        name: String,
+        author: String
+    ): String {
+        // 清理包名（只保留字母数字、空格、连字符、下划线）
+        val cleanName = name
+            .trim()
+            .replace(Regex("[<>:\"/\\\\|?*]"), "_")  // Windows 非法字符替换为 _
+            .replace(Regex("\\s+"), "_")              // 空格替换为 _
+            .take(50)                                  // 限制长度
+
+        // 清理作者名
+        val cleanAuthor = author
+            .trim()
+            .replace(Regex("[<>:\"/\\\\|?*]"), "_")
+            .replace(Regex("\\s+"), "_")
+            .take(30)
+
+        // 类型前缀
+        val prefix = when (packType) {
+            ResourcesPackItem.PackType.TexturePack -> "tex"
+            ResourcesPackItem.PackType.LanguagePack -> "lang"
+            ResourcesPackItem.PackType.LanguagePatchPack -> "lpatch"
+            ResourcesPackItem.PackType.AudioPack -> "audio"
+            ResourcesPackItem.PackType.FontPack -> "font"
+        }
+
+        // 组合文件名
+        val baseName = if (cleanAuthor.isNotEmpty()) {
+            "${prefix}_${cleanName}-${cleanAuthor}"
+        } else {
+            "${prefix}_${cleanName}"
+        }
+
+        // 确保 Windows 合法并返回
+        return sanitizeFileName("$baseName.zip")
+    }
+
+    private fun sanitizeFileName(name: String): String {
+        // Windows 非法字符: < > : " / \ | ? *
+        return name
+            .replace(Regex("[<>:\"/\\\\|?*]"), "_")
+            .take(200)  // Windows 最大文件名长度
+            .trim('_')
     }
 
     data class PackAnalysisResult(

@@ -42,6 +42,7 @@ fun TEFManagerTheme(
     themeMode: ThemeMode = ConfigurationState.themeMode,
     dynamicColor: Boolean = ConfigurationState.dynamicColor,
     seedColor: Color = ConfigurationState.themeSeedColor,
+    fontSizeScale: Float = ConfigurationState.fontSizeScale,
     content: @Composable () -> Unit
 ) {
     val darkTheme = when (themeMode) {
@@ -56,9 +57,12 @@ fun TEFManagerTheme(
         else -> rememberDynamicColorScheme(seedColor = seedColor, isDark = darkTheme)
     }
 
+    // 应用字体缩放
+    val scaledTypography = Typography.getScaled(fontSizeScale)
+
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
+        typography = scaledTypography,
         content = content
     )
 }

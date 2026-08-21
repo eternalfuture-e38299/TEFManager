@@ -1,5 +1,6 @@
 package eternal.future.tefmanager.utils
 
+import eternal.future.tefmanager.BuildConfig
 import eternal.future.tefmanager.ConfigurationState.AppConfig
 import kotlinx.serialization.json.Json
 import okio.FileSystem
@@ -80,16 +81,16 @@ class ConfigManager private constructor() {
                     }
                 } else {
                     AppLogger.d("Config file does not exist, creating default.")
-                    currentConfig = AppConfig()
+                    currentConfig = AppConfig(kernelVersion = BuildConfig.KERNEL_VERSION)
                     saveConfig() // 保存默认配置
                 }
             } ?: run {
                 AppLogger.w("Config directory/file not initialized, using default config.")
-                currentConfig = AppConfig()
+                currentConfig = AppConfig(kernelVersion = BuildConfig.KERNEL_VERSION)
             }
         } catch (e: Exception) { // 捕获 SerializationException 等
             AppLogger.e(message = "Failed to load or parse config, using default", throwable = e)
-            currentConfig = AppConfig()
+            currentConfig = AppConfig(kernelVersion = BuildConfig.KERNEL_VERSION)
         }
     }
 
@@ -123,7 +124,7 @@ class ConfigManager private constructor() {
     }
 
     fun getConfig(): AppConfig {
-        return currentConfig?.copy() ?: AppConfig()
+        return currentConfig?.copy() ?: AppConfig(kernelVersion = BuildConfig.KERNEL_VERSION)
     }
 
     fun updateConfig(updates: (AppConfig) -> Unit): Boolean {
@@ -136,30 +137,5 @@ class ConfigManager private constructor() {
             AppLogger.e(message = "Failed to update config", throwable = e)
             false
         }
-    }
-
-    fun getConfigAsJson(): String {
-        return currentConfig?.let { config ->
-            // 使用 prettyPrint = true 的 Json 实例进行编码
-            json.encodeToString(config)
-        } ?: "{}"
-    }
-
-    interface ConfigChangeListener {
-        fun onConfigChanged(changedKeys: List<String>)
-    }
-
-    private val listeners = mutableSetOf<ConfigChangeListener>()
-
-    fun addConfigListener(listener: ConfigChangeListener) {
-        listeners.add(listener)
-    }
-
-    fun removeConfigListener(listener: ConfigChangeListener) {
-        listeners.remove(listener)
-    }
-
-    private fun notifyConfigChanged(changedKeys: List<String>) {
-        listeners.forEach { it.onConfigChanged(changedKeys) }
     }
 }

@@ -81,6 +81,7 @@ fun GeneralSettings() {
                 icon = Icons.Rounded.Translate,
                 title = Strings.settings.general.language,
                 description = Strings.settings.general.languageDec,
+                showDivider = false,
                 trailingContent = {
                     var expanded by remember { mutableStateOf(false) }
                     val languages = listOf(

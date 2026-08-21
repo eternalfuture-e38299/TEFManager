@@ -18,14 +18,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
+import eternal.future.tefmanager.Platform
+import eternal.future.tefmanager.model.ResourcesPackItem
 import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.ui.component.ResourcesPackCard
+import eternal.future.tefmanager.utils.AppLogger
 import eternal.future.tefmanager.utils.resourcepack.BasePackManager
+import io.github.vinceglb.filekit.dialogs.FileKitDialogSettings
+import io.github.vinceglb.filekit.dialogs.compose.rememberFileSaverLauncher
+import io.github.vinceglb.filekit.sink
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.io.buffered
+import kotlinx.io.files.Path
+import kotlinx.io.files.SystemFileSystem
 
 /*******************************************************************************
  * TEFManager - BasePackScreen
@@ -65,6 +74,35 @@ abstract class BasePackScreen(
             withContext(Dispatchers.IO) {
                 manager.initialize()
                 isLoading = false
+            }
+        }
+
+        var exportPack: ResourcesPackItem? = null
+        val packExporter = rememberFileSaverLauncher(
+            FileKitDialogSettings.createDefault()
+        ) { uri ->
+            exportPack?.let { pack ->
+                uri?.let { targetFile ->
+                    try {
+                        val sourcePath = Path(
+                            (Platform.getData("module") / "private" / manager.config.packName / manager.config.packSubDir / pack.fileName).toString()
+                        )
+
+                        if (SystemFileSystem.exists(sourcePath)) {
+                            targetFile.sink().use { outputStream ->
+                                SystemFileSystem.source(sourcePath).buffered().use { input ->
+                                    outputStream.buffered().use { bufferedOutput ->
+                                        input.transferTo(bufferedOutput)
+                                    }
+                                }
+                            }
+                        } else {
+                            AppLogger.e("Source file does not exist: ${pack.fileName}")
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
             }
         }
 
@@ -120,6 +158,11 @@ abstract class BasePackScreen(
                                     CoroutineScope(Dispatchers.IO).launch {
                                         manager.deletePack(pack.fileName)
                                     }
+                                },
+                                onExport = {
+                                    exportPack = it
+                                    packExporter.launch(pack.fileName.removeSuffix(".zip"),
+                                        defaultExtension = "zip")
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             )

@@ -49,6 +49,7 @@ import eternal.future.tefmanager.ui.component.SettingsGroup
 import eternal.future.tefmanager.ui.dialogs.ModuleType
 import eternal.future.tefmanager.ui.dialogs.UpdateDialog
 import eternal.future.tefmanager.utils.AppLogger
+import eternal.future.tefmanager.utils.isVersionGreater
 import eternal.future.tefmanager.utils.NetworkService
 import eternal.future.tefmanager.utils.addon.AddonManager
 import eternal.future.tefmanager.utils.addon.ModuleManager
@@ -99,7 +100,6 @@ fun AboutSettings() {
     val showUpdateDialog = remember { mutableStateOf(false) }
     var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
     val networkService = remember { NetworkService() }
-
 
     val filePickerLauncher = rememberFilePickerLauncher(
         mode = FileKitMode.Single
@@ -480,22 +480,4 @@ private fun AboutItemGroup(
             )
         }
     }
-}
-
-/**
- * 比较两个版本号，判断 v1 是否大于 v2
- * 支持格式：1.8.0、1.8、1.8.0.1 等
- */
-private fun isVersionGreater(v1: String, v2: String): Boolean {
-    val parts1 = v1.split('.').map { it.toIntOrNull() ?: 0 }
-    val parts2 = v2.split('.').map { it.toIntOrNull() ?: 0 }
-
-    val maxLen = maxOf(parts1.size, parts2.size)
-
-    for (i in 0 until maxLen) {
-        val num1 = if (i < parts1.size) parts1[i] else 0
-        val num2 = if (i < parts2.size) parts2[i] else 0
-        if (num1 != num2) return num1 > num2
-    }
-    return false
 }

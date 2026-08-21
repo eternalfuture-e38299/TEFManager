@@ -311,7 +311,7 @@ fun AdvancedSettings() {
     }
 }
 
-private fun mergeAllLogFilesPureKotlin(
+fun mergeAllLogFilesPureKotlin(
     baseDir: String,
     outputSink: RawSink,
     includeAppLogs: Boolean = true,
