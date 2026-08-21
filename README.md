@@ -57,6 +57,167 @@ TEFManager 是 TEFKernel 生态系统的**官方图形化管理前端**，它：
 
 ---
 
+## 🚀 桌面端快速启动指南
+
+### ⚠️ 重要提示：JRE 环境配置
+
+TEFManager 桌面版（Windows/Linux/macOS）以 JAR 文件形式分发，需要 **Java 21 或更高版本** 的运行环境。
+
+由于一些不可抗力的技术原因，**部分发行版自带的 JRE 包可能存在兼容性问题**，导致 TEFManager 无法正常启动或运行异常。**强烈建议** 用户从微软官方 OpenJDK 发行版获取稳定可靠的 Java 运行时环境。
+
+### 📥 推荐 JRE 安装方式
+
+#### 方式一：Microsoft OpenJDK（官方推荐 ✅）
+
+访问微软 OpenJDK 官方下载页面：
+
+👉 **[https://learn.microsoft.com/java/openjdk/download](https://learn.microsoft.com/java/openjdk/download)**
+
+**选择对应平台的安装包：**
+
+| 平台      | 推荐版本    | 下载文件格式        |
+|:--------|:--------|:--------------|
+| Windows | Java 21 | `.msi` 安装包    |
+| Linux   | Java 21 | `.tar.gz` 压缩包 |
+| macOS   | Java 21 | `.tar.gz` 压缩包 |
+
+> ✅ **为什么推荐 Microsoft OpenJDK？**
+> - 微软官方维护，质量和稳定性有保障
+> - 经过大量企业级应用验证
+> - 与 TEFManager 兼容性最佳
+> - 定期安全更新和漏洞修复
+
+#### 方式二：其他 OpenJDK 发行版
+
+如果无法访问微软源，也可使用以下替代方案：
+
+| 发行版                 | 下载地址                             |
+|:--------------------|:---------------------------------|
+| **Adoptium**        | https://adoptium.net/            |
+| **Amazon Corretto** | https://aws.amazon.com/corretto/ |
+| **Azul Zulu**       | https://www.azul.com/downloads/  |
+
+> ⚠️ **注意**：使用非微软 OpenJDK 发行版时，如遇启动问题，请优先尝试切换至 Microsoft OpenJDK。
+
+---
+
+### 🖥️ 从 JAR 启动 TEFManager
+
+#### Windows 用户
+
+**方法一：命令行启动（推荐）**
+
+1. 打开命令提示符（CMD）或 PowerShell
+2. 切换到 TEFManager JAR 文件所在目录
+3. 执行启动命令：
+
+```cmd
+java -jar TEFManager.jar
+```
+
+**方法二：创建快捷方式**
+
+1. 右键桌面 → 新建 → 快捷方式
+2. 位置填写：
+```
+java -jar "C:\path\to\TEFManager.jar"
+```
+3. 将 `C:\path\to\` 替换为实际 JAR 文件路径
+
+**方法三：双击运行（需正确关联 .jar 文件）**
+
+> ⚠️ 如果双击无法打开，说明 `.jar` 文件未正确关联到 Java。请使用方法一或二。
+
+---
+
+#### Linux 用户
+
+**终端启动：**
+
+```bash
+# 进入 JAR 文件所在目录
+cd /path/to/TEFManager/
+
+# 启动 TEFManager
+java -jar TEFManager.jar
+```
+
+**创建桌面快捷方式（可选）：**
+
+创建 `TEFManager.desktop` 文件：
+
+```ini
+[Desktop Entry]
+Name=TEFManager
+Comment=TEFKernel 图形化管理工具
+Exec=java -jar /path/to/TEFManager.jar
+Icon=/path/to/icon.png
+Terminal=false
+Type=Application
+Categories=Game;
+```
+
+---
+
+#### macOS 用户
+
+**终端启动：**
+
+```bash
+# 进入 JAR 文件所在目录
+cd /path/to/TEFManager/
+
+# 启动 TEFManager
+java -jar TEFManager.jar
+```
+
+**使用脚本启动（可选）：**
+
+创建 `start.sh` 脚本：
+
+```bash
+#!/bin/bash
+java -jar /path/to/TEFManager.jar
+```
+
+赋予执行权限：
+
+```bash
+chmod +x start.sh
+```
+
+双击 `start.sh` 或在终端中运行 `./start.sh` 启动。
+
+---
+
+### 🔧 常见启动问题排查
+
+| 问题现象                           | 可能原因       | 解决方案                                      |
+|:-------------------------------|:-----------|:------------------------------------------|
+| `java: command not found`      | 未安装 Java   | 安装 Microsoft OpenJDK                      |
+| `UnsupportedClassVersionError` | Java 版本过低  | 升级到 Java 21 或更高版本                         |
+| 启动后闪退或界面异常                     | JRE 兼容性问题  | 切换至 Microsoft OpenJDK                     |
+| 双击 .jar 无反应                    | 文件关联错误     | 使用命令行启动或重新关联 `.jar` 文件到 `javaw.exe`       |
+| 内存不足错误                         | JVM 内存分配不足 | 增加内存：`java -Xmx2048m -jar TEFManager.jar` |
+
+**验证 Java 安装：**
+
+```bash
+java -version
+```
+
+正确输出应包含类似 `openjdk version "21"` 或更高版本号。
+
+---
+
+### 📦 获取 TEFManager JAR 文件
+
+| 来源                  | 说明               |
+|:--------------------|:-----------------|
+| **GitHub Releases** | 官方发布页面，推荐下载最新稳定版 |
+
+---
+
 ## 包类型对比
 
 | 类型            | 目录位置                    | 文件后缀      | 管理者                | 用途       |
@@ -386,8 +547,8 @@ TEFManager 内置了三个核心扩展模块，**填补了安卓端模组生态�
 
 支持加载自定义字体，解决不同语言地区的字体显示问题，提升阅读体验。
 
-- **支持格式**：`.ttf` / `.otf` / `.woff2`
-- **功能**：字体替换、字号调节、多字体混合
+- **支持格式**：`.zip`
+- **功能**：字体替换
 - **适用平台**：Android
 - **⭐ 特别意义**：为中文、日文、韩文等非拉丁文字玩家提供更好的显示效果
 
