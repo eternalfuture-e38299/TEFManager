@@ -1,7 +1,31 @@
 {
-  "tefmanager": null,
-  "tefkernel": null,
-  "tefloader": null,
+  "tefmanager": {
+    "fileName": "TEFManager",
+    "moduleName": "TEFManager",
+    "newVersion": "1.1.0",
+    "description": "",
+    "downloadUrl": "",
+    "externalUrl": "https://github.com/eternalfuture-e38299/TEFManager/releases/1.1.0",
+    "fileSize": ""
+  },
+  "tefkernel": {
+    "fileName": "tefkernel.zip",
+    "moduleName": "TEFKernel",
+    "newVersion": "1.0.1",
+    "description": "修复无法输出日志到文件的Bug | Fix the bug where logs cannot be output to a file",
+    "downloadUrl": "https://github.com/eternalfuture-e38299/TEFKernel/releases/download/1.0.1/tefkernel.zip",
+    "externalUrl": "https://github.com/eternalfuture-e38299/TEFKernel/releases/tag/1.0.1",
+    "fileSize": "1.28 MB"
+  },
+  "tefloader": {
+    "fileName": "tefloader-net.zip",
+    "moduleName": "TEFLoader",
+    "newVersion": "1.0.1",
+    "description": "修复无法输出日志到文件的Bug | Fix the bug where logs cannot be output to a file.",
+    "downloadUrl": "https://github.com/eternalfuture-e38299/TEFKernel/releases/download/1.0.1/tefloader-net.zip",
+    "externalUrl": "https://github.com/eternalfuture-e38299/TEFKernel/releases/tag/1.0.1",
+    "fileSize": "3.3 MB"
+  },
   "language": null,
   "texture": {
     "fileName": "TexturePackExtension.zip",
