@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eternal.future.tefmanager.model.ModItem
 import eternal.future.tefmanager.strings.StringsResource.Strings
+import eternal.future.tefmanager.utils.addon.ModSettingsStore
 import eternal.future.tefmanager.utils.openUrl
 import eternal.future.tefmanager.utils.toFileUrlString
 import io.kamel.image.KamelImage
@@ -107,6 +108,7 @@ fun ModItemCard(
     mod: ModItem,
     enabled: Boolean = false,
     customIconPath: Path? = null,
+    settingsStore: ModSettingsStore? = null,
     onEnableChange: (Boolean) -> Unit = {},
     onDelete: () -> Unit = {}
 ) {
@@ -532,6 +534,10 @@ fun ModItemCard(
                             lineHeight = 20.sp,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
+                    }
+
+                    if (mod.settings.isNotEmpty() && settingsStore != null) {
+                        ModSettingsSection(mod, settingsStore)
                     }
 
                     if (mod.features.isNotEmpty()) {

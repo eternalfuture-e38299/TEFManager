@@ -33,4 +33,7 @@ class ModManager(loaderId: String) : BaseManager<ModItem>(
         AddonConfig.AddonType.Mod
     ),
     ModItem.serializer()
-)
+) {
+    fun getSettingsStore(pkgId: String): ModSettingsStore =
+        ModSettingsStore(config.dir / "private" / pkgId)
+}

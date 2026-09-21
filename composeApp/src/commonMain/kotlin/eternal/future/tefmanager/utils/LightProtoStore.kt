@@ -255,6 +255,15 @@ class LightProtoStore<T>(
                 }
             }
 
+            // Never replace the live database with a partial rewrite.  A
+            // serialization failure must make installation fail visibly
+            // instead of reporting success and silently losing the record.
+            if (validCount != allRecords.size.toLong()) {
+                throw IllegalStateException(
+                    "Only $validCount of ${allRecords.size} records could be serialized"
+                )
+            }
+
             // 替换数据文件
             if (fileSystem.exists(dataFilePath)) {
                 fileSystem.delete(dataFilePath)
@@ -794,6 +803,9 @@ class LightProtoStore<T>(
             AppLogger.d("[$storeName] Flush completed")
         } catch (e: Exception) {
             AppLogger.e("[$storeName] Flush failed", e)
+            // Do not let callers report a successful installation when the
+            // database could not be persisted.
+            throw e
         }
     }
 

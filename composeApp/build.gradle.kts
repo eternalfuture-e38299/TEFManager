@@ -12,8 +12,8 @@ plugins {
 }
 
 object AppConfig {
-    const val VERSION_NAME : String = "1.1.0"
-    const val VERSION_CODE : Int = 2026082100
+    const val VERSION_NAME : String = "1.1.1"
+    const val VERSION_CODE : Int = 2026091902
     const val KERNEL_VERSION = "1.0.1"
     const val TEFLOADER_VERSION = "1.0.1"
     val MODULE_VERSIONS = mapOf(
@@ -201,6 +201,7 @@ androidApp.apply {
     signingConfigs {
         getByName("debug") {
             storeFile = file("tefmanager.p12")
+            storeType = "PKCS12"
             keyAlias = "TEFManager"
             storePassword = "EternalFuture@2026"
             keyPassword = "EternalFuture@2026"

@@ -1,7 +1,66 @@
 package eternal.future.tefmanager.model
 
 import eternal.future.tefmanager.strings.StringsResource.Strings
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
+
+/**
+ * JsonPrimitive is a JSON-only tree type and cannot be encoded directly by
+ * ProtoBuf.  Mod metadata is kept in LightProtoStore, so use the primitive's
+ * textual value for the binary database while preserving the original JSON
+ * value when reading Info.json.
+ */
+object ModSettingValueSerializer : KSerializer<JsonPrimitive> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("ModSettingValue", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: JsonPrimitive) {
+        if (encoder is JsonEncoder) {
+            encoder.encodeJsonElement(value)
+        } else {
+            // Keep the JSON primitive kind in the binary representation so a
+            // numeric default (3) does not come back as a JSON string ("3").
+            val stored = when {
+                value.isString -> "s:${value.content}"
+                value.content == "true" || value.content == "false" -> "b:${value.content}"
+                value.content.toLongOrNull() != null || value.content.toDoubleOrNull() != null ->
+                    "n:${value.content}"
+                else -> "s:${value.content}"
+            }
+            encoder.encodeString(stored)
+        }
+    }
+
+    override fun deserialize(decoder: Decoder): JsonPrimitive {
+        return if (decoder is JsonDecoder) {
+            decoder.decodeJsonElement().jsonPrimitive
+        } else {
+            val stored = decoder.decodeString()
+            when {
+                stored.startsWith("b:") -> JsonPrimitive(stored.substring(2) == "true")
+                stored.startsWith("n:") -> {
+                    val number = stored.substring(2)
+                    number.toLongOrNull()?.let(::JsonPrimitive)
+                        ?: number.toDoubleOrNull()?.let(::JsonPrimitive)
+                        ?: JsonPrimitive(number)
+                }
+                stored.startsWith("s:") -> JsonPrimitive(stored.substring(2))
+                // Backward-compatible fallback for an older string-only
+                // record, should one ever exist in the local database.
+                else -> JsonPrimitive(stored)
+            }
+        }
+    }
+}
 
 /*******************************************************************************
  * TEFManager - ModItem
@@ -60,7 +119,39 @@ data class ModItem(
     val experimental: Boolean = false,     // 是否实验性版本
     val deprecated: Boolean = false,       // 是否已弃用
     val hasExtendedContent: Boolean = false, // 是否有扩展内容
+
+    /**
+     * Optional settings declared by a mod.  TEFManager owns only the editor and
+     * persistence; the native mod remains the authority that validates values.
+     */
+    val settings: List<ModSetting> = listOf(),
 ) {
+
+    @Serializable
+    data class ModSetting(
+        val key: String,
+        val title: String,
+        val description: String = "",
+        val type: SettingType,
+        @Serializable(with = ModSettingValueSerializer::class)
+        val defaultValue: JsonPrimitive,
+        // ProtoBuf does not support nullable optional properties in this
+        // metadata store.  Zero means "not specified" and keeps the JSON
+        // manifest behavior used by the settings UI.
+        val min: Int = 0,
+        val max: Int = 0,
+        val step: Int = 1,
+        val options: List<SettingOption> = listOf(),
+    )
+
+    @Serializable
+    data class SettingOption(
+        val value: String,
+        val label: String,
+    )
+
+    @Serializable
+    enum class SettingType { SWITCH, INTEGER, CHOICE }
 
     @Serializable
     enum class ModFeature {

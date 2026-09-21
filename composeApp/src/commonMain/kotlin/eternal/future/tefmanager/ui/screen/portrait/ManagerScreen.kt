@@ -502,6 +502,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                                     mod = mod,
                                     enabled = enabled,
                                     customIconPath = manager.getIconFilePath(mod.pkgId),
+                                    settingsStore = manager.getSettingsStore(mod.pkgId),
                                     onEnableChange = { enable ->
                                         enabled = enable
                                         if (enable) {
@@ -976,6 +977,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                             mod = mod,
                             enabled = enabled,
                             customIconPath = manager.getIconFilePath(mod.pkgId),
+                            settingsStore = manager.getSettingsStore(mod.pkgId),
                             onEnableChange = { enable ->
                                 enabled = enable
                                 if (enable) manager.enable(mod.pkgId)

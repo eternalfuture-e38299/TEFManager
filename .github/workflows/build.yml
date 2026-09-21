@@ -41,10 +41,43 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Create keystore file
+      - name: Prepare Android signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > composeApp/tefmanager.p12
-          echo "Keystore created"
+          set -e
+          keyStorePath="composeApp/tefmanager.p12"
+          keyStorePassword='EternalFuture@2026'
+          keyAlias='TEFManager'
+
+          # Use the repository secret when it is present and valid.
+          # If it is missing or malformed, generate a temporary PKCS12 key so
+          # this build can still produce an installable APK without requiring
+          # local PowerShell/keytool setup.
+          if [ -n "${KEYSTORE_BASE64:-}" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keyStorePath" || true
+          fi
+
+          if [ -s "$keyStorePath" ] && keytool -list \
+              -storetype PKCS12 \
+              -keystore "$keyStorePath" \
+              -storepass "$keyStorePassword" \
+              -alias "$keyAlias" >/dev/null 2>&1; then
+            echo "Using the configured Android signing keystore"
+          else
+            rm -f "$keyStorePath"
+            keytool -genkeypair -v \
+              -storetype PKCS12 \
+              -keystore "$keyStorePath" \
+              -alias "$keyAlias" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass "$keyStorePassword" \
+              -keypass "$keyStorePassword" \
+              -dname 'CN=TEFManager, OU=EternalFuture, O=EternalFuture, C=CN'
+            echo "Generated a temporary Android signing keystore"
+          fi
 
       - name: Build Android Release APK
         run: |
