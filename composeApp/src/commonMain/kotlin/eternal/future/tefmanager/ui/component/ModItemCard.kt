@@ -467,8 +467,15 @@ fun ModItemCard(
                                 AssistChip(
                                     onClick = {},
                                     label = {
+                                        // Metadata may include a product/platform prefix (for example,
+                                        // "Terraria Android 1.4.5.8.5"). The card should show only
+                                        // the actual game version, matching the compatibility chip.
+                                        val version = Regex("\\d+(?:\\.\\d+)+")
+                                            .find(mod.targetGameVersion)
+                                            ?.value
+                                            ?: mod.targetGameVersion
                                         Text(
-                                            Strings.manager.mod.targetGameVersion(mod.targetGameVersion),
+                                            Strings.manager.mod.targetGameVersion(version),
                                             style = MaterialTheme.typography.labelSmall
                                         )
                                     },

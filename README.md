@@ -598,6 +598,53 @@ TEFManager 在 Android 平台上支持两种运行模式，以适应不同用户
 
 ---
 
+## ⚙️ 模组设置 API
+
+模组可以在 `Info.json` 中声明设置项，TEFManager 会自动生成设置界面，并将用户配置保存为 `config.json`。
+
+### Info.json 示例
+
+```json
+{
+  "settings": [
+    {
+      "key": "feature_enabled",
+      "title": "启用功能",
+      "description": "控制该功能是否启用",
+      "type": "SWITCH",
+      "defaultValue": true
+    },
+    {
+      "key": "output_multiplier",
+      "title": "产出倍率",
+      "description": "调整产出数量",
+      "type": "INTEGER",
+      "defaultValue": 2,
+      "min": 1,
+      "max": 10,
+      "step": 1,
+      "unit": "×"
+    }
+  ]
+}
+```
+
+支持的设置类型：
+
+- `SWITCH`：开关，对应 `true` 或 `false`
+- `INTEGER`：整数输入，可设置最小值、最大值、步长和单位
+- `CHOICE`：多个选项中选择一个，需要额外提供 `options` 数组
+
+配置文件会保存到以下位置：
+
+```text
+<TEFManager数据目录>/mods/<loaderId>/private/<pkgId>/config.json
+```
+
+模组端读取配置后，应自行进行类型和取值范围校验。设置项的详细字段定义请以 `ModItem.ModSetting` 为准。
+
+---
+
 ## 📦 打包指南
 
 TEFManager 包的打包文档请参考TEFKenrel

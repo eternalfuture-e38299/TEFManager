@@ -12,9 +12,9 @@ plugins {
 }
 
 object AppConfig {
-    const val VERSION_NAME : String = "1.1.1"
-    const val VERSION_CODE : Int = 2026091902
-    const val KERNEL_VERSION = "1.0.1"
+    const val VERSION_NAME : String = "1.1.2"
+    const val VERSION_CODE : Int = 2026092302
+    const val KERNEL_VERSION = "1.0.2"
     const val TEFLOADER_VERSION = "1.0.1"
     val MODULE_VERSIONS = mapOf(
         "LanguagePackExtension" to "1.0.2",
