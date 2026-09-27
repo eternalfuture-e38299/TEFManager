@@ -141,6 +141,7 @@ data class ModItem(
         val min: Int = 0,
         val max: Int = 0,
         val step: Int = 1,
+        val unit: String = "×",
         val options: List<SettingOption> = listOf(),
     )
 
