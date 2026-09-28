@@ -143,6 +143,11 @@ data class ModItem(
         val step: Int = 1,
         val unit: String = "×",
         val options: List<SettingOption> = listOf(),
+        // Optional grouping label declared by the mod itself. Empty means the
+        // setting is shown without a section header. Appended last on purpose:
+        // kotlinx.serialization assigns ProtoBuf field numbers by declaration
+        // order, so inserting it earlier would break existing stored metadata.
+        val section: String = "",
     )
 
     @Serializable
