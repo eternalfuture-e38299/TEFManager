@@ -157,7 +157,7 @@ data class ModItem(
     )
 
     @Serializable
-    enum class SettingType { SWITCH, INTEGER, CHOICE }
+    enum class SettingType { SWITCH, INTEGER, CHOICE, STRING }
 
     @Serializable
     enum class ModFeature {
