@@ -332,6 +332,24 @@ private fun ModSettingEditor(
                 }
             }
         }
+
+        ModItem.SettingType.STRING -> {
+            val text = current.jsonPrimitive.contentOrNull
+                ?: setting.defaultValue.contentOrNull
+                ?: ""
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                SettingLabel(setting)
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = {
+                        onChange(JsonPrimitive(it))
+                        onValidityChanged(true)
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
     }
 }
 

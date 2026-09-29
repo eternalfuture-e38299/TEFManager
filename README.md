@@ -612,7 +612,8 @@ TEFManager 在 Android 平台上支持两种运行模式，以适应不同用户
       "title": "启用功能",
       "description": "控制该功能是否启用",
       "type": "SWITCH",
-      "defaultValue": true
+      "defaultValue": true,
+      "section": "常规"
     },
     {
       "key": "output_multiplier",
@@ -623,7 +624,16 @@ TEFManager 在 Android 平台上支持两种运行模式，以适应不同用户
       "min": 1,
       "max": 10,
       "step": 1,
-      "unit": "×"
+      "unit": "×",
+      "section": "常规"
+    },
+    {
+      "key": "custom_message",
+      "title": "自定义文本",
+      "description": "例如自定义提示语",
+      "type": "STRING",
+      "defaultValue": "hello",
+      "section": "高级"
     }
   ]
 }
@@ -634,6 +644,11 @@ TEFManager 在 Android 平台上支持两种运行模式，以适应不同用户
 - `SWITCH`：开关，对应 `true` 或 `false`
 - `INTEGER`：整数输入，可设置最小值、最大值、步长和单位
 - `CHOICE`：多个选项中选择一个，需要额外提供 `options` 数组
+- `STRING`：单行自由文本输入，`defaultValue` 为字符串
+
+字段说明：
+
+- `section`：可选，设置项的分组名。同一 `section` 的设置会归到同一张卡片，顺序按其在 `Info.json` 中首次出现的先后；留空则不显示分组标题。
 
 配置文件会保存到以下位置：
 
