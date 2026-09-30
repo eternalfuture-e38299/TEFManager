@@ -22,8 +22,7 @@ filekitCoil = "0.14.2"
 junit = "4.13.2"
 kamelImageDefault = "1.0.9"
 kermit = "2.1.0"
-kmpZip = "0.13.0"
-kmpZipOkio = "0.13.0"
+kmpZip = "1.0.0"
 kotlin = "2.4.10"
 kotlinx-coroutines = "1.11.0"
 kotlinxDatetime = "0.8.0"
@@ -57,7 +56,7 @@ filekit-core = { module = "io.github.vinceglb:filekit-core", version.ref = "file
 kamel-image-default = { module = "media.kamel:kamel-image-default", version.ref = "kamelImageDefault" }
 kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
 kmp-zip-kotlinx = { module = "no.synth:kmp-zip-kotlinx", version.ref = "kmpZip" }
-kmp-zip-okio = { module = "no.synth:kmp-zip-okio", version.ref = "kmpZipOkio" }
+kmp-zip-okio = { module = "no.synth:kmp-zip-okio", version.ref = "kmpZip" }
 kmp-zip = { module = "no.synth:kmp-zip", version.ref = "kmpZip" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
