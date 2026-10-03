@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.TEFManager" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+
+        <!-- 关键：不要 fullscreen -->
+        <item name="android:windowFullscreen">false</item>
+
+        <!-- 沉浸式但不破坏 insets -->
+        <item name="android:windowTranslucentStatus">true</item>
+        <item name="android:windowTranslucentNavigation">true</item>
+
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
+
+
+    <style name="BaseUnityTheme" parent="@android:style/Theme.Material.Light.NoActionBar.Fullscreen" />
+    <style name="UnityThemeSelector" parent="@style/BaseUnityTheme">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+    <style name="UnityThemeSelector.Translucent" parent="@style/UnityThemeSelector">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+    </style>
+</resources>

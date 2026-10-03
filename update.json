@@ -1,0 +1,41 @@
+{
+  "tefmanager": {
+    "fileName": "TEFManager",
+    "moduleName": "TEFManager",
+    "newVersion": "2.0.0",
+    "description": "",
+    "downloadUrl": "",
+    "externalUrl": "https://github.com/eternalfuture-e38299/TEFManager/releases/2.0.0",
+    "fileSize": ""
+  },
+  "tefkernel": {
+    "fileName": "tefkernel.zip",
+    "moduleName": "TEFKernel",
+    "newVersion": "1.1.1",
+    "description": "增加音频包支持 | Add audio package support",
+    "downloadUrl": "https://github.com/eternalfuture-e38299/TEFKernel/releases/download/1.1.1/tefkernel.zip",
+    "externalUrl": "https://github.com/eternalfuture-e38299/TEFKernel/releases/tag/1.1.1",
+    "fileSize": "1.28 MB"
+  },
+  "tefloader": {
+    "fileName": "tefloader-net.zip",
+    "moduleName": "TEFLoader",
+    "newVersion": "1.1.1",
+    "description": "增加音频包支持 | Add audio package support",
+    "downloadUrl": "https://github.com/eternalfuture-e38299/TEFKernel/releases/download/1.1.1/tefloader-net.zip",
+    "externalUrl": "https://github.com/eternalfuture-e38299/TEFKernel/releases/tag/1.1.1",
+    "fileSize": "3.3 MB"
+  },
+  "language": null,
+  "texture": {
+    "fileName": "TexturePackExtension.zip",
+    "moduleName": "TexturePackExtension",
+    "newVersion": "2.0.0",
+    "description": "优化性能 | Optimize performance",
+    "downloadUrl": "https://github.com/eternalfuture-e38299/TEFManager-TexturePack-Extension/releases/download/2.0.0/TexturePackExtension.zip",
+    "externalUrl": "https://github.com/eternalfuture-e38299/TEFManager-TexturePack-Extension/releases/tag/2.0.0",
+    "fileSize": "846 KB"
+  },
+  "font": null,
+  "music": null
+}
