@@ -36,6 +36,14 @@
     "externalUrl": "https://github.com/eternalfuture-e38299/TEFManager-TexturePack-Extension/releases/tag/2.0.0",
     "fileSize": "846 KB"
   },
-  "font": null,
+  "font": {
+    "fileName": "FontPackExtension.zip",
+    "moduleName": "FontPackExtension",
+    "newVersion": "1.0.1",
+    "description": "修复默认字符不显示的问题 | Fix default character not displaying",
+    "downloadUrl": "https://github.com/eternalfuture-e38299/TEFManager-FontPack-Extension/releases/download/1.0.1/FontPackExtension.zip",
+    "externalUrl": "https://github.com/eternalfuture-e38299/TEFManager-FontPack-Extension/releases/tag/1.0.1",
+    "fileSize": "959 KB"
+  },
   "music": null
 }
