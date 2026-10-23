@@ -172,7 +172,7 @@ object AppLogger {
             fileSystem.appendingSink(file).buffer().use { sink ->
                 sink.writeUtf8(logLine).flush()
             }
-            // 无锁检查大�?
+            // 无锁检查大小
             checkLogFileSize()
         } catch (e: Exception) {
             // 防止刷屏，仅打印一次

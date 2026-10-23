@@ -106,7 +106,7 @@ object GamePatcher {
      */
     private fun determineRuntimePrefix(useCustomLoader: Boolean, architecture: String): String {
         return if (useCustomLoader) {
-            ""  // 自定�?loader 不限制目�?
+            ""  // 自定义 loader 不限制目录
         } else if (Platform.isWindows && architecture.equals("x86", ignoreCase = true)) {
             RUNTIME_WINDOWS
         } else {
