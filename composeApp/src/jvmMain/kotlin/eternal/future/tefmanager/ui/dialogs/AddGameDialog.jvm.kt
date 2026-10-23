@@ -296,15 +296,16 @@ actual object AddGameDialog {
                                 try {
                                     val versionCode = convertVersionToCode(gameVersion)
 
-                                    // 执行补丁并获取生成的二进制路径
+                                    // 执行补丁并获取生成的加载器路径
                                     val binaryPath = GamePatcher.patchViaDotNetGrafting(
                                             gameFilePath.toPath(),
                                             tefLoaderPath,
                                             architecture.toString().lowercase()
-                                        ).toString()
+                                        )?.toString()
 
-                                    if (binaryPath.isEmpty()) {
+                                    if (binaryPath.isNullOrBlank() || !File(binaryPath).isFile) {
                                         errorMessage = Strings.home.add.error.invalidTefLoader
+                                        isProcessing = false
                                         return@Button
                                     }
 
