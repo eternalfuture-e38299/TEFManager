@@ -164,10 +164,13 @@ object AppLogger {
         }
 
         try {
-            fileSystem.openReadWrite(file).use { handle ->
-                handle.appendingSink().buffer().use { sink ->
-                    sink.writeUtf8(logLine).flush()
-                }
+            // 直接使用追加模式写入：该模式会自动创建不存在的日志文件。
+            // 之前用 openReadWrite 时文件不存在会抛 "no such file"，导致首次启动的日志全部丢失。
+            file.parent?.let { parent ->
+                if (!fileSystem.exists(parent)) fileSystem.createDirectories(parent)
+            }
+            fileSystem.appendingSink(file).buffer().use { sink ->
+                sink.writeUtf8(logLine).flush()
             }
             // 无锁检查大小
             checkLogFileSize()

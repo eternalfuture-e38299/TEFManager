@@ -41,6 +41,7 @@ object GamePatcher {
     private const val RUNTIME_UNIX = "net472/"
     private const val BINARY_PREFIX = "Terraria.bin."
     private const val BINARY_TARGET_PREFIX = "tefloader.bin."
+    private const val WINDOWS_LOADER_FILENAME = "tefloader.exe"
 
     private val files = FileSystem.SYSTEM
 
@@ -71,14 +72,18 @@ object GamePatcher {
         logGraftingStart(targetDir, loaderPath, architecture, runtimePrefix)
 
         val zipFile = openZipFile(loaderPath)
-        extractLoaderFiles(zipFile, targetDir, runtimePrefix, useCustomLoader)
+        val extractedFiles = extractLoaderFiles(zipFile, targetDir, runtimePrefix, useCustomLoader)
 
-        // 返回生成的二进制文件路径
+        // 返回生成的加载器可执行文件路径
         return if (!Platform.isWindows) {
             processBinaryFiles(targetDir, architecture)
         } else {
-            // Windows 平台返回 null 或返回主 exe 路径
-            null
+            // Windows 平台启动的是 tefloader.exe（从 tefloader.zip 的 net452/net472 中解压）。
+            // 之前这里返回 null，调用方 .toString() 后得到字符串 "null"，
+            // 最终 ProcessBuilder 尝试执行名为 "null" 的程序并报 CreateProcess error=2。
+            extractedFiles.firstOrNull {
+                it.name.equals(WINDOWS_LOADER_FILENAME, ignoreCase = true)
+            } ?: targetDir.resolve(WINDOWS_LOADER_FILENAME).takeIf { files.exists(it) }
         }
     }
 
@@ -102,7 +107,7 @@ object GamePatcher {
     private fun determineRuntimePrefix(useCustomLoader: Boolean, architecture: String): String {
         return if (useCustomLoader) {
             ""  // 自定义 loader 不限制目录
-        } else if (Platform.isWindows && architecture == "X86") {
+        } else if (Platform.isWindows && architecture.equals("x86", ignoreCase = true)) {
             RUNTIME_WINDOWS
         } else {
             RUNTIME_UNIX
@@ -124,12 +129,14 @@ object GamePatcher {
         targetDir: Path,
         runtimePrefix: String,
         useCustomLoader: Boolean
-    ) {
+    ): List<Path> {
         // 确保目标目录存在
         if (!files.exists(targetDir)) {
             files.createDirectories(targetDir)
             AppLogger.d("Created target directory: $targetDir")
         }
+
+        val extractedFiles = mutableListOf<Path>()
 
         zipFile.entries.forEach { entry ->
             // 跳过目录条目
@@ -146,12 +153,15 @@ object GamePatcher {
 
             extractSingleEntry(zipFile, entry, targetDir, runtimePrefix, useCustomLoader)
                 .onSuccess { targetFile ->
+                    extractedFiles += targetFile
                     AppLogger.d("Extracted: ${entry.name} -> $targetFile")
                 }
                 .onFailure { e ->
                     AppLogger.e("Failed to extract ${entry.name}", e)
                 }
         }
+
+        return extractedFiles
     }
 
     /**
