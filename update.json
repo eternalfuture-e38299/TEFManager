@@ -11,20 +11,20 @@
   "tefkernel": {
     "fileName": "tefkernel.zip",
     "moduleName": "TEFKernel",
-    "newVersion": "1.1.1",
-    "description": "增加音频包支持 | Add audio package support",
-    "downloadUrl": "https://github.com/eternalfuture-e38299/TEFKernel/releases/download/1.1.1/tefkernel.zip",
-    "externalUrl": "https://github.com/eternalfuture-e38299/TEFKernel/releases/tag/1.1.1",
-    "fileSize": "1.28 MB"
+    "newVersion": "1.2.0",
+    "description": "添加新内容 | Add new content",
+    "downloadUrl": "https://github.com/eternalfuture-e38299/TEFKernel/releases/download/1.2.0/tefkernel.zip",
+    "externalUrl": "https://github.com/eternalfuture-e38299/TEFKernel/releases/tag/1.2.0",
+    "fileSize": "2.04 MB"
   },
   "tefloader": {
     "fileName": "tefloader-net.zip",
     "moduleName": "TEFLoader",
-    "newVersion": "1.1.1",
-    "description": "增加音频包支持 | Add audio package support",
-    "downloadUrl": "https://github.com/eternalfuture-e38299/TEFKernel/releases/download/1.1.1/tefloader-net.zip",
-    "externalUrl": "https://github.com/eternalfuture-e38299/TEFKernel/releases/tag/1.1.1",
-    "fileSize": "3.3 MB"
+    "newVersion": "1.2.0",
+    "description": "添加新内容 | Add new content",
+    "downloadUrl": "https://github.com/eternalfuture-e38299/TEFKernel/releases/download/1.2.0/tefloader-net.zip",
+    "externalUrl": "https://github.com/eternalfuture-e38299/TEFKernel/releases/tag/1.2.0",
+    "fileSize": "3.31 MB"
   },
   "language": null,
   "texture": {
