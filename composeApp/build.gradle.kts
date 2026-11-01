@@ -12,19 +12,19 @@ plugins {
 }
 
 object AppConfig {
-    const val VERSION_NAME : String = "2.0.0"
-    const val VERSION_CODE : Int = 2026100300
-    const val KERNEL_VERSION = "1.1.1"
-    const val TEFLOADER_VERSION = "1.1.1"
+    const val VERSION_NAME : String = "2.1.0"
+    const val VERSION_CODE : Int = 2026110100
+    const val KERNEL_VERSION = "1.4.0"
+    const val TEFLOADER_VERSION = "1.4.0"
     val MODULE_VERSIONS = mapOf(
         "LanguagePackExtension" to "1.0.2",
-        "TexturePackExtension" to "2.0.0",
-        "FontPackExtension" to "1.0.0",
-        "AudioPackExtension" to "1.2.6"
+        "TexturePackExtension" to "2.0.6",
+        "FontPackExtension" to "1.0.1",
+        "AudioPackExtension" to "2.0.0"
     )
     const val IS_INLINE_GAME = false
-    const val INLINE_GAME_VERSION = "1.4.5.6.4"
-    const val INLINE_GAME_VERSION_CODE = 301543
+    const val INLINE_GAME_VERSION = "1.4.5.8.6"
+    const val INLINE_GAME_VERSION_CODE = 301720
 }
 
 val buildConfig = BuildConfigGenerator.BuildConfig(
@@ -225,7 +225,8 @@ androidApp.apply {
                     "**/libil2cpp.so",
                     "**/libmain.so",
                     "**/libunity.so",
-                    "**/libc++_shared.so"
+                    "**/libc++_shared.so",
+                    "**/libGNS_Wrapper.so"
                 )
             }
 

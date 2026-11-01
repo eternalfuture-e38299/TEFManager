@@ -125,6 +125,7 @@ data class ModItem(
      * persistence; the native mod remains the authority that validates values.
      */
     val settings: List<ModSetting> = listOf(),
+    val updateInfoUrl: String = ""
 ) {
 
     @Serializable

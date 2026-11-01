@@ -41,7 +41,6 @@ import eternal.future.tefmanager.model.UpdateInfo
 import eternal.future.tefmanager.strings.StringsResource
 import eternal.future.tefmanager.ui.dialogs.ModuleType
 import eternal.future.tefmanager.ui.dialogs.UpdateDialog
-import eternal.future.tefmanager.ui.dialogs.UpdateOutdatedDialog
 import eternal.future.tefmanager.ui.theme.TEFManagerTheme
 import eternal.future.tefmanager.utils.AppLogger
 import eternal.future.tefmanager.utils.ConfigManager

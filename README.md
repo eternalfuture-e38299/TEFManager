@@ -255,7 +255,11 @@ package.zip
     "file": "libplugin.android.arm64.so",
     "resources": "resources/",
     "iconFile": "icon.png",
+    "tefkernelMinVersion": "1.0.0",
     "parentLoader": "eternal.future.kernelloader",
+    "parentLoaderMinVersion": "1.0.0",
+    "updateInfoUrl": "https://example.com/mymod/update.json",
+    "modRepositoryIndexUrl": "https://example.com/kernelloader/repository.json",
     "modloader": {
         "type": "inline",
         "file": "modloader_inline.zip"
@@ -272,15 +276,21 @@ package.zip
 
 **字段说明：**
 
-| 字段             | 类型     | 必填        | 说明                                            |
-|:---------------|:-------|:----------|:----------------------------------------------|
-| `type`         | string | ✅         | 包类型：`plugin` / `module` / `modloader` / `mod` |
-| `file`         | string | ✅         | 主文件路径（相对于 ZIP 根目录）                            |
-| `resources`    | string | ❌         | 资源目录路径                                        |
-| `iconFile`     | string | ❌         | 图标文件路径                                        |
-| `parentLoader` | string | ⚠️ Mod 必填 | 所属 ModLoader 的 `pkgId`                        |
-| `modloader`    | object | ❌         | 内联 ModLoader 依赖                               |
-| `plugins`      | object | ❌         | 内联 Plugin 依赖                                  |
+| 字段                       | 类型     | 适用 type            | 必填 | 说明                                            |
+|--------------------------|--------|--------------------|----|-----------------------------------------------|
+| `type`                   | string | 全部                 | ✅  | 包类型:`plugin` / `module` / `modloader` / `mod` |
+| `file`                   | string | plugin / modloader | ✅  | 主库或入口文件路径                                     |
+| `resources`              | string | 全部                 | ❌  | 资源目录前缀,安装时整体解压到目标目录                           |
+| `iconFile`               | string | 全部                 | ❌  | 图标路径,用于列表展示                                   |
+| `tefkernelMinVersion`    | string | 全部                 | ❌  | **本包要求的最低 TEFKernel 版本**;不满足则拒绝安装             |
+| `parentLoader`           | string | mod                | ✅  | 所属 modloader 的 pkgId                          |
+| `parentLoaderMinVersion` | string | mod                | ❌  | 本 mod 要求的最低 parentLoader 版本                   |
+| `updateInfoUrl`          | string | mod / modloader    | ❌  | 更新信息 JSON 地址，用于检查新版本                          |
+| `modRepositoryIndexUrl`  | string | modloader          | ❌  | Mod 仓库索引 JSON 地址，用于浏览/安装 Mod                  |
+| `modloader`              | object | 全部                 | ❌  | 内联 modloader 依赖                               |
+| `plugins`                | object | 全部                 | ❌  | 内联 plugin 依赖                                  |
+
+> 💡 `updateInfoUrl` 与 `modRepositoryIndexUrl` 均为可选字段。未声明时，TEFManager 不会对该组件发起更新检查，也不会展示对应的 Mod 仓库。
 
 ---
 
@@ -341,6 +351,8 @@ package.zip
     "description": "基于 TEFKernel 的 ModLoader 实现",
     "version": "1.0.0",
     "versionCode": 1,
+    "updateInfoUrl": "https://example.com/kernelloader/update.json",
+    "modRepositoryIndexUrl": "https://example.com/kernelloader/repository.json",
     "dependence": [
         {
             "pkgId": "com.example.plugin",
@@ -380,6 +392,7 @@ package.zip
     "deprecated": false,
     "hasExtendedContent": false,
     "detailsURL": "https://example.com",
+    "updateInfoUrl": "https://example.com/mymod/update.json",
     "dependence": [
         {
             "pkgId": "com.example.dependency",
@@ -465,6 +478,128 @@ package.zip
 | iOS     | `arm64`        | 仅 ARM64               |
 
 ---
+
+### 📡 更新功能与 Mod 仓库
+
+TEFManager 支持从远程信息源检查 Mod 与 ModLoader 的更新，并支持通过 Mod 仓库索引浏览、搜索和安装 Mod。
+
+#### 更新信息字段
+
+`Info.json` 中新增了两个可选字段，用于声明更新信息源和 Mod 仓库索引：
+
+| 字段                      | 类型     | 适用 type         | 必填 | 说明                               |
+|:------------------------|:-------|:----------------|:---|:---------------------------------|
+| `updateInfoUrl`         | string | mod / modloader | ❌  | 该组件的更新信息 JSON 地址，用于检查新版本         |
+| `modRepositoryIndexUrl` | string | modloader       | ❌  | 该 ModLoader 对应的 Mod 仓库索引 JSON 地址 |
+
+> 💡 这两个字段在 `Manifest.json` 与 `Info.json` 中均可声明；TEFManager 以组件元信息中的声明为准。
+
+#### AddonUpdateInfo 更新信息格式
+
+`updateInfoUrl` 指向的 JSON 文件应遵循 `AddonUpdateInfo` 结构：
+
+```json
+{
+    "version": "1.1.0",
+    "versionCode": 2,
+    "fileSize": "2.4 MB",
+    "downloadUrl": "https://example.com/mymod/1.1.0.tefpkg",
+    "updateLog": "修复若干问题，新增功能 X"
+}
+```
+
+**字段说明：**
+
+| 字段            | 类型     | 必填 | 说明                                   |
+|:--------------|:-------|:---|:-------------------------------------|
+| `version`     | string | ✅  | 最新版本号（语义化版本）                         |
+| `versionCode` | int    | ✅  | 最新版本代码，用于与本地 `versionCode` 比较判断是否有更新 |
+| `fileSize`    | string | ✅  | 安装包大小的人类可读描述                         |
+| `downloadUrl` | string | ✅  | 新版本包的下载地址                            |
+| `updateLog`   | string | ✅  | 更新日志                                 |
+
+> TEFManager 通过比较远程 `versionCode` 与本地已安装组件的 `versionCode` 来决定是否提示更新。
+
+#### ModRepositoryIndex Mod 仓库索引格式
+
+`modRepositoryIndexUrl` 指向的 JSON 文件应遵循 `ModRepositoryIndex` 结构，用于列出该 ModLoader 生态下可用的 Mod：
+
+```json
+{
+    "updatedAt": "2026-10-31T12:00:00Z",
+    "loaderMinVersionCode": 1,
+    "loaderMinVersion": "1.0.0",
+    "mods": [
+        {
+            "pkgId": "com.example.mymod",
+            "name": "My Mod",
+            "author": "TEFKernel Team",
+            "version": "1.1.0",
+            "versionCode": 2,
+            "brieflyDescribe": "简短描述",
+            "features": ["NEW_CONTENT", "QUALITY_OF_LIFE"],
+            "sizeCategory": "MEDIUM",
+            "stableVerified": true,
+            "experimental": false,
+            "deprecated": false,
+            "iconUrl": "https://example.com/mymod/icon.png",
+            "downloadUrl": "https://example.com/mymod/1.1.0.tefpkg",
+            "fileSize": "2.4 MB",
+            "updateLog": "修复若干问题，新增功能 X"
+        }
+    ]
+}
+```
+
+**顶层字段说明：**
+
+| 字段                     | 类型     | 必填 | 说明                             |
+|:-----------------------|:-------|:---|:-------------------------------|
+| `updatedAt`            | string | ❌  | 索引更新时间                         |
+| `loaderMinVersionCode` | int    | ✅  | 该索引要求的最低 ModLoader versionCode |
+| `loaderMinVersion`     | string | ✅  | 该索引要求的最低 ModLoader 版本          |
+| `mods`                 | array  | ✅  | Mod 条目列表                       |
+
+**Mod 条目（ModEntry）字段说明：**
+
+| 字段                | 类型     | 必填 | 说明                             |
+|:------------------|:-------|:---|:-------------------------------|
+| `pkgId`           | string | ✅  | Mod 包 ID                       |
+| `name`            | string | ✅  | Mod 名称                         |
+| `author`          | string | ✅  | 作者                             |
+| `version`         | string | ✅  | 版本号                            |
+| `versionCode`     | int    | ✅  | 版本代码                           |
+| `brieflyDescribe` | string | ❌  | 简短描述                           |
+| `features`        | array  | ❌  | 特征标签（取值同 `ModFeature` 枚举）      |
+| `sizeCategory`    | string | ❌  | 规模分类（取值同 `ModSizeCategory` 枚举） |
+| `stableVerified`  | bool   | ❌  | 是否已验证稳定                        |
+| `experimental`    | bool   | ❌  | 是否实验性版本                        |
+| `deprecated`      | bool   | ❌  | 是否已弃用                          |
+| `iconUrl`         | string | ❌  | 图标地址，可为空                       |
+| `downloadUrl`     | string | ✅  | 下载地址                           |
+| `fileSize`        | string | ❌  | 文件大小描述                         |
+| `updateLog`       | string | ❌  | 更新日志                           |
+
+> `ModEntry` 提供了 `toAddonUpdateInfo()` 方法，可将仓库条目直接转换为 `AddonUpdateInfo`，便于复用统一的更新/安装流程。
+
+#### 更新与仓库工作流程
+
+1. **更新检查**：TEFManager 读取已安装 Mod / ModLoader 的 `updateInfoUrl`，拉取 `AddonUpdateInfo`，比较 `versionCode`，若远程更高则提示用户更新。
+2. **仓库浏览**：TEFManager 读取当前 ModLoader 的 `modRepositoryIndexUrl`，拉取 `ModRepositoryIndex`，展示可安装的 Mod 列表。
+3. **版本兼容校验**：仓库索引中的 `loaderMinVersionCode` / `loaderMinVersion` 用于校验当前 ModLoader 是否满足该索引的最低版本要求；不满足时提示用户先更新 ModLoader。
+4. **安装/更新**：用户选择条目后，TEFManager 通过 `downloadUrl` 下载 `.tefpkg` 包，并按包格式规范完成安装。
+
+> ⚠️ 所有远程 JSON 均为可选能力。未配置 `updateInfoUrl` 或 `modRepositoryIndexUrl` 的组件不会参与更新检查或仓库展示，保持与旧版本行为一致。
+
+#### 包类型更新与仓库能力对比
+
+| 类型            | 目录位置                    | 文件后缀      | 管理者                | 用途       | 更新检查 | 仓库索引 |
+|:--------------|:------------------------|:----------|:-------------------|:---------|:-----|:-----|
+| **Plugin**    | `plugin/pkg/`           | `.tefpkg` | `PluginManager`    | 注册底层符号   | ❌    | ❌    |
+| **Module**    | `module/pkg/`           | `.tefpkg` | `ModuleManager`    | 游戏功能扩展   | ❌    | ❌    |
+| **ModLoader** | `modloader/pkg/`        | `.tefpkg` | `ModLoaderManager` | Mod 加载容器 | ✅    | ✅    |
+| **Mod**       | `mods/{loader_id}/mod/` | `.tefpkg` | `ModManager`       | 最终用户模组   | ✅    | ❌    |
+
 
 ## 📁 目录结构
 
@@ -553,6 +688,18 @@ TEFManager 内置了三个核心扩展模块，**填补了安卓端模组生态�
 - **⭐ 特别意义**：为中文、日文、韩文等非拉丁文字玩家提供更好的显示效果
 
 > 📦 **项目地址**：[TEFManager-FontPack-Extension](https://github.com/eternalfuture-e38299/TEFManager-FontPack-Extension)
+
+---
+
+### 🎨 材质包模块 (AudioPack-Extension)
+
+让安卓玩家也能像桌面端一样自由替换游戏音频。
+
+- **支持格式**：`pack.json` (Terraria 标准) / `pack_info.json` (TEFManager)
+- **功能**：纹理替换、优先级排序、动态切换
+- **适用平台**：Android
+
+> 📦 **项目地址**：[TEFManager-AudioPack-Extension](https://github.com/eternalfuture-e38299/TEFManager-AudioPack-Extension)
 
 ---
 
@@ -675,6 +822,8 @@ TEFManager 包的打包文档请参考TEFKenrel
 | **材质包模块**       | [GitHub](https://github.com/eternalfuture-e38299/TEFManager-TexturePack-Extension)  | 材质包加载    |
 | **语言包模块**       | [GitHub](https://github.com/eternalfuture-e38299/TEFManager-LanguagePack-Extension) | 跨平台语言包加载 |
 | **字体包模块**       | [GitHub](https://github.com/eternalfuture-e38299/TEFManager-FontPack-Extension)     | 字体包加载    |
+| **音频包模块**       | [GitHub](https://github.com/eternalfuture-e38299/TEFManager-AudioPack-Extension)    | 音频包加载    |
+
 
 ---
 

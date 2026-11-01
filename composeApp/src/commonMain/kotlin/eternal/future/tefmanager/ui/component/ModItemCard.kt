@@ -39,6 +39,7 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Science
+import androidx.compose.material.icons.rounded.SystemUpdateAlt
 import androidx.compose.material.icons.rounded.VideogameAsset
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AssistChip
@@ -109,6 +110,8 @@ fun ModItemCard(
     enabled: Boolean = false,
     customIconPath: Path? = null,
     settingsStore: ModSettingsStore? = null,
+    hasUpdate: Boolean = false,
+    onCheckUpdate: () -> Unit = {},
     onEnableChange: (Boolean) -> Unit = {},
     onDelete: () -> Unit = {}
 ) {
@@ -293,6 +296,33 @@ fun ModItemCard(
                             fontSize = 11.sp,
                             maxLines = 1
                         )
+                    }
+
+                    if (hasUpdate) {
+                        Spacer(Modifier.width(6.dp))
+                        Surface(
+                            onClick = onCheckUpdate,
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.tertiaryContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    Icons.Rounded.SystemUpdateAlt,   // material-icons-extended
+                                    contentDescription = null,
+                                    modifier = Modifier.size(12.dp),
+                                    tint = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                                Text(
+                                    Strings.manager.hasUpdate,   // 新增字符串："可更新"
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            }
+                        }
                     }
                 }
 

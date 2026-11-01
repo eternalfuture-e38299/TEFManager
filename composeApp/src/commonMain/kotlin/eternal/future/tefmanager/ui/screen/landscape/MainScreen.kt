@@ -22,10 +22,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.Widgets
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Storefront
 import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -235,6 +237,12 @@ object MainScreen : Screen {
                 selectedIcon = Icons.Rounded.Widgets,
                 unselectedIcon = Icons.Outlined.Widgets,
                 label = Strings.manager.title
+            ),
+            NavigationItem(
+                screen = AddonStoreScreen,
+                selectedIcon = Icons.Rounded.Storefront,
+                unselectedIcon = Icons.Outlined.Storefront,
+                label = Strings.store.title
             ),
             NavigationItem(
                 screen = SettingsScreen,

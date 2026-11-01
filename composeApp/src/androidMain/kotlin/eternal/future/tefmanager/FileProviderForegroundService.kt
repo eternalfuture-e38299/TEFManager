@@ -46,21 +46,20 @@ class FileProviderForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "文件服务",
+                getString(R.string.file_service_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             )
-            channel.description = "保持文件服务运行"
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+            channel.description = getString(R.string.file_service_channel_desc)
+            getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
         }
     }
 
     private fun startForeground() {
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("文件服务运行中")
-            .setContentText("保持文件ContentProvider可用")
+            .setContentTitle(getString(R.string.file_service_notification_title))
+            .setContentText(getString(R.string.file_service_notification_text))
             .setSmallIcon(R.mipmap.ic_launcher_round)
-            .setPriority(NotificationManager.IMPORTANCE_LOW)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
         startForeground(NOTIFICATION_ID, notification)

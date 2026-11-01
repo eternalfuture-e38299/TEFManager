@@ -58,8 +58,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eternal.future.tefmanager.BuildConfig
+import eternal.future.tefmanager.ConfigurationState
 import eternal.future.tefmanager.Platform
 import eternal.future.tefmanager.strings.StringsResource.Strings
+import eternal.future.tefmanager.utils.AppLogger
 import eternal.future.tefmanager.utils.addon.AddonManager
 import kotlinx.coroutines.delay
 import okio.FileSystem
@@ -551,6 +554,64 @@ fun PlatformTipsScreen(modifier: Modifier = Modifier) {
 
 // ==================== 组件安装页面 ====================
 
+/**
+ * 安装内核(如果已安装且为新版则跳过)
+ * 桌面端同时保证 tefloader.zip 就位
+ */
+private fun installKernelIfNeeded() {
+    val outDir = Platform.getData("tefkernel")
+
+    val kernelUpToDate = AddonManager.isKernelUpToDate()
+
+    if (!kernelUpToDate) {
+        AppLogger.i("Installing/updating kernel...")
+        val kernelTmpPath = releaseResourceToTmp("tefkernel.zip")
+        try {
+            AddonManager.installKernel(kernelTmpPath)
+        } finally {
+            FileSystem.SYSTEM.delete(kernelTmpPath, mustExist = false)
+        }
+    } else {
+        AppLogger.i("Kernel up-to-date: ${ConfigurationState.kernelVersion}")
+    }
+
+    // ---- TEFLoader (desktop only) ----
+    // 内核刚更新过,或 tefloader.zip 缺失/损坏 时补装
+    if (Platform.isDesktop && (!kernelUpToDate || !AddonManager.isTefloaderInstalled())) {
+        AppLogger.i("Installing tefloader...")
+        val tefloaderTmpPath = releaseResourceToTmp("tefloader.zip")
+        try {
+            FileSystem.SYSTEM.copy(
+                tefloaderTmpPath,
+                outDir / "tefloader.zip"
+            )
+        } finally {
+            FileSystem.SYSTEM.delete(tefloaderTmpPath, mustExist = false)
+        }
+    }
+}
+
+/**
+ * 安装模块(如果已安装且为新版则跳过)
+ */
+private suspend fun installModuleIfNeeded(
+    pkgId: String,
+    latestVersion: String,
+    zipName: String
+) {
+    if (AddonManager.isModuleUpToDate(pkgId, latestVersion)) {
+        AppLogger.i("$pkgId up-to-date: $latestVersion")
+        return
+    }
+    AppLogger.i("Installing/updating $pkgId ...")
+    val tmpPath = releaseResourceToTmp(zipName)
+    try {
+        AddonManager.install(tmpPath)
+    } finally {
+        FileSystem.SYSTEM.delete(tmpPath, mustExist = false)
+    }
+}
+
 @Composable
 fun ComponentInstallScreen(
     isInstalling: Boolean,
@@ -568,41 +629,36 @@ fun ComponentInstallScreen(
                 currentComponent = i
                 installProgress = (i + 1) * 100 / components.size
 
-                when (i) {
-                    0 -> {
-                        val kernelTmpPath = releaseResourceToTmp("tefkernel.zip")
-                        AddonManager.installKernel(kernelTmpPath)
-                        FileSystem.SYSTEM.delete(kernelTmpPath)
+                try {
+                    when (i) {
+                        0 -> installKernelIfNeeded()
 
-                        if (Platform.isDesktop) {
-                            val tefloaderTmpPath = releaseResourceToTmp("tefloader.zip")
-                            FileSystem.SYSTEM.copy(
-                                tefloaderTmpPath,
-                                Platform.getData("tefkernel") / "tefloader.zip"
-                            )
-                            FileSystem.SYSTEM.delete(tefloaderTmpPath)
-                        }
-                    } // TEFKernel
-                    1 -> {
-                        val moduleTmpPath = releaseResourceToTmp("LanguagePackExtension.zip")
-                        AddonManager.install(moduleTmpPath)
-                        FileSystem.SYSTEM.delete(moduleTmpPath)
-                    } // LanguagePackExtension
-                    2 -> {
-                        val moduleTmpPath = releaseResourceToTmp("TexturePackExtension.zip")
-                        AddonManager.install(moduleTmpPath)
-                        FileSystem.SYSTEM.delete(moduleTmpPath)
-                    }    // TexturePackExtension
-                    3 -> {
-                        val moduleTmpPath = releaseResourceToTmp("FontPackExtension.zip")
-                        AddonManager.install(moduleTmpPath)
-                        FileSystem.SYSTEM.delete(moduleTmpPath)
-                    }    // FontPackExtension
-                    4 -> {
-                        val moduleTmpPath = releaseResourceToTmp("AudioPackExtension.zip")
-                        AddonManager.install(moduleTmpPath)
-                        FileSystem.SYSTEM.delete(moduleTmpPath)
-                    }   // AudioPackExtension
+                        1 -> installModuleIfNeeded(
+                            "eternal.future.languagepackextension",
+                            BuildConfig.LANGUAGEPACKEXTENSION,
+                            "LanguagePackExtension.zip"
+                        )
+
+                        2 -> installModuleIfNeeded(
+                            "eternal.future.texturepackextension",
+                            BuildConfig.TEXTUREPACKEXTENSION,
+                            "TexturePackExtension.zip"
+                        )
+
+                        3 -> installModuleIfNeeded(
+                            "eternal.future.fontpackextension",
+                            BuildConfig.FONTPACKEXTENSION,
+                            "FontPackExtension.zip"
+                        )
+
+                        4 -> installModuleIfNeeded(
+                            "eternal.future.audiopackextension",
+                            BuildConfig.AUDIOPACKEXTENSION,
+                            "AudioPackExtension.zip"
+                        )
+                    }
+                } catch (e: Exception) {
+                    AppLogger.e("Failed to install component ${components[i].name}", e)
                 }
 
                 delay(1.seconds)

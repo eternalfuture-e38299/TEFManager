@@ -100,78 +100,163 @@ object AddonManager {
 
     val modManagersList = mutableStateMapOf<String, ModManager>()
 
+    // ==================== 组件状态判断 ====================
+
+    /**
+     * 当前平台需要的内核文件列表
+     */
+    private fun currentPlatformKernelFiles(): List<String> = when {
+        Platform.isAndroid -> listOf(
+            "libtefkernel.android.arm64-v8a.so",
+            "libtefkernel.android.armeabi-v7a.so"
+        )
+        Platform.isWindows -> listOf(
+            "libtefkernel.windows.x86_64.dll",
+            "libtefkernel.windows.x86.dll"
+        )
+        Platform.isLinux -> listOf(
+            "libtefkernel.linux.x86.so",
+            "libtefkernel.linux.x86_64.so"
+        )
+        else -> listOf(
+            "libtefkernel.mac.arm64.so",
+            "libtefkernel.mac.x86_64.so"
+        )
+    }
+
+    /**
+     * 判断内核是否已安装(仅检查当前平台文件是否齐全)
+     */
+    fun isKernelInstalled(): Boolean {
+        val outDir = Platform.getData("tefkernel")
+        if (!fileSystem.exists(outDir)) return false
+        return currentPlatformKernelFiles().all { name -> fileSystem.exists(outDir / name) }
+    }
+
+    /**
+     * 判断内核是否已安装且为新版(文件齐全 + 版本不落后于内置版本)
+     */
+    fun isKernelUpToDate(): Boolean {
+        if (!isKernelInstalled()) return false
+        val installed = ConfigurationState.kernelVersion
+        return !isVersionGreater(BuildConfig.KERNEL_VERSION, installed)
+    }
+
+    /**
+     * 判断 tefloader.zip 是否已就位(桌面端)
+     */
+    fun isTefloaderInstalled(): Boolean {
+        if (!Platform.isDesktop) return false
+        val f = Platform.getData("tefkernel") / "tefloader.zip"
+        return fileSystem.exists(f) && (fileSystem.metadataOrNull(f)?.size ?: 0) > 0
+    }
+
+    /**
+     * 判断某个 module 是否已安装且为新版
+     * @param pkgId 模块包 ID
+     * @param latestVersion 内置的最新版本
+     */
+    fun isModuleUpToDate(pkgId: String, latestVersion: String): Boolean {
+        val installed = ModuleManager.getPackItem(pkgId)?.version ?: return false
+        return !isVersionGreater(latestVersion, installed)
+    }
+
+    // ==================== 更新组件 ====================
+
     suspend fun updateOutdatedComponents(
         onNeedUpdate: () -> Unit,
         onUpdateComplete: () -> Unit
     ) {
-        // Kernel
-        logger.i("Kernel: current=${ConfigurationState.kernelVersion}, latest=${BuildConfig.KERNEL_VERSION}")
-        if (isVersionGreater(BuildConfig.KERNEL_VERSION, ConfigurationState.kernelVersion)) {
-            logger.i("Updating kernel...")
+        // ---- Kernel ----
+        logger.i(
+            "Kernel: current=${ConfigurationState.kernelVersion}, latest=${BuildConfig.KERNEL_VERSION}, " +
+                    "installed=${isKernelInstalled()}"
+        )
+        val kernelWasOutdated = !isKernelUpToDate()
+        if (kernelWasOutdated) {
+            logger.i("Installing/updating kernel...")
             onNeedUpdate()
             val kernelTmpPath = releaseResourceToTmp("tefkernel.zip")
-            installKernel(kernelTmpPath)
-            FileSystem.SYSTEM.delete(kernelTmpPath)
-            logger.i("Kernel updated")
-
-            if (Platform.isDesktop) {
-                val tefloaderTmpPath = releaseResourceToTmp("tefloader.zip")
-                FileSystem.SYSTEM.copy(
-                    tefloaderTmpPath,
-                    Platform.getData("tefkernel") / "tefloader.zip"
-                )
-                FileSystem.SYSTEM.delete(tefloaderTmpPath)
-                logger.d("tefloader updated")
+            try {
+                installKernel(kernelTmpPath)
+            } finally {
+                fileSystem.delete(kernelTmpPath, mustExist = false)
             }
+            logger.i("Kernel updated")
         } else {
             logger.d("Kernel up to date")
         }
 
-        // Language Pack
-        val langVersion = ModuleManager.getPackItem("eternal.future.languagepackextension")?.version ?: "none"
-        logger.i("LanguagePack: current=$langVersion, latest=${BuildConfig.LANGUAGEPACKEXTENSION}")
-        if (isVersionGreater(BuildConfig.LANGUAGEPACKEXTENSION, langVersion)) {
+        // ---- tefloader (desktop only) ----
+        // 内核刚更新过,或 zip 缺失/损坏 时补装
+        if (Platform.isDesktop && (kernelWasOutdated || !isTefloaderInstalled())) {
+            logger.i("Installing tefloader...")
+            onNeedUpdate()
+            val tefloaderTmpPath = releaseResourceToTmp("tefloader.zip")
+            try {
+                fileSystem.copy(tefloaderTmpPath, Platform.getData("tefkernel") / "tefloader.zip")
+            } finally {
+                fileSystem.delete(tefloaderTmpPath, mustExist = false)
+            }
+            logger.d("tefloader updated")
+        }
+
+        // ---- LanguagePack ----
+        if (!isModuleUpToDate("eternal.future.languagepackextension", BuildConfig.LANGUAGEPACKEXTENSION)) {
             logger.i("Updating LanguagePack...")
             onNeedUpdate()
-            val tmpPath = releaseResourceToTmp("LanguagePackExtension.zip")
-            install(tmpPath)
-            FileSystem.SYSTEM.delete(tmpPath)
+            installResourceModule("LanguagePackExtension.zip")
             logger.i("LanguagePack updated")
         } else {
             logger.d("LanguagePack up to date")
         }
 
-        // Android-only modules
+        // ---- Android-only modules ----
         if (Platform.isAndroid) {
-            val fontVersion = ModuleManager.getPackItem("eternal.future.fontpackextension")?.version ?: "none"
-            logger.i("FontPack: current=$fontVersion, latest=${BuildConfig.FONTPACKEXTENSION}")
-            if (isVersionGreater(BuildConfig.FONTPACKEXTENSION, fontVersion)) {
+            if (!isModuleUpToDate("eternal.future.fontpackextension", BuildConfig.FONTPACKEXTENSION)) {
                 logger.i("Updating FontPack...")
                 onNeedUpdate()
-                val tmpPath = releaseResourceToTmp("FontPackExtension.zip")
-                install(tmpPath)
-                FileSystem.SYSTEM.delete(tmpPath)
+                installResourceModule("FontPackExtension.zip")
                 logger.i("FontPack updated")
             } else {
                 logger.d("FontPack up to date")
             }
 
-            val texVersion = ModuleManager.getPackItem("eternal.future.texturepackextension")?.version ?: "none"
-            logger.i("TexturePack: current=$texVersion, latest=${BuildConfig.TEXTUREPACKEXTENSION}")
-            if (isVersionGreater(BuildConfig.TEXTUREPACKEXTENSION, texVersion)) {
+            if (!isModuleUpToDate("eternal.future.texturepackextension", BuildConfig.TEXTUREPACKEXTENSION)) {
                 logger.i("Updating TexturePack...")
                 onNeedUpdate()
-                val tmpPath = releaseResourceToTmp("TexturePackExtension.zip")
-                install(tmpPath)
-                FileSystem.SYSTEM.delete(tmpPath)
+                installResourceModule("TexturePackExtension.zip")
                 logger.i("TexturePack updated")
             } else {
                 logger.d("TexturePack up to date")
+            }
+
+            if (!isModuleUpToDate("eternal.future.audiopackextension", BuildConfig.AUDIOPACKEXTENSION)) {
+                logger.i("Updating AudioPack...")
+                onNeedUpdate()
+                installResourceModule("AudioPackExtension.zip")
+                logger.i("AudioPack updated")
+            } else {
+                logger.d("AudioPack up to date")
             }
         }
 
         onUpdateComplete()
     }
+
+    /**
+     * 安装内置资源模块,并在结束后清理临时文件
+     */
+    private suspend fun installResourceModule(zipName: String) {
+        val tmp = releaseResourceToTmp(zipName)
+        try {
+            install(tmp)
+        } finally {
+            FileSystem.SYSTEM.delete(tmp, mustExist = false)
+        }
+    }
+
+    // ==================== 内核安装 ====================
 
     fun installKernel(filePath: Path) {
         val outDir = Platform.getData("tefkernel")
@@ -181,19 +266,7 @@ object AddonManager {
             fileSystem.createDirectories(outDir)
         }
 
-        val files = if (Platform.isAndroid) listOf(
-            "libtefkernel.android.arm64-v8a.so",
-            "libtefkernel.android.armeabi-v7a.so"
-        ) else if(Platform.isWindows) listOf(
-            "libtefkernel.windows.x86_64.dll",
-            "libtefkernel.windows.x86.dll"
-        ) else if (Platform.isLinux) listOf(
-            "libtefkernel.linux.x86.so",
-            "libtefkernel.linux.x86_64.so"
-        ) else listOf(
-            "libtefkernel.mac.arm64.so",
-            "libtefkernel.mac.x86_64.so"
-        )
+        val files = currentPlatformKernelFiles()
 
         ZipFile(fileSystem.openReadOnly(filePath)).use { zip ->
             val infoString = zip.getInputStream("info.json").asSource().buffer().readUtf8()
@@ -219,10 +292,12 @@ object AddonManager {
         }
     }
 
+    // ==================== 通用安装入口 ====================
+
     /**
      * 安装或更新附加包
      * @param filePath 包文件路径
-     * @param progressCallback 进度回调函数，用于报告安装进度和错误
+     * @param progressCallback 进度回调函数,用于报告安装进度和错误
      */
     suspend fun install(filePath: Path, progressCallback: ProgressCallback? = null) {
         logger.d("Starting install for file: $filePath")
@@ -247,9 +322,18 @@ object AddonManager {
                 val manifest = json.parseToJsonElement(
                     zip.getInputStream(manifestEntry).asSource().buffer().readUtf8()
                 ).jsonObject
-                val type = manifest["type"]?.jsonPrimitive?.content?.lowercase()
 
-                logger.d("Detected addon type: $type")
+                val type = manifest["type"]?.jsonPrimitive?.content?.lowercase()
+                val kernelMinVersion = manifest["tefkernelMinVersion"]?.jsonPrimitive?.content
+
+                kernelMinVersion?.let {
+                    if (isVersionGreater(it, ConfigurationState.kernelVersion)) {
+                        // kernelMinVersion > 当前 kernelVersion,说明当前内核版本过低
+                        throw IllegalArgumentException(
+                            "Kernel version too low: current ${ConfigurationState.kernelVersion}, required >= $it"
+                        )
+                    }
+                }
 
                 when (type) {
                     "plugin" -> {
@@ -315,7 +399,7 @@ object AddonManager {
                     progressCallback?.invoke(InstallProgress.COMPLETED, null)
                 }
             } catch (e: Exception) {
-                if (currentError == null) {
+                if (currentError != null) {
                     logger.e("Error processing addon: $filePath", e)
                     progressCallback?.invoke(InstallProgress.ERROR, e)
                 }
@@ -336,6 +420,25 @@ object AddonManager {
             logger.e(error.message ?: "Missing parentLoader field")
             progressCallback?.invoke(InstallProgress.ERROR, error)
             throw error
+        }
+
+        manifest["parentLoaderMinVersion"]?.jsonPrimitive?.content?.let { parentLoaderMinVersion ->
+            val curVersion = ModLoaderManager.getPackItem(parentLoader)?.version
+            if (curVersion == null) {
+                val error = IllegalArgumentException("Mod manifest missing 'parentLoader' field")
+                logger.e(error.message ?: "Missing parentLoader field")
+                progressCallback?.invoke(InstallProgress.ERROR, error)
+                throw error
+            }
+
+            if (isVersionGreater(parentLoaderMinVersion, curVersion)) {
+                val error = IllegalArgumentException(
+                    "$parentLoader version too low: current $curVersion, required >= $parentLoaderMinVersion"
+                )
+                logger.e(error.message ?: "$parentLoader version too low")
+                progressCallback?.invoke(InstallProgress.ERROR, error)
+                throw error
+            }
         }
 
         progressCallback?.invoke(InstallProgress.INSTALLING_DEPENDENCIES, null)
@@ -558,7 +661,7 @@ object AddonManager {
             entriesToExtract.forEach { entry ->
                 // 计算相对路径
                 val relativePath = if (entry.name == resourcesPath) {
-                    // 直接是资源文件，不是目录
+                    // 直接是资源文件,不是目录
                     entry.name.substringAfterLast('/')
                 } else {
                     // 去掉资源目录前缀
@@ -625,7 +728,7 @@ object AddonManager {
      * 获取或创建模组数据库实例
      * @param loaderPkgId 模组加载器包ID
      * @param autoCreate 如果数据库不存在是否自动创建
-     * @return 数据库实例，如果加载器被禁用且autoCreate为false则返回null
+     * @return 数据库实例,如果加载器被禁用且autoCreate为false则返回null
      */
     fun getOrCreateModManager(loaderPkgId: String, autoCreate: Boolean = false): ModManager? {
         // 检查是否已经有数据库实例
@@ -664,7 +767,7 @@ object AddonManager {
 
     /**
      * 刷新所有启用的模组数据库
-     * 关闭禁用的，打开启用的
+     * 关闭禁用的,打开启用的
      */
     fun refreshModManager(modLoaders: List<ModLoaderItem>) {
         // 检查哪些加载器需要关闭

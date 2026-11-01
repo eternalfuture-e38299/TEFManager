@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="file_service_channel_name">文件服务</string>
+    <string name="file_service_channel_desc">保持文件服务运行</string>
+    <string name="file_service_notification_title">文件服务运行中</string>
+    <string name="file_service_notification_text">保持文件ContentProvider可用</string>
+</resources>

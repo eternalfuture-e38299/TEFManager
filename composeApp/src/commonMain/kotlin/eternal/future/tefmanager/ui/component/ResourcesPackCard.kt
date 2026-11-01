@@ -336,7 +336,7 @@ fun ResourcesPackCard(
                                         ResourcesPackItem.Type.Terraria ->
                                             MaterialTheme.colorScheme.onPrimaryContainer
                                         ResourcesPackItem.Type.TEFManager ->
-                                            MaterialTheme.colorScheme.secondaryContainer
+                                            MaterialTheme.colorScheme.onSecondaryContainer
                                     }
                                 ),
                                 border = null

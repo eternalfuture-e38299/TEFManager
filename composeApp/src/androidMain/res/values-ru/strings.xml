@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="file_service_channel_name">Файловая служба</string>
+    <string name="file_service_channel_desc">Поддерживает работу файловой службы</string>
+    <string name="file_service_notification_title">Файловая служба работает</string>
+    <string name="file_service_notification_text">Поддерживает доступность файлового ContentProvider</string>
+</resources>

@@ -34,5 +34,7 @@ data class ModLoaderItem(
     val version: String = "",
     val versionCode: Int = 0,
     val dependence: List<Dependence> = listOf(),
-    val support: PlatformSupport = PlatformSupport()
+    val support: PlatformSupport = PlatformSupport(),
+    val updateInfoUrl: String = "",
+    val modRepositoryIndexUrl: String = ""
 )

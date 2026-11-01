@@ -105,7 +105,7 @@ fun main() = application {
                             isVersionGreater(it.newVersion, currentKernelVersion)
                         },
                         tefloader = info.tefloader?.takeIf {
-                            isVersionGreater(it.newVersion, currentLoaderVersion) && Platform.isDesktop
+                            isVersionGreater(it.newVersion, currentLoaderVersion)
                         },
                         language = info.language?.takeIf {
                             // 如果 currentLanguageVersion 为 null（未安装），或者版本更新

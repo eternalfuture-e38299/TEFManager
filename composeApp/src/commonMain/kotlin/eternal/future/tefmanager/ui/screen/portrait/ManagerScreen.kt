@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import eternal.future.tefmanager.Platform
+import eternal.future.tefmanager.model.AddonUpdateInfo
 import eternal.future.tefmanager.model.ModItem
 import eternal.future.tefmanager.model.ModLoaderItem
 import eternal.future.tefmanager.strings.StringsResource.Strings
@@ -77,10 +78,13 @@ import eternal.future.tefmanager.ui.component.ModLoaderItemCard
 import eternal.future.tefmanager.ui.component.ModuleItemCard
 import eternal.future.tefmanager.ui.component.PluginItemCard
 import eternal.future.tefmanager.ui.dialogs.AddonInstallOrUpdateDialog
+import eternal.future.tefmanager.ui.dialogs.AddonUpdateDialog
+import eternal.future.tefmanager.utils.NetworkService
 import eternal.future.tefmanager.utils.addon.AddonManager
 import eternal.future.tefmanager.utils.addon.ModLoaderManager
 import eternal.future.tefmanager.utils.addon.ModuleManager
 import eternal.future.tefmanager.utils.addon.PluginManager
+import eternal.future.tefmanager.utils.isVersionGreater
 import eternal.future.tefmanager.utils.toFileUrlString
 import io.github.vinceglb.filekit.dialogs.FileKitMode
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
@@ -98,6 +102,7 @@ import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
 import okio.SYSTEM
+import kotlin.collections.set
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -125,6 +130,7 @@ import kotlin.time.Duration.Companion.milliseconds
 
 object ManagerScreen : Screen, MainScreen.TitledScreen {
     private var categories = mutableStateListOf<ManagerTab>()
+    private val networkService = NetworkService()
 
     data class ManagerTab(
         val id: String,
@@ -841,6 +847,28 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
             derivedStateOf { enabledLoaders.toMap() }
         }
 
+        // pkgId -> AddonUpdateInfo（只保存在新版本可用的）
+        val updates = remember { mutableStateMapOf<String, AddonUpdateInfo>() }
+
+        // 正在弹窗展示的 loader
+        var dialogLoader by remember { mutableStateOf<ModLoaderItem?>(null) }
+
+        // 批量检查更新：packs 列表变化时重新拉
+        LaunchedEffect(ModLoaderManager.packs.map { it.pkgId to it.version }) {
+            updates.clear()
+            ModLoaderManager.packs
+                .filter { it.updateInfoUrl.isNotBlank() }
+                .forEach { loader ->
+                    launch {
+                        val info = networkService.getJson<AddonUpdateInfo>(loader.updateInfoUrl)
+                            ?: return@launch
+                        if (isVersionGreater(info.version, loader.version)) {
+                            updates[loader.pkgId] = info
+                        }
+                    }
+                }
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -934,6 +962,8 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                         modLoader = loader,
                         enabled = enabled,
                         customIconPath = Platform.getData("modloader") / "icons" / "${loader.pkgId}.icon",
+                        hasUpdate = updates.containsKey(loader.pkgId),
+                        onCheckUpdate = { dialogLoader = loader },
                         onEnableChange = { onLoaderToggle(loader.pkgId, it) },
                         onDelete = {
                             runBlocking {
@@ -944,6 +974,19 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                     )
                 }
             }
+
+            dialogLoader?.let { loader ->
+                val info = updates[loader.pkgId] ?: return@let
+                AddonUpdateDialog(
+                    title = loader.name,
+                    currentVersion = loader.version,
+                    updateInfo = info,
+                    installPackage = { path ->
+                        runBlocking { AddonManager.install(path) }
+                    },
+                    onDismiss = { dialogLoader = null }
+                )
+            }
         }
     }
 
@@ -951,6 +994,22 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
     private fun ModListSection(
         loader: ModLoaderItem
     ) {
+        val mods = AddonManager.modManagersList[loader.pkgId]?.packs.orEmpty()
+        val updates = remember { mutableStateMapOf<String, AddonUpdateInfo>() }
+        var dialogFor by remember { mutableStateOf<Pair<ModItem, AddonUpdateInfo>?>(null) }
+
+        LaunchedEffect(mods.map { it.pkgId }) {
+            updates.clear()
+            mods.filter { it.updateInfoUrl.isNotBlank() }.forEach { mod ->
+                launch {
+                    val info = networkService.getJson<AddonUpdateInfo>(mod.updateInfoUrl) ?: return@launch
+                    if (isVersionGreater(info.version, mod.version)) {
+                        updates[mod.pkgId] = info
+                    }
+                }
+            }
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -978,6 +1037,8 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                             enabled = enabled,
                             customIconPath = manager.getIconFilePath(mod.pkgId),
                             settingsStore = manager.getSettingsStore(mod.pkgId),
+                            hasUpdate = updates.containsKey(mod.pkgId),
+                            onCheckUpdate = { updates[mod.pkgId]?.let { dialogFor = mod to it } },
                             onEnableChange = { enable ->
                                 enabled = enable
                                 if (enable) manager.enable(mod.pkgId)
@@ -991,6 +1052,18 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                         )
                     }
                 }
+            }
+
+            dialogFor?.let { (mod, info) ->
+                AddonUpdateDialog(
+                    title = mod.name,
+                    currentVersion = mod.version,
+                    updateInfo = info,
+                    installPackage = { path ->
+                        runBlocking { AddonManager.install(path) } // 见下方说明
+                    },
+                    onDismiss = { dialogFor = null }
+                )
             }
         }
     }

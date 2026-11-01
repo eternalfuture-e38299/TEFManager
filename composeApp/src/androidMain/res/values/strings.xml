@@ -2,6 +2,11 @@
 <resources>
     <string name="app_name" translatable="false">TEFManager</string>
 
+    <string name="file_service_channel_name">File Service</string>
+    <string name="file_service_channel_desc">Keeps the file service running</string>
+    <string name="file_service_notification_title">File service running</string>
+    <string name="file_service_notification_text">Keeps the file ContentProvider available</string>
+
     <string name="FreeformWindowOrientation_landscape" />
     <string name="FreeformWindowOrientation_portrait" />
     <string name="FreeformWindowSize_maximize" />

@@ -1,5 +1,6 @@
 package eternal.future.tefmanager.utils
 
+import eternal.future.tefmanager.BuildConfig
 import eternal.future.tefmanager.model.UpdateInfo
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -81,7 +82,7 @@ class NetworkService {
     private var isCancelled = false
 
     // 创建 HTTP 客户端
-    private val client = HttpClient {
+    val client = HttpClient {
         install(HttpTimeout) {
             requestTimeoutMillis = 30000000
             connectTimeoutMillis = 10000000
@@ -93,7 +94,7 @@ class NetworkService {
         }
     }
 
-    private val json = Json {
+    val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
     }
@@ -108,7 +109,7 @@ class NetworkService {
             val response: HttpResponse = client.get(url) {
                 // 直接使用字符串常量，不需要 ContentType
                 header(HttpHeaders.Accept, "application/json")
-                header(HttpHeaders.UserAgent, "TEFManager-App/1.0")
+                header(HttpHeaders.UserAgent, "TEFManager-App/${BuildConfig.VERSION_NAME}")
             }
 
             if (response.status.value in 200..299) {
@@ -165,6 +166,39 @@ class NetworkService {
         return null
     }
 
+    // ---------- 通用 JSON 读取 ----------
+
+    /**
+     * GET 一个 JSON URL 并反序列化成 T
+     * @return 成功返回 T，失败返回 null（内部已记日志）
+     */
+    suspend inline fun <reified T> getJson(
+        url: String,
+        headers: Map<String, String> = emptyMap()
+    ): T? {
+        return try {
+            val response: HttpResponse = client.get(url) {
+                header(HttpHeaders.Accept, "application/json")
+                headers.forEach { (k, v) -> header(k, v) }
+            }
+
+            if (response.status.value in 200..299) {
+                val jsonString = response.body<String>()
+                AppLogger.i("Fetched ${T::class.simpleName} from $url")
+                json.decodeFromString<T>(jsonString)
+            } else {
+                AppLogger.e("Failed to fetch ${T::class.simpleName}: HTTP ${response.status}")
+                null
+            }
+        } catch (e: SerializationException) {
+            AppLogger.e("Failed to parse ${T::class.simpleName}: ${e.message}", e)
+            null
+        } catch (e: Exception) {
+            AppLogger.e("Failed to fetch ${T::class.simpleName}: ${e.message}", e)
+            null
+        }
+    }
+
     /**
      * 下载单个文件
      */
@@ -185,7 +219,7 @@ class NetworkService {
         currentDownloadJob = scope.launch {
             try {
                 performDownload(url, outputPath)
-            } catch (e: CancellationException) {
+            } catch (_: CancellationException) {
                 AppLogger.i("Download was cancelled")
                 updateProgress(DownloadProgress(status = DownloadStatus.CANCELLED))
             } catch (e: Exception) {
@@ -355,10 +389,13 @@ class NetworkService {
         AppLogger.v("Updating progress: ${progress.status} - ${progress.percentage}%")
         _downloadProgress.value = progress
     }
+/*
 
-    /**
+    */
+/**
      * 清除进度记录
-     */
+     *//*
+
     fun clearProgress() {
         AppLogger.d("Clearing download progress")
         isCancelled = false
@@ -366,12 +403,15 @@ class NetworkService {
         _downloadProgress.value = DownloadProgress()
     }
 
-    /**
+    */
+/**
      * 获取当前下载进度
-     */
+     *//*
+
     fun getProgress(): DownloadProgress {
         return _downloadProgress.value
     }
+*/
 
     fun close() {
         AppLogger.i("Closing NetworkService")
