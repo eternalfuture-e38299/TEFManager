@@ -2,6 +2,6 @@ id=tefmanager
 name=TEFManager Zygisk
 version=v2.1.0
 versionCode=2026110100
-author=lzup333
+author=lzup333, eternalfuture-e38299
 description=TEFManager: inject TEFKernel into Terraria through Zygisk. No Xposed required.
 updateJson=https://raw.githubusercontent.com/lzup333/TEFManager/main/update.json
