@@ -707,22 +707,25 @@ Allows Android players to freely replace game audio just like on desktop.
 
 TEFManager supports two operating modes on the Android platform to accommodate users' different devices and permission situations:
 
-### Root Mode
+### Root Mode (Zygisk)
 
-**Principle**: Injects TEFKernel into the game process via the Xposed framework (LSPosed, etc.).
+**Principle**: Install TEFManager as a **Zygisk module** for Magisk / KernelSU / APatch. Zygisk injects TEFKernel when the game process starts, with no Xposed dependency.
 
 **Requirements**:
 - The device is rooted
-- The Xposed framework is installed (LSPosed recommended)
-- Activate the TEFManager module in the Xposed manager and add Terraria to the scope
-- Grant TEFManager Root permission
+- Magisk (built-in Zygisk) or another Zygisk-capable root solution
+- Flash `TEFManager-Zygisk-v*.zip` in Magisk/KernelSU/APatch
+- Reboot and grant TEFManager root permission
 
 **Advantages**:
 - No need to modify the game APK
 - Supports official game version updates
-- Perfectly compatible with official versions
+- No Xposed dependency, avoiding Xposed scope/inline-hook compatibility issues
+- Nothing remains injected after the module is disabled or removed
 
-**Configuration suggestion**: If you encounter crashes in the Xposed framework, you can enable the "Restore inline hooks" option for Terraria.
+**Notes**:
+- The module copies the `libtefkernel.android.<abi>.so` downloaded by TEFManager into the game's private directory, then loads it through Zygisk.
+- If the game APK is already patched by External Mode (bundled Tefloader), Zygisk detects it and skips injection to avoid double-loading.
 
 ---
 

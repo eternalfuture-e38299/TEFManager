@@ -92,7 +92,6 @@ okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
 voyager-navigator = { module = "cafe.adriel.voyager:voyager-navigator", version.ref = "voyagerNavigator" }
 voyager-transitions = { module = "cafe.adriel.voyager:voyager-transitions", version.ref = "voyagerNavigator" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
-xposed-api = { module = "de.robv.android.xposed:api", version = "82" }
 
 
 [plugins]

@@ -51,6 +51,9 @@ actual object GameLauncher {
             }
 */
 
+            // Zygisk 模块可能在本次启动 App 之后才安装/更新，每次启动游戏前重新检测。
+            ZygiskManager.refreshActiveState(verify = true)
+
             if (!Platform.isAndroidModuleActive) {
                 AppLogger.d("Android module is not active, starting FileProviderForegroundService")
 

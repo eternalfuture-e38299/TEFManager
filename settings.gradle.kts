@@ -4,7 +4,6 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 pluginManagement {
     repositories {
         google()
-        maven("https://api.xposed.info/")
         mavenCentral()
         gradlePluginPortal()
     }
@@ -13,7 +12,6 @@ pluginManagement {
 dependencyResolutionManagement {
     repositories {
         google()
-        maven("https://api.xposed.info/")
         mavenCentral()
     }
 }

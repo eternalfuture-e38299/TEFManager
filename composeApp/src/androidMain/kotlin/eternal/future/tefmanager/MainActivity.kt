@@ -45,6 +45,7 @@ import eternal.future.tefmanager.ui.theme.TEFManagerTheme
 import eternal.future.tefmanager.utils.AppLogger
 import eternal.future.tefmanager.utils.ConfigManager
 import eternal.future.tefmanager.utils.NetworkService
+import eternal.future.tefmanager.utils.ZygiskManager
 import eternal.future.tefmanager.utils.addon.AddonManager
 import eternal.future.tefmanager.utils.addon.ModuleManager
 import eternal.future.tefmanager.utils.isVersionGreater
@@ -69,6 +70,9 @@ class MainActivity : ComponentActivity() {
         context = this
 
         AppLogger.initializeSync(enableFileLog = true, logDir = Platform.getData("logs/app").toString())
+
+        // Root 模式通过 Zygisk 模块注入，不再依赖 Xposed 在启动时写静态字段。
+        ZygiskManager.refreshActiveState()
         ConfigManager.getInstance().initialize(Platform.getData(null).toString())
 
         enableEdgeToEdge()

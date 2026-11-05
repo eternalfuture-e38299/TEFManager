@@ -707,22 +707,25 @@ TEFManager 内置了三个核心扩展模块，**填补了安卓端模组生态�
 
 TEFManager 在 Android 平台上支持两种运行模式，以适应不同用户的设备和权限情况：
 
-### Root 模式
+### Root 模式（Zygisk）
 
-**原理**：通过 Xposed 框架（LSPosed 等）将 TEFKernel 注入到游戏进程。
+**原理**：以 Magisk / KernelSU / APatch 的 **Zygisk 模块**形式安装 TEFManager，由 Zygisk 在游戏进程启动时注入 TEFKernel，全程不依赖 Xposed。
 
 **使用条件**：
 - 设备已 Root
-- 已安装 Xposed 框架（推荐 LSPosed）
-- 在 Xposed 管理器中激活 TEFManager 模块，并将 Terraria 加入作用域
-- 授予 TEFManager Root权限`
+- 使用 Magisk（内置 Zygisk）或其他支持 Zygisk 的 Root 方案
+- 在 Magisk/KernelSU/APatch 中刷入 `TEFManager-Zygisk-v*.zip`
+- 重启设备，并授予 TEFManager Root 权限
 
 **优势**：
 - 无需修改游戏 APK
 - 支持游戏官方版本更新
-- 与官方版本完美兼容
+- 不依赖 Xposed 框架，避免 Xposed 的作用域、内联钩子兼容性问题
+- 模块卸载/禁用后不会残留注入
 
-**配置建议**：如在 Xposed 框架中遇到闪退，可对 Terraria 启用「还原内联钩子」选项。
+**说明**：
+- 模块会把 TEFManager 下载的 `libtefkernel.android.<abi>.so` 复制到游戏私有目录，再由 Zygisk 加载。
+- 若检测到游戏 APK 已通过「外部模式」修补（自带 Tefloader），Zygisk 会自动让路，避免重复加载。
 
 ---
 

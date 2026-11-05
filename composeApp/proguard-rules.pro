@@ -6,7 +6,6 @@
 # 如果 aXML 库使用了泛型反射，还需要保留泛型信息
 -keep class * implements java.lang.reflect.ParameterizedType
 -keep class * extends java.lang.reflect.Type
--keep class eternal.future.tefmanager.MainHook { *; }
 -keep class eternal.future.tefmanager.Platform { *; }
 
 # ============ 核心规则 ============

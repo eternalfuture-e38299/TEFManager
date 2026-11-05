@@ -40,3 +40,6 @@ google-services.json
 composeApp/src/androidMain/resources/assets
 composeApp/src/androidMain/jniLibs/
 composeApp/libs/android/terraria.jar
+
+# Zygisk module build output
+dist/

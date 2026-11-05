@@ -102,7 +102,6 @@ kotlin {
                 implementation(libs.bcprov.jdk18on)
                 implementation(libs.bcpkix.jdk18on)
                 implementation(libs.material)
-                compileOnly(libs.xposed.api)
                 // implementation(fileTree(mapOf("dir" to "libs/android", "include" to listOf("*.jar", "*.aar"))))
                 implementation(project(":composeApp:libs:android:aXML"))
                 implementation(files("libs/android/ManifestEditor-2.0.jar"))
