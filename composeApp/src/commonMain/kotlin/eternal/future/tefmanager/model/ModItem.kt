@@ -125,7 +125,10 @@ data class ModItem(
      * persistence; the native mod remains the authority that validates values.
      */
     val settings: List<ModSetting> = listOf(),
-    val updateInfoUrl: String = ""
+    val updateInfoUrl: String = "",
+
+    /** Class name of the mod-provided Compose page (inside the page jar). */
+    val pageClass: String = "default.PageClass"
 ) {
 
     @Serializable

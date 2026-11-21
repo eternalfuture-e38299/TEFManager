@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Dashboard
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Error
@@ -111,6 +112,8 @@ fun ModItemCard(
     customIconPath: Path? = null,
     settingsStore: ModSettingsStore? = null,
     hasUpdate: Boolean = false,
+    pagePath: Path? = null,
+    onOpenPage: () -> Unit = {},
     onCheckUpdate: () -> Unit = {},
     onEnableChange: (Boolean) -> Unit = {},
     onDelete: () -> Unit = {}
@@ -296,6 +299,33 @@ fun ModItemCard(
                             fontSize = 11.sp,
                             maxLines = 1
                         )
+                    }
+
+                    if (pagePath != null) {
+                        Spacer(Modifier.width(6.dp))
+                        Surface(
+                            onClick = onOpenPage,
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Dashboard,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(12.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    "界面",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
                     }
 
                     if (hasUpdate) {
