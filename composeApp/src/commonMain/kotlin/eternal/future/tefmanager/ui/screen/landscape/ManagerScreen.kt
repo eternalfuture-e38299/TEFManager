@@ -68,12 +68,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import eternal.future.tefmanager.Platform
 import eternal.future.tefmanager.model.AddonUpdateInfo
 import eternal.future.tefmanager.model.ModItem
 import eternal.future.tefmanager.model.ModLoaderItem
 import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.ui.component.ModItemCard
+import eternal.future.tefmanager.ui.screen.ModPageScreen
 import eternal.future.tefmanager.ui.component.ModLoaderItemCard
 import eternal.future.tefmanager.ui.component.ModuleItemCard
 import eternal.future.tefmanager.ui.component.PluginItemCard
@@ -127,6 +130,11 @@ import kotlin.time.Duration.Companion.milliseconds
  *******************************************************************************/
 
 object ManagerScreen : Screen, MainScreen.TitledScreen {
+    /** Page JAR convention: <mod data>/private/<pkgId>/page/<platform>.jar */
+    private fun modPageJar(baseDir: Path, pkgId: String): Path =
+        baseDir / "private" / pkgId / "page" /
+            (if (Platform.isAndroid) "android.jar" else "desktop.jar")
+
 
     private var categories = mutableStateListOf<ManagerTab>()
     private val networkService = NetworkService()
@@ -268,6 +276,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         searchQuery: String,
         enabledLoaders: SnapshotStateMap<String, Boolean>
     ) {
+        val navigator = LocalNavigator.currentOrThrow
         val query = searchQuery.trim()
 
         // 获取所有启用的加载器包名列表
@@ -416,6 +425,20 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                                     enabled = enabled,
                                     customIconPath = manager.getIconFilePath(mod.pkgId),
                                     settingsStore = manager.getSettingsStore(mod.pkgId),
+                                    pagePath = modPageJar(manager.config.dir, mod.pkgId)
+                                        .takeIf { FileSystem.SYSTEM.exists(it) },
+                                    onOpenPage = {
+                                        val jar = modPageJar(manager.config.dir, mod.pkgId)
+                                        navigator.push(
+                                            ModPageScreen(
+                                                title = mod.name,
+                                                pagePath = jar.toString(),
+                                                pageClass = mod.pageClass,
+                                                privatePath = (manager.config.dir / "private" / mod.pkgId).toString(),
+                                                dataPath = (manager.config.dir / "mod" / mod.pkgId).toString(),
+                                            )
+                                        )
+                                    },
                                     onEnableChange = { enable ->
                                         enabled = enable
                                         if (enable) {
@@ -977,6 +1000,7 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
         onRefresh: () -> Unit,
         onAddMod: () -> Unit
     ) {
+        val navigator = LocalNavigator.currentOrThrow
         val mods = AddonManager.modManagersList[loader.pkgId]?.packs.orEmpty()
         val updates = remember { mutableStateMapOf<String, AddonUpdateInfo>() }
         var dialogFor by remember { mutableStateOf<Pair<ModItem, AddonUpdateInfo>?>(null) }
@@ -1052,6 +1076,20 @@ object ManagerScreen : Screen, MainScreen.TitledScreen {
                             customIconPath = manager.getIconFilePath(mod.pkgId),
                             settingsStore = manager.getSettingsStore(mod.pkgId),
                             hasUpdate = updates.containsKey(mod.pkgId),
+                            pagePath = modPageJar(manager.config.dir, mod.pkgId)
+                                .takeIf { FileSystem.SYSTEM.exists(it) },
+                            onOpenPage = {
+                                val jar = modPageJar(manager.config.dir, mod.pkgId)
+                                navigator.push(
+                                    ModPageScreen(
+                                        title = mod.name,
+                                        pagePath = jar.toString(),
+                                        pageClass = mod.pageClass,
+                                        privatePath = (manager.config.dir / "private" / mod.pkgId).toString(),
+                                        dataPath = (manager.config.dir / "mod" / mod.pkgId).toString(),
+                                    )
+                                )
+                            },
                             onCheckUpdate = { updates[mod.pkgId]?.let { dialogFor = mod to it } },
                             onEnableChange = { enable ->
                                 enabled = enable

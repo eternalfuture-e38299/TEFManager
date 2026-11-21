@@ -1,6 +1,7 @@
-# 保留 ModPage 稳定 ABI：Mod 页面 JAR 按这些类名反射加载
--keep class eternal.future.tefmanager.modpage.api.** { *; }
--keep interface eternal.future.tefmanager.modpage.api.** { *; }
+# 保留本 App 全部类与成员：Voyager / Compose / 动态加载依赖类名与签名，
+# 混淆后会在导航和 ModPage 加载时发生 ClassCastException
+-keep class eternal.future.tefmanager.** { *; }
+-keep interface eternal.future.tefmanager.** { *; }
 
 # 保留 Kotlin 序列化
 -keepattributes *Annotation*, InnerClasses
