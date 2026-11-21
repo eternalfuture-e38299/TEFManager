@@ -45,7 +45,6 @@ import androidx.compose.material.icons.rounded.VideogameAsset
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -577,17 +576,36 @@ fun ModItemCard(
                         )
                     }
 
-                    if (pagePath != null) {
-                        Button(
-                            onClick = onOpenPage,
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    if (pagePath != null ||
+                        (mod.settings.isNotEmpty() && settingsStore != null)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Text("自定义界面")
+                            if (pagePath != null) {
+                                OutlinedButton(
+                                    onClick = onOpenPage,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Dashboard,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("模组界面", fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                            if (mod.settings.isNotEmpty() && settingsStore != null) {
+                                ModSettingsSection(
+                                    mod,
+                                    settingsStore,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
                         }
-                    }
-
-                    if (mod.settings.isNotEmpty() && settingsStore != null) {
-                        ModSettingsSection(mod, settingsStore)
                     }
 
                     if (mod.features.isNotEmpty()) {

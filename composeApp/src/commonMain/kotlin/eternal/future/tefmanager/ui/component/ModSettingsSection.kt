@@ -67,7 +67,11 @@ import kotlinx.serialization.json.contentOrNull
 
 /** Compact entry point on the mod card; details are edited in a second-level window. */
 @Composable
-fun ModSettingsSection(mod: ModItem, store: ModSettingsStore) {
+fun ModSettingsSection(
+    mod: ModItem,
+    store: ModSettingsStore,
+    modifier: Modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+) {
     var values by remember(mod.pkgId) { mutableStateOf(store.load(mod.settings)) }
     var settingsOpen by remember { mutableStateOf(false) }
     var invalidKeys by remember { mutableStateOf(emptySet<String>()) }
@@ -81,7 +85,7 @@ fun ModSettingsSection(mod: ModItem, store: ModSettingsStore) {
             invalidKeys = emptySet()
             settingsOpen = true
         },
-        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        modifier = modifier,
         shape = RoundedCornerShape(12.dp)
     ) {
         Icon(Icons.Rounded.Tune, contentDescription = null, modifier = Modifier.size(18.dp))
