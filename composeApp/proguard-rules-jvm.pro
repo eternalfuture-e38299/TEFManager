@@ -53,3 +53,7 @@
 -dontwarn org.slf4j.**
 -dontwarn com.sun.jna.**
 -dontwarn org.freedesktop.dbus.**
+
+# 外部 Mod 页面 JAR 会直接引用 Kotlin 运行时
+-keep class kotlin.** { *; }
+-keep interface kotlin.** { *; }
