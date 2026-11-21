@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eternal.future.tefmanager.Platform
 import eternal.future.tefmanager.modpage.api.PageNode
 import eternal.future.tefmanager.modpage.openModPageSession
 import eternal.future.tefmanager.modpage.platformModPageContext
@@ -45,7 +46,12 @@ import eternal.future.tefmanager.ui.screen.landscape.MainScreen as LandscapeMain
 import eternal.future.tefmanager.ui.screen.portrait.MainScreen as PortraitMainScreen
 import io.github.vinceglb.filekit.dialogs.FileKitMode
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
-import io.github.vinceglb.filekit.path
+import kotlinx.datetime.Clock
+import kotlinx.io.buffered
+import kotlinx.io.files.SystemFileSystem
+import io.github.vinceglb.filekit.name
+import io.github.vinceglb.filekit.size
+import io.github.vinceglb.filekit.source
 
 class ModPageScreen(
     override val title: String,
@@ -78,7 +84,23 @@ class ModPageScreen(
             val id = pendingPickId
             val picked = session
             if (id != null && picked != null) {
-                val value = files.orEmpty().joinToString("\n") { it.path }
+                val value = runCatching {
+                    files.orEmpty().joinToString("\n") { file ->
+                        // FileKit returns a content:// URI on Android, which
+                        // java.io.File cannot open. Copy the picked file into
+                        // the app cache and hand the page a real path instead.
+                        val target = kotlinx.io.files.Path(
+                            (Platform.getDirectory("tmp") / "modpage_picked" /
+                                "${Clock.System.now().toEpochMilliseconds()}_${file.name}").toString(),
+                        )
+                        target.parent?.let { SystemFileSystem.createDirectories(it) }
+                        SystemFileSystem.sink(target).buffered().use { sink ->
+                            sink.write(file.source(), file.size())
+                            sink.flush()
+                        }
+                        target.toString()
+                    }
+                }.getOrElse { return@rememberFilePickerLauncher it.printStackTrace() }
                 runCatching { picked.event(id, value) }
                     .onSuccess { tree = it }
                     .onFailure { it.printStackTrace() }
