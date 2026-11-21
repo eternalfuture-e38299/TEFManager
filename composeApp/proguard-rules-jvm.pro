@@ -1,3 +1,7 @@
+# 保留 ModPage 稳定 ABI：Mod 页面 JAR 按这些类名反射加载
+-keep class eternal.future.tefmanager.modpage.api.** { *; }
+-keep interface eternal.future.tefmanager.modpage.api.** { *; }
+
 # 保留 Kotlin 序列化
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.**
