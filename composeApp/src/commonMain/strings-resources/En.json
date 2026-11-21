@@ -162,6 +162,7 @@
   "manager.mod.pageTitle": "Mod page",
   "manager.mod.pageLoadFailed": "Failed to load page: ${error}",
   "manager.mod.pageBack": "Back",
+  "manager.mod.pageSelectFile": "Select file",
   "manager.mod.pageDefaultButton": "Button",
   "manager.mod.feature.assistance": "Assistance",
   "manager.mod.feature.quality_of_life": "Quality of Life",

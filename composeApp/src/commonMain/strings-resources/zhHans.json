@@ -161,6 +161,7 @@
   "manager.mod.pageTitle": "模组界面",
   "manager.mod.pageLoadFailed": "页面加载失败: ${error}",
   "manager.mod.pageBack": "返回",
+  "manager.mod.pageSelectFile": "选择文件",
   "manager.mod.pageDefaultButton": "按钮",
   "manager.mod.feature.assistance": "辅助型",
   "manager.mod.feature.quality_of_life": "生活改善",

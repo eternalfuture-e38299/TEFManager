@@ -149,6 +149,7 @@
   "manager.mod.pageTitle": "Страница мода",
   "manager.mod.pageLoadFailed": "Не удалось загрузить страницу: ${error}",
   "manager.mod.pageBack": "Назад",
+  "manager.mod.pageSelectFile": "Выбрать файл",
   "manager.mod.pageDefaultButton": "Кнопка",
   "manager.mod.feature.assistance": "Вспомогательный",
   "manager.mod.feature.quality_of_life": "Улучшение качества жизни",

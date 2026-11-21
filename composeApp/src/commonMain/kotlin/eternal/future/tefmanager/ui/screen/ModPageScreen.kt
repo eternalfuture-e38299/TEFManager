@@ -43,6 +43,9 @@ import eternal.future.tefmanager.modpage.platformModPageContext
 import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.ui.screen.landscape.MainScreen as LandscapeMainScreen
 import eternal.future.tefmanager.ui.screen.portrait.MainScreen as PortraitMainScreen
+import io.github.vinceglb.filekit.dialogs.FileKitMode
+import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
+import io.github.vinceglb.filekit.path
 
 class ModPageScreen(
     override val title: String,
@@ -67,6 +70,20 @@ class ModPageScreen(
         val session = loaded.getOrNull()?.first
         var tree by remember(session) {
             mutableStateOf(loaded.getOrNull()?.second ?: PageNode("text"))
+        }
+        var pendingPickId by remember { mutableStateOf<String?>(null) }
+        val filePicker = rememberFilePickerLauncher(
+            mode = FileKitMode.Multiple(maxItems = 10),
+        ) { files ->
+            val id = pendingPickId
+            val picked = session
+            if (id != null && picked != null) {
+                val value = files.orEmpty().joinToString("\n") { it.path }
+                runCatching { picked.event(id, value) }
+                    .onSuccess { tree = it }
+                    .onFailure { it.printStackTrace() }
+            }
+            pendingPickId = null
         }
         DisposableEffect(session) {
             onDispose { session?.close() }
@@ -116,11 +133,18 @@ class ModPageScreen(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    RenderNode(tree) { id, value ->
-                        runCatching { session.event(id, value) }
-                            .onSuccess { tree = it }
-                            .onFailure { it.printStackTrace() }
-                    }
+                    RenderNode(
+                        node = tree,
+                        event = { id, value ->
+                            runCatching { session.event(id, value) }
+                                .onSuccess { tree = it }
+                                .onFailure { it.printStackTrace() }
+                        },
+                        pickFile = { id ->
+                            pendingPickId = id
+                            filePicker.launch()
+                        },
+                    )
                 }
             }
         }
@@ -128,19 +152,23 @@ class ModPageScreen(
 }
 
 @Composable
-private fun RenderNode(node: PageNode, event: (String, String?) -> Unit) {
+private fun RenderNode(
+    node: PageNode,
+    event: (String, String?) -> Unit,
+    pickFile: (String) -> Unit,
+) {
     when (node.type) {
         "column" -> Column(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            node.children.forEach { RenderNode(it, event) }
+            node.children.forEach { RenderNode(it, event, pickFile) }
         }
 
         "row" -> Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            node.children.forEach { RenderNode(it, event) }
+            node.children.forEach { RenderNode(it, event, pickFile) }
         }
 
         "text" -> Text(
@@ -154,6 +182,13 @@ private fun RenderNode(node: PageNode, event: (String, String?) -> Unit) {
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(node.str("label", Strings.manager.mod.pageDefaultButton))
+        }
+
+        "pickFile" -> Button(
+            onClick = { pickFile(node.str("id")) },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(node.str("label", Strings.manager.mod.pageSelectFile))
         }
 
         "checkbox" -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -195,7 +230,7 @@ private fun RenderNode(node: PageNode, event: (String, String?) -> Unit) {
 
         "collapsing" -> {
             Text(node.str("label"), style = MaterialTheme.typography.titleMedium)
-            node.children.forEach { RenderNode(it, event) }
+            node.children.forEach { RenderNode(it, event, pickFile) }
         }
     }
 }
