@@ -39,14 +39,17 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eternal.future.tefmanager.modpage.api.PageNode
 import eternal.future.tefmanager.modpage.openModPageSession
 import eternal.future.tefmanager.modpage.platformModPageContext
+import eternal.future.tefmanager.ui.screen.landscape.MainScreen as LandscapeMainScreen
+import eternal.future.tefmanager.ui.screen.portrait.MainScreen as PortraitMainScreen
 
 class ModPageScreen(
-    private val title: String,
+    override val title: String,
     private val pagePath: String,
     private val pageClass: String,
     private val privatePath: String,
     private val dataPath: String,
-) : Screen {
+) : Screen, PortraitMainScreen.TitledScreen, LandscapeMainScreen.TitledScreen {
+    override val refreshAction: (() -> Unit)? = null
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable

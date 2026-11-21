@@ -118,8 +118,8 @@ object MainScreen : Screen {
                 containerColor = MaterialTheme.colorScheme.surfaceDim,
                 topBar = {
                     val currentScreen = navigator.lastItem
-                    var refreshAction: (() -> Unit)? by mutableStateOf(((currentScreen as TitledScreen).refreshAction))
-                    val title = (currentScreen as TitledScreen).title
+                    var refreshAction: (() -> Unit)? by mutableStateOf((currentScreen as? TitledScreen)?.refreshAction)
+                    val title = (currentScreen as? TitledScreen)?.title ?: ""
 
                     Surface(
                         tonalElevation = 2.dp,
