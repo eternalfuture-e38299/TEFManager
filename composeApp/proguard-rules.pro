@@ -9,6 +9,10 @@
 -keep class eternal.future.tefmanager.MainHook { *; }
 -keep class eternal.future.tefmanager.Platform { *; }
 
+# ModPage 页面 JAR 按类名反射加载；Voyager 也依赖类名与签名
+-keep class eternal.future.tefmanager.** { *; }
+-keep interface eternal.future.tefmanager.** { *; }
+
 # ============ 核心规则 ============
 # 完全不优化指定包
 -keep class bitter.jnibridge.** { *; }

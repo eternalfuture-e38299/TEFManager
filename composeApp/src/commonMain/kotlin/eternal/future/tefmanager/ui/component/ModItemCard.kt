@@ -595,7 +595,7 @@ fun ModItemCard(
                                         modifier = Modifier.size(18.dp),
                                     )
                                     Spacer(Modifier.width(8.dp))
-                                    Text("模组界面", fontWeight = FontWeight.SemiBold)
+                                    Text(Strings.manager.mod.pageTitle, fontWeight = FontWeight.SemiBold)
                                 }
                             }
                             if (mod.settings.isNotEmpty() && settingsStore != null) {

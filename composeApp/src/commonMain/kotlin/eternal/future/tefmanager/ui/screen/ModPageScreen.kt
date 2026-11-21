@@ -19,6 +19,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -39,6 +40,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eternal.future.tefmanager.modpage.api.PageNode
 import eternal.future.tefmanager.modpage.openModPageSession
 import eternal.future.tefmanager.modpage.platformModPageContext
+import eternal.future.tefmanager.strings.StringsResource.Strings
 import eternal.future.tefmanager.ui.screen.landscape.MainScreen as LandscapeMainScreen
 import eternal.future.tefmanager.ui.screen.portrait.MainScreen as PortraitMainScreen
 
@@ -56,19 +58,25 @@ class ModPageScreen(
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val context = platformModPageContext()
-        val session = remember(pagePath, pageClass) {
-            openModPageSession(pagePath, pageClass, privatePath, dataPath, context)
+        val loaded = remember(pagePath, pageClass) {
+            runCatching {
+                val s = openModPageSession(pagePath, pageClass, privatePath, dataPath, context)
+                s to s.render()
+            }
         }
-        var tree by remember(session) { mutableStateOf(session.render()) }
+        val session = loaded.getOrNull()?.first
+        var tree by remember(session) {
+            mutableStateOf(loaded.getOrNull()?.second ?: PageNode("text"))
+        }
         DisposableEffect(session) {
-            onDispose { session.close() }
+            onDispose { session?.close() }
         }
 
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             topBar = {
                 CenterAlignedTopAppBar(
-                    title = { Text(session.title.ifEmpty { title }) },
+                    title = { Text(session?.title?.ifEmpty { title } ?: title) },
                     navigationIcon = {
                         IconButton(onClick = { navigator.pop() }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
@@ -81,16 +89,38 @@ class ModPageScreen(
                 )
             },
         ) { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(horizontal = 16.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                RenderNode(tree) { id, value ->
-                    tree = session.event(id, value)
+            if (session == null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        Strings.manager.mod.pageLoadFailed(
+                            loaded.exceptionOrNull()?.message ?: Strings.error.unknown,
+                        ),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Button(onClick = { navigator.pop() }) { Text(Strings.manager.mod.pageBack) }
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(horizontal = 16.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    RenderNode(tree) { id, value ->
+                        runCatching { session.event(id, value) }
+                            .onSuccess { tree = it }
+                            .onFailure { it.printStackTrace() }
+                    }
                 }
             }
         }
@@ -115,7 +145,7 @@ private fun RenderNode(node: PageNode, event: (String, String?) -> Unit) {
 
         "text" -> Text(
             text = node.str("value", node.str("text")),
-            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(vertical = 4.dp),
         )
 
@@ -123,7 +153,7 @@ private fun RenderNode(node: PageNode, event: (String, String?) -> Unit) {
             onClick = { event(node.str("id"), null) },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(node.str("label", "按钮"))
+            Text(node.str("label", Strings.manager.mod.pageDefaultButton))
         }
 
         "checkbox" -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -164,7 +194,7 @@ private fun RenderNode(node: PageNode, event: (String, String?) -> Unit) {
         )
 
         "collapsing" -> {
-            Text(node.str("label"), style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
+            Text(node.str("label"), style = MaterialTheme.typography.titleMedium)
             node.children.forEach { RenderNode(it, event) }
         }
     }
