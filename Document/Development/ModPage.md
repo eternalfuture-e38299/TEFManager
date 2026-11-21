@@ -1,46 +1,40 @@
-# Mod 自定义界面（原生页面）
+# Mod 自定义界面（稳定 ABI）
 
-Mod 可以在自己的数据目录里附带一个页面 JAR，TEFManager 会把它加载成界面并显示。
+Mod 可以在自己的目录里附带一个页面 JAR，TEFManager 加载后按节点树渲染成原生界面。
 
 ## 目录约定
 
 ```
-<mod 数据目录>/
-└── private/
-    └── <pkgId>/
-        └── page/
-            ├── android.jar    # Android
-            └── desktop.jar    # JVM / 桌面
+<mod 数据>/private/<pkgId>/page/
+├── android.jar
+└── desktop.jar
 ```
 
-页面存在时，Mod 卡片会出现“界面”按钮。
+## 稳定 ABI（不会随 Compose 版本变化）
 
-## 页面类约定
-
-页面 JAR 里的类需要满足（与旧 TEFModLoader 页面兼容）：
+Mod 只依赖 `modpage-api.jar`（compileOnly），**不依赖 Compose**：
 
 ```kotlin
-package my.mod.page
+class Page : ModPage {
+    override fun title(): String = "My Page"
 
-class Page {
-    var params: Map<String, *> = emptyMap()
+    override fun render(api: ModPageApi): PageNode = PageNode(
+        type = "column",
+        children = listOf(
+            PageNode("text", mapOf("value" to "Hello ${api.privatePath}")),
+            PageNode("button", mapOf("id" to "click", "label" to "点我")),
+        ),
+    )
 
-    val Content: @Composable () -> Unit = {
-        Text("private-path: ${params["private-path"]}")
-        Text("data-path: ${params["data-path"]}")
+    override fun onEvent(id: String, value: String?, api: ModPageApi) {
+        if (id == "click") api.setState("count", "1")
     }
 }
 ```
 
-- 类名写在 `Info.json` 的 `pageClass` 字段；缺省为 `default.PageClass`
-- 可选：提供 `fun initialize(api: Map<String, *>)`，加载时会调用
-- 宿主注入参数：
-  - `private-path` = `<mod 数据目录>/private/<pkgId>`
-  - `data-path` = `<mod 数据目录>`
+- `ModPageApi` 提供 `privatePath`、`dataPath`、`state(key)`、`setState(key,value)`、`openUrl`
+- `PageNode` 类型：`column / row / text / button / checkbox / slider / input / separator / spacer / progress / collapsing / image`
+- 状态保存在 `<private>/page-state.json`
+- 类名由 `Info.json` 的 `pageClass` 指定，默认 `default.PageClass`
 
-## 实现说明
-
-- Android 用 `DexClassLoader`，ClassLoader 以 App 的 ClassLoader 为父级，保证页面能看到 Compose
-- JVM 用 `URLClassLoader`
-- ClassLoader 会按页面 JAR 路径缓存，页面关闭时释放
-- 加载失败显示错误提示，不再导致宿主崩溃
+宿主使用自身的 Compose 版本渲染节点树，Mod 不需要重新编译。

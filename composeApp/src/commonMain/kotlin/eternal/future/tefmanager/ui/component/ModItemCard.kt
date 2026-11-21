@@ -45,6 +45,7 @@ import androidx.compose.material.icons.rounded.VideogameAsset
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -601,6 +602,15 @@ fun ModItemCard(
                             lineHeight = 20.sp,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
+                    }
+
+                    if (pagePath != null) {
+                        Button(
+                            onClick = onOpenPage,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        ) {
+                            Text("自定义界面")
+                        }
                     }
 
                     if (mod.settings.isNotEmpty() && settingsStore != null) {
