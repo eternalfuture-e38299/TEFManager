@@ -294,8 +294,13 @@ class Ctx:
             f"找不到 {kind} 版本 {spec!r}；可用: " + ", ".join(l for l, _ in entries))
 
     def kernel_version(self):
+        # 内核包里的 info.json 优先；GUI 版的旧工作目录只把版本记在 app_config.json
         j = read_json(self.kernel_dir / "info.json", {}) or {}
-        return j.get("version")
+        v = j.get("version")
+        if v:
+            return v
+        app = read_json(self.workdir / "app_config.json", {}) or {}
+        return app.get("kernelVersion")
 
     def kernel_lib(self):
         d = self.kernel_dir
@@ -661,11 +666,12 @@ def cmd_status(ctx, args):
     info(f"workdir      : {data['workdir']}")
     info(f"game_dir     : {data['game_dir'] or '(未配置)'}")
     info(f"arch         : {data['arch']}")
-    info(f"kernel       : {data['kernel_version'] or '(未安装)'} "
-         f"[选用 {data['kernel_label'] or '-'}；缓存 {len(data['kernel_cache'])} 个]")
+    kver_display = data['kernel_version'] or ('(未记录版本)' if data['kernel_lib'] else '(未安装)')
+    klabel = data['kernel_label'] or ('未记录标签' if data['kernel_lib'] else '-')
+    info(f"kernel       : {kver_display} [选用 {klabel}；缓存 {len(data['kernel_cache'])} 个]")
     info(f"kernel lib   : {data['kernel_lib'] or '(未找到)'}")
-    info(f"tefloader    : {data['loader_label'] or '(未安装)'} "
-         f"[缓存 {len(data['loader_cache'])} 个]")
+    llabel = data['loader_label'] or ('未记录标签' if data['tefloader_zip'] else '(未安装)')
+    info(f"tefloader    : {llabel} [缓存 {len(data['loader_cache'])} 个]")
     info(f"tefloader.zip: {'有' if data['tefloader_zip'] else '无'}")
     if data.get("game_dir"):
         info(f"tefloader bin: {'有' if data.get('tefloader_bin') else '未 patch'}")
@@ -1278,7 +1284,9 @@ def cmd_doctor(ctx, args):
               "tefloader 运行时已解压")
     except TeFmError as e:
         check(False, str(e))
-    check(ctx.kernel_version() is not None, f"内核已安装（{ctx.kernel_version() or '无'}）")
+    kver = ctx.kernel_version()
+    check(bool(kver or ctx.kernel_lib()),
+          f"内核已安装（{kver or ('未记录版本，但库文件存在' if ctx.kernel_lib() else '无')}）")
     check(ctx.kernel_lib() is not None, f"当前平台内核库（{os_name()}/{ctx.arch}）")
     check(ctx.tefloader_zip.is_file(), "tefloader.zip 已保存")
 
