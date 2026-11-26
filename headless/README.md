@@ -183,6 +183,20 @@ systemctl --user daemon-reload && systemctl --user enable --now tef-server
 sudo systemctl restart tef-server
 ```
 
+**启动报 `System.TypeInitializationException: System.Console` / `File must be smaller than 4K`**
+
+Mono 自带的 `ConsoleDriver` 会读取 `$TERM` 对应的 terminfo，文件超过 4K 就直接崩，
+还没进游戏就退出。Debian 上 `xterm` / `xterm-256color` 都已经超过 4K。
+
+`tefm run` 会自动检测并降级为 `TERM=linux`，并打印一句提示：
+
+```
+warning: $TERM=xterm-256color 的 terminfo 超过 4K，Mono 会崩溃；本次改用 TERM=linux（可用 TEFM_TERM 覆盖）
+```
+
+想自己指定可以用 `TEFM_TERM=screen-256color tefm run --server`，
+或者手动 `TERM=linux tefm run --server`。
+
 **安装附加包报“内核版本过低”，但我用的是自己编译的内核**
 
 裸内核库没有可靠的版本号，装出来标签是 `local-x86_64` 这类。`tefm` 对

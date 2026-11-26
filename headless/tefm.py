@@ -1168,6 +1168,56 @@ def cmd_config(ctx, args):
     raise TeFmError("用法: tefm config get|set|list ...")
 
 
+# Mono 自带的 ConsoleDriver 读取 $TERM 的 terminfo；文件超过 4K 会直接抛
+# "File must be smaller than 4K"，导致 tefloader 还没启动就崩。
+# Debian 上 xterm / xterm-256color 都已经超过 4K，需要降级到 linux。
+_TERMINFO_LIMIT = 4000
+_TERMINFO_DIRS = ("/lib/terminfo", "/usr/share/terminfo", "/etc/terminfo")
+_SAFE_TERMS = ("linux", "screen-256color", "vt100", "dumb")
+
+
+def _terminfo_size(term):
+    if not term:
+        return None
+    for base in _TERMINFO_DIRS + (str(Path.home() / ".terminfo"),):
+        for sub in (term[0], f"{ord(term[0]):x}"):
+            p = Path(base) / sub / term
+            if p.is_file():
+                return p.stat().st_size
+    return None
+
+
+def safe_terminal():
+    """返回适合 Mono 的 TERM；无法判断时返回 None（保持原样）。"""
+    override = os.environ.get("TEFM_TERM")
+    if override:
+        return override
+    cur = os.environ.get("TERM")
+    if not cur:
+        # 没有 TERM 时 Mono 会走无 terminfo 的兜底路径，不用动
+        return cur
+    size = _terminfo_size(cur)
+    if size is None or size <= _TERMINFO_LIMIT:
+        return cur
+    for cand in _SAFE_TERMS:
+        s = _terminfo_size(cand)
+        if s and s <= _TERMINFO_LIMIT:
+            return cand
+    return "linux"
+
+
+def apply_safe_terminal(verbose=True):
+    if is_windows():
+        return
+    cur = os.environ.get("TERM")
+    fixed = safe_terminal()
+    if fixed and fixed != cur:
+        os.environ["TERM"] = fixed
+        if verbose and cur:
+            warn(f"$TERM={cur} 的 terminfo 超过 4K，Mono 会崩溃；本次改用 TERM={fixed}"
+                 f"（可用 TEFM_TERM 覆盖）")
+
+
 def cmd_run(ctx, args):
     game = ctx.game_dir
     arch = ctx.arch
@@ -1210,6 +1260,7 @@ def cmd_run(ctx, args):
     sys.stderr.flush()
     # Linux 版官方启动脚本会设置这个，兼容大小写不一致的资源路径。
     os.environ.setdefault("MONO_IOMAP", "all")
+    apply_safe_terminal()
     os.chdir(str(game))
     try:
         os.execv(str(loader), cmd)
