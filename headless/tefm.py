@@ -1345,15 +1345,40 @@ def cmd_doctor(ctx, args):
     check(bool(kver or ctx.kernel_lib()),
           f"内核已安装（{kver or ('未记录版本，但库文件存在' if ctx.kernel_lib() else '无')}）")
     check(ctx.kernel_lib() is not None, f"当前平台内核库（{os_name()}/{ctx.arch}）")
-    check(ctx.tefloader_zip.is_file(), "tefloader.zip 已保存")
 
+    # tefloader.zip 只用于“解压/切换运行时”。只要游戏目录里的运行时已就绪，
+    # 缺这个 zip 也能正常启动，所以不算致命问题。
+    if ctx.tefloader_zip.is_file():
+        check(True, "tefloader.zip 已保存")
+    else:
+        runtime_ok = False
+        try:
+            game = ctx.game_dir
+            runtime_ok = (game / "tefloader.exe").is_file() or (game / "tefloader").is_file()
+        except TeFmError:
+            pass
+        if runtime_ok:
+            info("  ! tefloader.zip 未保存（运行时已就绪，启动不受影响）")
+            default_zip = DEFAULT_WORKDIR / "tefkernel" / "tefloader.zip"
+            if default_zip.is_file() and default_zip != ctx.tefloader_zip:
+                info(f"    可复用默认目录里的包：tefm -w {ctx.workdir} loader install "
+                     f"{default_zip}")
+        else:
+            check(False, "tefloader.zip 已保存（当前工作目录里没有，游戏目录也没有运行时）")
+
+    any_loader = False
     for t in ("modloader", "module", "plugin"):
         root = ctx.addon_root(t)
         if not root.is_dir():
             continue
         for pid in enabled_ids(root):
+            if t == "modloader":
+                any_loader = True
             p = root / "pkg" / f"{pid}.tefpkg"
             check(p.is_file(), f"{ADDON_TYPE_NAMES[t]} 已启用且文件存在: {pid}")
+
+    if not any_loader:
+        info("  ! 当前工作目录没有启用任何 ModLoader（服务端将以无 Mod 状态启动）")
 
     if not ok:
         eprint("\n有检查项未通过。")
