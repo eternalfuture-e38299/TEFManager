@@ -36,12 +36,42 @@ tefm -w /srv/tefm run --server --world /srv/terraria/Worlds/MyWorld.wld
 
 `-w / --workdir` 写在子命令前后都可以。
 
-默认工作目录是 `~/.local/share/tefmanager`，可用 `-w` 或环境变量 `TEFM_WORKDIR` 指定：
+### 工作目录与持久化
+
+所有配置（游戏路径、选用的内核/Loader、附加包）都保存在 **工作目录** 里的 `tefm.json`，
+默认是 `~/.local/share/tefmanager`。工作目录的解析顺序：
+
+1. 命令行 `-w / --workdir`
+2. 环境变量 `TEFM_WORKDIR`
+3. 当前目录下的 `tefm.json`（如果里面有 `game_dir`，即用当前目录作为工作目录）
+4. 默认 `~/.local/share/tefmanager`
+
+所以 **如果 init 时用了 `-w`，之后每条命令都要带同样的 `-w`**（或者 `export TEFM_WORKDIR=...`），
+否则会落到别的目录、看起来像“没初始化”。随时可以确认：
 
 ```bash
-tefm -w /srv/terfm status
-export TEFM_WORKDIR=/srv/terfm
+tefm where
+# workdir : /srv/tefm
+# config  : /srv/tefm/tefm.json (存在)
+# game_dir: /srv/terraria
 ```
+
+推荐两种用法：
+
+```bash
+# 用法 A：固定一个工作目录（推荐给服务器）
+tefm init -w /srv/tefm --game /srv/terraria --kernel ... --loader ... --patch
+export TEFM_WORKDIR=/srv/tefm        # 写进 ~/.bashrc 后就不用每条都带 -w
+tefm status
+
+# 用法 B：让当前目录自己就是工作目录（类似 git init）
+mkdir -p /srv/terraria-tef && cd /srv/terraria-tef
+tefm init --local --game /srv/terraria --kernel ... --loader ...
+tefm status                          # 之后在这个目录里直接跑即可
+```
+
+> 注意：`--local` 只是把**工作目录**放到当前目录，游戏目录由 `--game` 决定。
+> 附加包（Mod 等）保存在工作目录里，切换工作目录不会自动迁移它们。
 
 ---
 

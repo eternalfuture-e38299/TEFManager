@@ -127,6 +127,16 @@ def is_windows():
     return os_name() == "windows"
 
 
+def _is_complete_config(path):
+    if not Path(path).is_file():
+        return False
+    try:
+        j = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    except Exception:
+        return False
+    return bool(isinstance(j, dict) and j.get("game_dir"))
+
+
 def read_json(path, default=None):
     try:
         with open(path, "r", encoding="utf-8-sig") as f:
@@ -204,8 +214,27 @@ def zip_extract_prefix(zf, prefix, dest, strip_prefix=True):
 
 class Ctx:
     def __init__(self, workdir, as_json=False):
-        self.workdir = Path(workdir).expanduser().resolve()
+        if workdir:
+            p = Path(workdir).expanduser()
+        elif os.environ.get("TEFM_WORKDIR"):
+            p = Path(os.environ["TEFM_WORKDIR"]).expanduser()
+        else:
+            local = Path.cwd() / "tefm.json"
+            # 只有看起来是完整配置（含 game_dir）才把当前目录当成工作目录，
+            # 避免某次 `-w .` 只写了 kernel_label 的残留文件把路径“劫持”。
+            if _is_complete_config(local):
+                p = Path.cwd()
+            else:
+                if local.is_file():
+                    warn(f"{local} 不完整（缺少 game_dir），已忽略；"
+                         f"如需以当前目录为工作目录，运行 tefm init --local --game <目录>")
+                p = DEFAULT_WORKDIR
+        self.workdir = p.resolve()
         self.as_json = as_json
+        self.config_path = self.workdir / "tefm.json"
+
+    def set_workdir(self, path):
+        self.workdir = Path(path).expanduser().resolve()
         self.config_path = self.workdir / "tefm.json"
 
     # ---- 配置 ----
@@ -220,7 +249,11 @@ class Ctx:
     def game_dir(self):
         g = self.config.get("game_dir")
         if not g:
-            raise TeFmError("尚未配置游戏目录，先执行：tefm init --game /path/to/game")
+            raise TeFmError(
+                f"当前工作目录 {self.workdir} 还没有配置游戏目录（{self.config_path}）。\n"
+                f"先执行: tefm -w {self.workdir} init --game /path/to/game\n"
+                f"如果之前用了别的 -w，请对后续命令带上同样的参数，"
+                f"或 export TEFM_WORKDIR=<那个目录>")
         return Path(g)
 
     @property
@@ -549,6 +582,9 @@ def cmd_init(ctx, args):
         raise TeFmError(f"游戏目录不存在: {game}")
     arch = args.arch or ctx.config.get("arch") or norm_arch()
 
+    if args.local:
+        ctx.set_workdir(Path.cwd())
+
     # 在“指定目录”初始化工作路径：这里会创建 workdir / packages / tefkernel 骨架。
     ctx.ensure_workdir()
     ctx.kernel_dir.mkdir(parents=True, exist_ok=True)
@@ -597,7 +633,28 @@ def cmd_init(ctx, args):
         cmd_patch(ctx, argparse.Namespace(force=True))
 
     info("")
+    info(f"配置已保存: {ctx.config_path}")
+    if Path(ctx.workdir) != DEFAULT_WORKDIR.resolve() and not args.local:
+        info(f"后续命令需要带 -w {ctx.workdir}，或先 export TEFM_WORKDIR={ctx.workdir}")
+    if args.local:
+        info(f"以后在该目录直接运行 tefm 即可（会自动读取 ./tefm.json）")
     info("下一步: tefm status / tefm doctor / tefm run --server")
+    return 0
+
+
+def cmd_where(ctx, args):
+    data = {
+        "workdir": str(ctx.workdir),
+        "config": str(ctx.config_path),
+        "config_exists": ctx.config_path.is_file(),
+        "game_dir": ctx.config.get("game_dir"),
+    }
+    if ctx.as_json:
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+    else:
+        info(f"workdir : {data['workdir']}")
+        info(f"config  : {data['config']} ({'存在' if data['config_exists'] else '不存在'})")
+        info(f"game_dir: {data['game_dir'] or '(未配置)'}")
     return 0
 
 
@@ -1329,8 +1386,9 @@ def build_parser():
                "  tefm -w /srv/tefm run --server --world /srv/terraria/Worlds/MyWorld.wld",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("-w", "--workdir", default=os.environ.get("TEFM_WORKDIR") or str(DEFAULT_WORKDIR),
-                   help="工作目录（默认 %(default)s，可用 TEFM_WORKDIR 覆盖）")
+    p.add_argument("-w", "--workdir", default=None,
+                   help=f"工作目录。省略时依次尝试 $TEFM_WORKDIR、当前目录的 tefm.json、"
+                        f"默认 {DEFAULT_WORKDIR}")
     p.add_argument("--json", action="store_true", help="以 JSON 输出（便于脚本处理）")
     sub = p.add_subparsers(dest="command", required=True)
 
@@ -1340,7 +1398,12 @@ def build_parser():
     sp.add_argument("--kernel", help="内核 zip 路径，或缓存里的版本标签（如 1.4.4 / latest）")
     sp.add_argument("--loader", help="tefloader zip 路径，或缓存里的标签（如 1.4.0 / latest）")
     sp.add_argument("--patch", action="store_true", help="初始化后立即生成 tefloader.bin.<arch>")
+    sp.add_argument("--local", action="store_true",
+                    help="把当前目录作为工作目录（写 ./tefm.json，之后在该目录直接运行 tefm 即可）")
     sp.set_defaults(func=cmd_init)
+
+    sp = sub.add_parser("where", parents=[common], help="显示当前使用的工作目录与配置文件")
+    sp.set_defaults(func=cmd_where)
 
     sp = sub.add_parser("status", parents=[common], help="查看内核 / 附加包 / 启用状态")
     sp.set_defaults(func=cmd_status)
