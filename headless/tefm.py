@@ -245,15 +245,28 @@ class Ctx:
         d = self.cache_dir(kind)
         if not d.is_dir():
             return []
-        out = [(p.stem, p) for p in d.glob("*.zip")]
+        suffixes = {".zip"}
+        if kind == "tefkernel":
+            # 允许缓存裸内核库，方便直接装构建产物
+            suffixes |= {".so", ".dll", ".dylib"}
+        out = [(p.stem, p) for p in d.iterdir()
+               if p.is_file() and p.suffix.lower() in suffixes]
         if kind == "tefkernel":
             out.sort(key=lambda it: version_key(it[0]))
         else:
             out.sort(key=lambda it: it[1].stat().st_mtime)
         return out
 
-    def cache_path(self, kind, label):
-        return self.cache_dir(kind) / f"{label}.zip"
+    def cache_path(self, kind, label, ext=".zip"):
+        return self.cache_dir(kind) / f"{label}{ext}"
+
+    def ensure_workdir(self):
+        try:
+            self.workdir.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            raise TeFmError(
+                f"没有权限创建 {self.workdir}。若放在 /srv 等系统目录，请用 sudo，"
+                f"或改用有权限的目录：-w ~/tefm")
 
     def active_label(self, kind):
         key = "kernel_label" if kind == "tefkernel" else "loader_label"
@@ -532,7 +545,7 @@ def cmd_init(ctx, args):
     arch = args.arch or ctx.config.get("arch") or norm_arch()
 
     # 在“指定目录”初始化工作路径：这里会创建 workdir / packages / tefkernel 骨架。
-    ctx.workdir.mkdir(parents=True, exist_ok=True)
+    ctx.ensure_workdir()
     ctx.kernel_dir.mkdir(parents=True, exist_ok=True)
     ctx.packages_dir.mkdir(parents=True, exist_ok=True)
 
@@ -559,10 +572,10 @@ def cmd_init(ctx, args):
     # 顺带选定内核 / TEFLoader（路径或缓存里的版本标签都可以）
     if args.kernel:
         if Path(args.kernel).expanduser().is_file():
-            r = install_kernel_zip(ctx, args.kernel)
+            r = install_kernel_package(ctx, args.kernel)
         else:
             path, label = ctx.resolve_cached("tefkernel", args.kernel)
-            r = install_kernel_zip(ctx, path, label)
+            r = install_kernel_package(ctx, path, label)
         info(f"内核已选定: {r['label']}")
         if not ctx.kernel_lib():
             warn(f"当前平台 ({os_name()}/{arch}) 没有匹配的内核库")
@@ -696,6 +709,19 @@ def _derive_label(zip_path, prefix_names):
     return f"{orig}-{h}"
 
 
+LIB_SUFFIXES = (".so", ".dll", ".dylib")
+
+
+def _kernel_arch_from_name(name):
+    m = re.search(r"\.(linux|windows|macos|android|ios)\."
+                  r"(x86_64|x86|arm64|arm64-v8a|armeabi-v7a|arm)\.", name)
+    if not m:
+        return None, None
+    os_part = m.group(1)
+    arch = {"arm64-v8a": "arm64", "armeabi-v7a": "arm"}.get(m.group(2), m.group(2))
+    return os_part, arch
+
+
 def install_kernel_zip(ctx, zip_path, label=None):
     zip_path = Path(zip_path).expanduser().resolve()
     if not zip_path.is_file():
@@ -704,13 +730,11 @@ def install_kernel_zip(ctx, zip_path, label=None):
     ver = meta.get("version") or meta.get("versionCode") or _derive_label(zip_path, ["tefkernel"])
     label = label or str(ver)
 
-    # 1) 缓存原始 zip，便于以后切换
     cache = ctx.cache_path("tefkernel", label)
     cache.parent.mkdir(parents=True, exist_ok=True)
     if cache.resolve() != zip_path:
         shutil.copy2(zip_path, cache)
 
-    # 2) 解出内核文件到 tefkernel/
     ctx.kernel_dir.mkdir(parents=True, exist_ok=True)
     picked = 0
     with zipfile.ZipFile(cache) as zf:
@@ -730,6 +754,62 @@ def install_kernel_zip(ctx, zip_path, label=None):
     ctx.set_active_label("tefkernel", label)
     return {"label": label, "version": meta.get("version"), "version_code": meta.get("versionCode"),
             "cache": str(cache)}
+
+
+def install_kernel_lib(ctx, lib_path, label=None):
+    """直接安装一个裸内核动态库（构建产物），不要求 zip。"""
+    lib_path = Path(lib_path).expanduser().resolve()
+    if not lib_path.is_file():
+        raise TeFmError(f"文件不存在: {lib_path}")
+    if lib_path.suffix.lower() not in LIB_SUFFIXES:
+        raise TeFmError(f"不认识的内核文件: {lib_path.name}（支持 .zip / .so / .dll / .dylib）")
+
+    # 版本：优先同目录 info.json / --label，否则用 local-<arch> 作为标签
+    meta = read_json(lib_path.parent / "info.json", {}) or {}
+    lib_os, lib_arch = _kernel_arch_from_name(lib_path.name)
+    label = label or meta.get("version") or (f"local-{lib_arch}" if lib_arch else "local")
+
+    cache = ctx.cache_path("tefkernel", label, lib_path.suffix.lower())
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    if cache.resolve() != lib_path:
+        shutil.copy2(lib_path, cache)
+
+    # 文件名里能解析出平台/架构时，顺手清掉旧的同平台库，避免 kernel_lib() 选到旧文件
+    if lib_os and lib_arch:
+        if lib_os != os_name() or lib_arch != ctx.arch:
+            warn(f"这个库是 {lib_os}/{lib_arch}，当前机器是 {os_name()}/{ctx.arch}，"
+                 f"启动时可能找不到匹配的内核")
+        ctx.kernel_dir.mkdir(parents=True, exist_ok=True)
+        for p in ctx.kernel_dir.iterdir():
+            if p.is_file() and p.suffix.lower() in LIB_SUFFIXES and "tefkernel" in p.name.lower():
+                p_os, p_arch = _kernel_arch_from_name(p.name)
+                if p_os == lib_os and p_arch == lib_arch:
+                    p.unlink(missing_ok=True)
+
+    ctx.kernel_dir.mkdir(parents=True, exist_ok=True)
+    dst = ctx.kernel_dir / lib_path.name
+    shutil.copy2(cache, dst)
+
+    # 维护 info.json，保证 status / version 显示的是当前选中的内核
+    info_path = ctx.kernel_dir / "info.json"
+    existing = read_json(info_path, {}) or {}
+    existing["version"] = meta.get("version") or label
+    existing.setdefault("versionCode", meta.get("versionCode", 0))
+    existing["source"] = lib_path.name
+    write_json(info_path, existing)
+
+    ctx.set_active_label("tefkernel", label)
+    return {"label": label, "version": meta.get("version") or label,
+            "version_code": meta.get("versionCode"), "cache": str(cache),
+            "lib": dst.name, "arch": lib_arch, "os": lib_os}
+
+
+def install_kernel_package(ctx, path, label=None):
+    """zip 或裸库都接受。"""
+    p = Path(path).expanduser()
+    if zipfile.is_zipfile(p):
+        return install_kernel_zip(ctx, p, label)
+    return install_kernel_lib(ctx, p, label)
 
 
 def install_loader_zip(ctx, zip_path, label=None):
@@ -768,7 +848,7 @@ def cmd_kernel(ctx, args):
     sub = args.kernel_cmd
 
     if sub == "install":
-        r = install_kernel_zip(ctx, args.zip, args.label)
+        r = install_kernel_package(ctx, args.zip, args.label)
         if ctx.as_json:
             print(json.dumps(r, ensure_ascii=False))
         else:
@@ -795,7 +875,7 @@ def cmd_kernel(ctx, args):
 
     if sub == "use":
         path, label = ctx.resolve_cached("tefkernel", args.label)
-        r = install_kernel_zip(ctx, path, label)
+        r = install_kernel_package(ctx, path, label)
         info(f"已切换到内核 {r['label']}")
         lib = ctx.kernel_lib()
         if not lib:
@@ -1262,7 +1342,7 @@ def build_parser():
 
     sp = sub.add_parser("kernel", parents=[common], help="内核管理（多版本缓存 / 切换）")
     ksub = sp.add_subparsers(dest="kernel_cmd", required=True)
-    k = ksub.add_parser("install", help="安装 tefkernel.zip 并加入缓存")
+    k = ksub.add_parser("install", help="安装 tefkernel.zip 或裸内核库（.so/.dll/.dylib）并加入缓存")
     k.add_argument("zip")
     k.add_argument("--label", help="自定义版本标签（默认取包内 info.json 的 version）")
     k.set_defaults(func=cmd_kernel)
@@ -1351,6 +1431,11 @@ def main(argv=None):
         return args.func(ctx, args) or 0
     except TeFmError as e:
         die(str(e))
+    except PermissionError as e:
+        die(f"没有权限写入 {e.filename or '目标路径'}。\n"
+            f"若工作目录在 /srv 等系统路径，请用 sudo，或换到有权限的目录：-w ~/tefm")
+    except OSError as e:
+        die(f"文件操作失败: {e}")
     except KeyboardInterrupt:
         return 130
 

@@ -52,7 +52,7 @@ export TEFM_WORKDIR=/srv/terfm
 | `tefm init --game DIR [--arch ARCH] [--kernel ZIP\|版本] [--loader ZIP\|标签] [--patch]` | 在 `-w` 指定目录初始化工作路径，可同时选定内核与 TEFLoader（也支持从缓存里按版本标签选） |
 | `tefm status [--json]` | 内核版本、tefloader 状态、已安装/已启用的附加包 |
 | `tefm doctor` | 逐项检查部署完整性（路径、可执行位、启用项对应的包文件） |
-| `tefm kernel install ZIP [--label L]` | 安装 `tefkernel.zip` 并加入版本缓存 |
+| `tefm kernel install ZIP\|LIB [--label L]` | 安装 `tefkernel.zip`，或直接安装裸内核库（`.so` / `.dll` / `.dylib`，构建产物即可）并加入版本缓存 |
 | `tefm kernel list` / `use LABEL\|latest` | 列出 / 切换缓存中的内核版本 |
 | `tefm kernel version` | 显示当前内核版本 |
 | `tefm loader install ZIP [--label L]` | 保存 `tefloader.zip` 并加入缓存，同时解压运行时（Linux/macOS 用 `net472/`，Windows x86 用 `net452/`） |
@@ -151,6 +151,29 @@ systemctl --user daemon-reload && systemctl --user enable --now tef-server
 
 ```bash
 sudo systemctl restart tef-server
+```
+
+**我想直接装编译出来的内核 `.so`，没有 zip**
+
+可以，直接传库文件即可（不需要 info.json）：
+
+```bash
+tefm -w /srv/tefm kernel install build/libtefkernel.linux.x86_64.so
+# 默认标签是 local-x86_64；也可以：
+tefm -w /srv/tefm kernel install build/libtefkernel.linux.x86_64.so --label 1.4.4
+```
+
+工具会按文件名里的平台/架构清理旧库；如果你装的是 x86 库但机器是 x86_64，
+会打印警告（启动时会找不到匹配内核）。
+
+**报 `PermissionError: /srv/tefm`**
+
+`/srv` 一般属于 root。两种做法：
+
+```bash
+sudo tefm -w /srv/tefm init ...      # 系统级目录
+# 或者用用户目录
+tefm -w ~/tefm init ...
 ```
 
 **tefloader 缓存标签是 `tefloader-<hash>`，看着不直观**
