@@ -20,23 +20,21 @@
 chmod +x tefm.py
 sudo ln -s "$PWD/tefm.py" /usr/local/bin/tefm
 
-# 2. 配置游戏目录（官方 Linux 专用服目录，或 GOG/Steam 游戏目录）
-tefm init --game /srv/terraria
+# 2. 一条命令：在指定目录初始化工作路径，并选定内核 / TEFLoader / 打补丁
+tefm init -w /srv/tefm --game /srv/terraria \
+     --kernel ~/uploads/tefkernel-1.4.4.zip \
+     --loader ~/uploads/tefloader.zip \
+     --patch
 
-# 3. 安装内核与 tefloader 运行时
-tefm kernel install ~/uploads/tefkernel.zip
-tefm loader  install ~/uploads/tefloader.zip
+# 3. 安装附加包（自动读 Manifest.json 判断类型并启用）
+tefm -w /srv/tefm addon install ~/uploads/LuaLoader.zip ~/uploads/VeinMiner.zip
 
-# 4. 生成补丁后的启动器（TerrariaServer.bin.* -> tefloader.bin.*）并解压运行时
-tefm patch
-
-# 5. 安装附加包（自动读 Manifest.json 判断类型并启用）
-tefm addon install ~/uploads/LuaLoader.zip ~/uploads/VeinMiner.zip
-
-# 6. 检查 / 启动
-tefm doctor
-tefm run --server --world /srv/terraria/Worlds/MyWorld.wld
+# 4. 检查 / 启动
+tefm -w /srv/tefm doctor
+tefm -w /srv/tefm run --server --world /srv/terraria/Worlds/MyWorld.wld
 ```
+
+`-w / --workdir` 写在子命令前后都可以。
 
 默认工作目录是 `~/.local/share/tefmanager`，可用 `-w` 或环境变量 `TEFM_WORKDIR` 指定：
 
@@ -51,12 +49,14 @@ export TEFM_WORKDIR=/srv/terfm
 
 | 命令 | 说明 |
 | --- | --- |
-| `tefm init --game DIR [--arch ARCH]` | 记录游戏目录与架构（自动识别 `Terraria.bin.*` / `TerrariaServer.bin.*`） |
+| `tefm init --game DIR [--arch ARCH] [--kernel ZIP\|版本] [--loader ZIP\|标签] [--patch]` | 在 `-w` 指定目录初始化工作路径，可同时选定内核与 TEFLoader（也支持从缓存里按版本标签选） |
 | `tefm status [--json]` | 内核版本、tefloader 状态、已安装/已启用的附加包 |
 | `tefm doctor` | 逐项检查部署完整性（路径、可执行位、启用项对应的包文件） |
-| `tefm kernel install ZIP` | 安装 `tefkernel.zip`（只取 `info.json` 与 `libtefkernel.*`） |
-| `tefm kernel version` | 显示已安装内核版本 |
-| `tefm loader install ZIP` | 保存 `tefloader.zip` 并把对应运行时解压到游戏目录（Linux/macOS 用 `net472/`，Windows x86 用 `net452/`） |
+| `tefm kernel install ZIP [--label L]` | 安装 `tefkernel.zip` 并加入版本缓存 |
+| `tefm kernel list` / `use LABEL\|latest` | 列出 / 切换缓存中的内核版本 |
+| `tefm kernel version` | 显示当前内核版本 |
+| `tefm loader install ZIP [--label L]` | 保存 `tefloader.zip` 并加入缓存，同时解压运行时（Linux/macOS 用 `net472/`，Windows x86 用 `net452/`） |
+| `tefm loader list` / `use LABEL\|latest` | 列出 / 切换缓存中的 tefloader |
 | `tefm loader runtime` | 重新解压 tefloader 运行时（例如更新 zip 之后） |
 | `tefm patch [--force]` | 复制原版启动器为 `tefloader.bin.<arch>`，加可执行位 |
 | `tefm addon install ZIP... [--no-enable]` | 安装 ModLoader / Module / Plugin / Mod，默认自动启用 |
@@ -75,7 +75,10 @@ export TEFM_WORKDIR=/srv/terfm
 
 ```
 <workdir>/
-  tefm.json                       本工具记录的游戏目录/架构（GUI 版不读）
+  tefm.json                       本工具记录的游戏目录/架构/当前选用的内核与 tefloader
+  packages/
+    tefkernel/<版本>.zip          内核包缓存（可保留多个版本，随时 use 切换）
+    tefloader/<标签>.zip          tefloader 包缓存
   tefkernel/
     info.json                     内核版本
     libtefkernel.<os>.<arch>.*    当前平台内核库
@@ -148,6 +151,15 @@ systemctl --user daemon-reload && systemctl --user enable --now tef-server
 
 ```bash
 sudo systemctl restart tef-server
+```
+
+**tefloader 缓存标签是 `tefloader-<hash>`，看着不直观**
+
+`tefloader.zip` 里没有版本元数据。安装时可以自己指定标签：
+
+```bash
+tefm -w /srv/tefm loader install tefloader-1.4.0.zip --label 1.4.0
+tefm -w /srv/tefm loader use 1.4.0
 ```
 
 **想换工作目录 / 多开几个服**
