@@ -218,6 +218,31 @@ java -version
 
 ---
 
+## 🖥️ 无头模式（服务器 / SSH）
+
+如果只需要在服务器上开 TEF 专用服、通过 SSH 管理 Mod，不需要图形界面，
+可以使用仓库里的 `headless/tefm.py`（纯 Python 3 标准库，零依赖）：
+
+```bash
+chmod +x headless/tefm.py && sudo ln -s "$PWD/headless/tefm.py" /usr/local/bin/tefm
+
+tefm init --game /srv/terraria
+tefm kernel install tefkernel.zip
+tefm loader install tefloader.zip
+tefm patch
+tefm addon install LuaLoader.zip VeinMiner.zip
+tefm doctor
+tefm run --server --world /srv/terraria/Worlds/MyWorld.wld
+```
+
+它读写与桌面版完全相同的磁盘格式（`modloader/pkg`、`mods/<loader>/mod|private`、
+`enables.txt`、`tefkernel/` 等），同一个工作目录可以在两边交替使用。
+还支持 `tefm config get/set`、`tefm logs -f` 和 `tefm service`（生成 systemd 单元）。
+
+详见 **[headless/README.md](headless/README.md)**。
+
+---
+
 ## 包类型对比
 
 | 类型            | 目录位置                    | 文件后缀      | 管理者                | 用途       |
