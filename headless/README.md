@@ -89,7 +89,7 @@ tefm status                          # 之后在这个目录里直接跑即可
 | `tefm loader list` / `use LABEL\|latest` | 列出 / 切换缓存中的 tefloader |
 | `tefm loader runtime` | 重新解压 tefloader 运行时（例如更新 zip 之后） |
 | `tefm patch [--force]` | 复制原版启动器为 `tefloader.bin.<arch>`，加可执行位 |
-| `tefm addon install ZIP... [--no-enable]` | 安装 ModLoader / Module / Plugin / Mod，默认自动启用 |
+| `tefm addon install ZIP... [--no-enable] [--force]` | 安装 ModLoader / Module / Plugin / Mod，默认自动启用；`--force` 跳过内核最低版本检查 |
 | `tefm addon list` | 同 `status` |
 | `tefm addon enable/disable/remove ID` | 启用 / 禁用 / 删除附加包 |
 | `tefm config list/get/set ID [KEY] [VALUE]` | 读写 `<private>/config.json` 的 `values` |
@@ -181,6 +181,16 @@ systemctl --user daemon-reload && systemctl --user enable --now tef-server
 
 ```bash
 sudo systemctl restart tef-server
+```
+
+**安装附加包报“内核版本过低”，但我用的是自己编译的内核**
+
+裸内核库没有可靠的版本号，装出来标签是 `local-x86_64` 这类。`tefm` 对
+`local*` 一律跳过最低版本检查，只打印提示。如果还是被拦（例如内核版本确实是旧版
+`1.0.0`），确认无误后加 `--force`：
+
+```bash
+tefm -w /srv/tefm addon install --force LuaLoader.zip
 ```
 
 **我想直接装编译出来的内核 `.so`，没有 zip**

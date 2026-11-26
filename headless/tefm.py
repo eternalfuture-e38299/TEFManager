@@ -428,7 +428,7 @@ def set_enabled(root, pkg_id, value):
 # 安装逻辑
 # ---------------------------------------------------------------------------
 
-def check_kernel_min(ctx, manifest):
+def check_kernel_min(ctx, manifest, force=False):
     req = None
     tk = manifest.get("tefkernel")
     if isinstance(tk, dict):
@@ -436,15 +436,23 @@ def check_kernel_min(ctx, manifest):
     req = req or manifest.get("tefkernelMinVersion")
     if not req:
         return
+    if force:
+        warn(f"已跳过内核版本检查（需要 >= {req}）")
+        return
     cur = ctx.kernel_version()
     if cur is None:
         warn(f"未检测到已安装内核版本，跳过最低版本检查（需要 >= {req}）")
         return
+    # 裸内核库（local-x86_64 等）没有可靠的版本号，一律放行
+    if str(cur).lower().startswith("local"):
+        warn(f"内核版本为 {cur!r}（本地构建），跳过最低版本检查（需要 >= {req}）")
+        return
     if version_lt(cur, req):
-        raise TeFmError(f"内核版本过低：当前 {cur}，要求 >= {req}")
+        raise TeFmError(
+            f"内核版本过低：当前 {cur}，要求 >= {req}（确认无误可加 --force 强制安装）")
 
 
-def install_zip(ctx, zip_path, auto_enable=True, _depth=0, _seen=None):
+def install_zip(ctx, zip_path, auto_enable=True, _depth=0, _seen=None, force=False):
     """安装一个附加包 zip（Manifest.json 在根目录）。返回安装结果列表。"""
     zip_path = Path(zip_path)
     if not zip_path.is_file():
@@ -467,7 +475,7 @@ def install_zip(ctx, zip_path, auto_enable=True, _depth=0, _seen=None):
         if t not in TYPE_ROOTS:
             raise TeFmError(f"未知附加包类型: {manifest.get('type')!r}")
 
-        check_kernel_min(ctx, manifest)
+        check_kernel_min(ctx, manifest, force=force)
 
         results = []
 
@@ -477,12 +485,12 @@ def install_zip(ctx, zip_path, auto_enable=True, _depth=0, _seen=None):
             f = ml_dep.get("file")
             if not f:
                 raise TeFmError("inline modloader 缺少 file 字段")
-            results += _install_inline_zip(ctx, zf, f, auto_enable, _depth, _seen)
+            results += _install_inline_zip(ctx, zf, f, auto_enable, _depth, _seen, force)
 
         pl_dep = manifest.get("plugins")
         if isinstance(pl_dep, dict) and str(pl_dep.get("type", "")).lower() == "inline":
             for f in pl_dep.get("files") or []:
-                results += _install_inline_zip(ctx, zf, f, auto_enable, _depth, _seen)
+                results += _install_inline_zip(ctx, zf, f, auto_enable, _depth, _seen, force)
 
         # ---- 读 Info.json ----
         if "Info.json" not in names:
@@ -552,7 +560,7 @@ def install_zip(ctx, zip_path, auto_enable=True, _depth=0, _seen=None):
         return results
 
 
-def _install_inline_zip(ctx, outer_zf, entry, auto_enable, depth, seen):
+def _install_inline_zip(ctx, outer_zf, entry, auto_enable, depth, seen, force=False):
     if entry not in outer_zf.namelist():
         raise TeFmError(f"inline 依赖缺少内嵌文件: {entry}")
     data = outer_zf.read(entry)
@@ -564,7 +572,7 @@ def _install_inline_zip(ctx, outer_zf, entry, auto_enable, depth, seen):
         tmp.write(data)
         tmp_path = tmp.name
     try:
-        return install_zip(ctx, tmp_path, auto_enable, depth + 1, seen)
+        return install_zip(ctx, tmp_path, auto_enable, depth + 1, seen, force)
     finally:
         try:
             os.unlink(tmp_path)
@@ -1069,7 +1077,7 @@ def cmd_addon(ctx, args):
     if sub == "install":
         results = []
         for z in args.zips:
-            results += install_zip(ctx, z, auto_enable=not args.no_enable)
+            results += install_zip(ctx, z, auto_enable=not args.no_enable, force=args.force)
         if ctx.as_json:
             print(json.dumps(results, ensure_ascii=False, indent=2))
         else:
@@ -1473,6 +1481,8 @@ def build_parser():
     a = asub.add_parser("install", help="从 zip 安装")
     a.add_argument("zips", nargs="+")
     a.add_argument("--no-enable", action="store_true", help="安装后不自动启用")
+    a.add_argument("--force", action="store_true",
+                   help="跳过内核最低版本等兼容性检查（强制安装）")
     a.set_defaults(func=cmd_addon)
     a = asub.add_parser("list", help="列出附加包（同 status）")
     a.set_defaults(func=cmd_addon)
