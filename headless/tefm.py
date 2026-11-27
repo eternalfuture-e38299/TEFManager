@@ -127,6 +127,16 @@ def is_windows():
     return os_name() == "windows"
 
 
+def _is_complete_config(path):
+    if not Path(path).is_file():
+        return False
+    try:
+        j = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    except Exception:
+        return False
+    return bool(isinstance(j, dict) and j.get("game_dir"))
+
+
 def read_json(path, default=None):
     try:
         with open(path, "r", encoding="utf-8-sig") as f:
@@ -204,8 +214,27 @@ def zip_extract_prefix(zf, prefix, dest, strip_prefix=True):
 
 class Ctx:
     def __init__(self, workdir, as_json=False):
-        self.workdir = Path(workdir).expanduser().resolve()
+        if workdir:
+            p = Path(workdir).expanduser()
+        elif os.environ.get("TEFM_WORKDIR"):
+            p = Path(os.environ["TEFM_WORKDIR"]).expanduser()
+        else:
+            local = Path.cwd() / "tefm.json"
+            # 只有看起来是完整配置（含 game_dir）才把当前目录当成工作目录，
+            # 避免某次 `-w .` 只写了 kernel_label 的残留文件把路径“劫持”。
+            if _is_complete_config(local):
+                p = Path.cwd()
+            else:
+                if local.is_file():
+                    warn(f"{local} 不完整（缺少 game_dir），已忽略；"
+                         f"如需以当前目录为工作目录，运行 tefm init --local --game <目录>")
+                p = DEFAULT_WORKDIR
+        self.workdir = p.resolve()
         self.as_json = as_json
+        self.config_path = self.workdir / "tefm.json"
+
+    def set_workdir(self, path):
+        self.workdir = Path(path).expanduser().resolve()
         self.config_path = self.workdir / "tefm.json"
 
     # ---- 配置 ----
@@ -220,7 +249,11 @@ class Ctx:
     def game_dir(self):
         g = self.config.get("game_dir")
         if not g:
-            raise TeFmError("尚未配置游戏目录，先执行：tefm init --game /path/to/game")
+            raise TeFmError(
+                f"当前工作目录 {self.workdir} 还没有配置游戏目录（{self.config_path}）。\n"
+                f"先执行: tefm -w {self.workdir} init --game /path/to/game\n"
+                f"如果之前用了别的 -w，请对后续命令带上同样的参数，"
+                f"或 export TEFM_WORKDIR=<那个目录>")
         return Path(g)
 
     @property
@@ -232,9 +265,75 @@ class Ctx:
     def kernel_dir(self):
         return self.workdir / "tefkernel"
 
+    # ---- 包缓存（既可保留多个版本的 zip，也用于切换） ----
+    @property
+    def packages_dir(self):
+        return self.workdir / "packages"
+
+    def cache_dir(self, kind):
+        return self.packages_dir / kind
+
+    def cache_entries(self, kind):
+        """返回 [(label, path)]，kind 为 tefkernel / tefloader。"""
+        d = self.cache_dir(kind)
+        if not d.is_dir():
+            return []
+        suffixes = {".zip"}
+        if kind == "tefkernel":
+            # 允许缓存裸内核库，方便直接装构建产物
+            suffixes |= {".so", ".dll", ".dylib"}
+        out = [(p.stem, p) for p in d.iterdir()
+               if p.is_file() and p.suffix.lower() in suffixes]
+        if kind == "tefkernel":
+            out.sort(key=lambda it: version_key(it[0]))
+        else:
+            out.sort(key=lambda it: it[1].stat().st_mtime)
+        return out
+
+    def cache_path(self, kind, label, ext=".zip"):
+        return self.cache_dir(kind) / f"{label}{ext}"
+
+    def ensure_workdir(self):
+        try:
+            self.workdir.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            raise TeFmError(
+                f"没有权限创建 {self.workdir}。若放在 /srv 等系统目录，请用 sudo，"
+                f"或改用有权限的目录：-w ~/tefm")
+
+    def active_label(self, kind):
+        key = "kernel_label" if kind == "tefkernel" else "loader_label"
+        return self.config.get(key)
+
+    def set_active_label(self, kind, label):
+        cfg = self.config
+        cfg["kernel_label" if kind == "tefkernel" else "loader_label"] = label
+        self.save_config(cfg)
+
+    def resolve_cached(self, kind, spec):
+        """spec 支持 latest / 版本号 / 标签 / zip 路径。"""
+        p = Path(spec).expanduser()
+        if p.is_file():
+            return p, None
+        entries = self.cache_entries(kind)
+        if not entries:
+            raise TeFmError(f"没有缓存的 {kind} 包，先用 install 添加一个")
+        if spec in ("latest", "newest"):
+            return entries[-1][1], entries[-1][0]
+        for label, path in entries:
+            if label == spec:
+                return path, label
+        raise TeFmError(
+            f"找不到 {kind} 版本 {spec!r}；可用: " + ", ".join(l for l, _ in entries))
+
     def kernel_version(self):
+        # 内核包里的 info.json 优先；GUI 版的旧工作目录只把版本记在 app_config.json
         j = read_json(self.kernel_dir / "info.json", {}) or {}
-        return j.get("version")
+        v = j.get("version")
+        if v:
+            return v
+        app = read_json(self.workdir / "app_config.json", {}) or {}
+        return app.get("kernelVersion")
 
     def kernel_lib(self):
         d = self.kernel_dir
@@ -329,7 +428,7 @@ def set_enabled(root, pkg_id, value):
 # 安装逻辑
 # ---------------------------------------------------------------------------
 
-def check_kernel_min(ctx, manifest):
+def check_kernel_min(ctx, manifest, force=False):
     req = None
     tk = manifest.get("tefkernel")
     if isinstance(tk, dict):
@@ -337,15 +436,23 @@ def check_kernel_min(ctx, manifest):
     req = req or manifest.get("tefkernelMinVersion")
     if not req:
         return
+    if force:
+        warn(f"已跳过内核版本检查（需要 >= {req}）")
+        return
     cur = ctx.kernel_version()
     if cur is None:
         warn(f"未检测到已安装内核版本，跳过最低版本检查（需要 >= {req}）")
         return
+    # 裸内核库（local-x86_64 等）没有可靠的版本号，一律放行
+    if str(cur).lower().startswith("local"):
+        warn(f"内核版本为 {cur!r}（本地构建），跳过最低版本检查（需要 >= {req}）")
+        return
     if version_lt(cur, req):
-        raise TeFmError(f"内核版本过低：当前 {cur}，要求 >= {req}")
+        raise TeFmError(
+            f"内核版本过低：当前 {cur}，要求 >= {req}（确认无误可加 --force 强制安装）")
 
 
-def install_zip(ctx, zip_path, auto_enable=True, _depth=0, _seen=None):
+def install_zip(ctx, zip_path, auto_enable=True, _depth=0, _seen=None, force=False):
     """安装一个附加包 zip（Manifest.json 在根目录）。返回安装结果列表。"""
     zip_path = Path(zip_path)
     if not zip_path.is_file():
@@ -368,7 +475,7 @@ def install_zip(ctx, zip_path, auto_enable=True, _depth=0, _seen=None):
         if t not in TYPE_ROOTS:
             raise TeFmError(f"未知附加包类型: {manifest.get('type')!r}")
 
-        check_kernel_min(ctx, manifest)
+        check_kernel_min(ctx, manifest, force=force)
 
         results = []
 
@@ -378,12 +485,12 @@ def install_zip(ctx, zip_path, auto_enable=True, _depth=0, _seen=None):
             f = ml_dep.get("file")
             if not f:
                 raise TeFmError("inline modloader 缺少 file 字段")
-            results += _install_inline_zip(ctx, zf, f, auto_enable, _depth, _seen)
+            results += _install_inline_zip(ctx, zf, f, auto_enable, _depth, _seen, force)
 
         pl_dep = manifest.get("plugins")
         if isinstance(pl_dep, dict) and str(pl_dep.get("type", "")).lower() == "inline":
             for f in pl_dep.get("files") or []:
-                results += _install_inline_zip(ctx, zf, f, auto_enable, _depth, _seen)
+                results += _install_inline_zip(ctx, zf, f, auto_enable, _depth, _seen, force)
 
         # ---- 读 Info.json ----
         if "Info.json" not in names:
@@ -453,7 +560,7 @@ def install_zip(ctx, zip_path, auto_enable=True, _depth=0, _seen=None):
         return results
 
 
-def _install_inline_zip(ctx, outer_zf, entry, auto_enable, depth, seen):
+def _install_inline_zip(ctx, outer_zf, entry, auto_enable, depth, seen, force=False):
     if entry not in outer_zf.namelist():
         raise TeFmError(f"inline 依赖缺少内嵌文件: {entry}")
     data = outer_zf.read(entry)
@@ -465,7 +572,7 @@ def _install_inline_zip(ctx, outer_zf, entry, auto_enable, depth, seen):
         tmp.write(data)
         tmp_path = tmp.name
     try:
-        return install_zip(ctx, tmp_path, auto_enable, depth + 1, seen)
+        return install_zip(ctx, tmp_path, auto_enable, depth + 1, seen, force)
     finally:
         try:
             os.unlink(tmp_path)
@@ -483,6 +590,14 @@ def cmd_init(ctx, args):
         raise TeFmError(f"游戏目录不存在: {game}")
     arch = args.arch or ctx.config.get("arch") or norm_arch()
 
+    if args.local:
+        ctx.set_workdir(Path.cwd())
+
+    # 在“指定目录”初始化工作路径：这里会创建 workdir / packages / tefkernel 骨架。
+    ctx.ensure_workdir()
+    ctx.kernel_dir.mkdir(parents=True, exist_ok=True)
+    ctx.packages_dir.mkdir(parents=True, exist_ok=True)
+
     cfg = ctx.config
     cfg["game_dir"] = str(game)
     cfg["arch"] = arch
@@ -496,14 +611,58 @@ def cmd_init(ctx, args):
     if bins:
         info(f"发现启动器: {', '.join(bins)}")
         if not any(b in (f"Terraria.bin.{arch}", f"TerrariaServer.bin.{arch}") for b in bins):
-            warn(f"没有 {arch} 架构的 Terraria/S TerrariaServer 启动器；可用 --arch 指定")
+            warn(f"没有 {arch} 架构的 Terraria/TerrariaServer 启动器；可用 --arch 指定")
     else:
         warn("游戏目录里没有 *.bin.* 启动器")
 
     if (game / "TerrariaServer.exe").is_file() or (game / "TerrariaServer").is_file():
         info("检测到服务端可执行文件（TerrariaServer）")
-    for p in ("docs/patch", "docs"):
-        pass
+
+    # 顺带选定内核 / TEFLoader（路径或缓存里的版本标签都可以）
+    if args.kernel:
+        if Path(args.kernel).expanduser().is_file():
+            r = install_kernel_package(ctx, args.kernel)
+        else:
+            path, label = ctx.resolve_cached("tefkernel", args.kernel)
+            r = install_kernel_package(ctx, path, label)
+        info(f"内核已选定: {r['label']}")
+        if not ctx.kernel_lib():
+            warn(f"当前平台 ({os_name()}/{arch}) 没有匹配的内核库")
+
+    if args.loader:
+        if Path(args.loader).expanduser().is_file():
+            r = install_loader_zip(ctx, args.loader)
+        else:
+            path, label = ctx.resolve_cached("tefloader", args.loader)
+            r = install_loader_zip(ctx, path, label)
+        info(f"TEFLoader 已选定: {r['label']}")
+
+    if args.patch:
+        cmd_patch(ctx, argparse.Namespace(force=True))
+
+    info("")
+    info(f"配置已保存: {ctx.config_path}")
+    if Path(ctx.workdir) != DEFAULT_WORKDIR.resolve() and not args.local:
+        info(f"后续命令需要带 -w {ctx.workdir}，或先 export TEFM_WORKDIR={ctx.workdir}")
+    if args.local:
+        info(f"以后在该目录直接运行 tefm 即可（会自动读取 ./tefm.json）")
+    info("下一步: tefm status / tefm doctor / tefm run --server")
+    return 0
+
+
+def cmd_where(ctx, args):
+    data = {
+        "workdir": str(ctx.workdir),
+        "config": str(ctx.config_path),
+        "config_exists": ctx.config_path.is_file(),
+        "game_dir": ctx.config.get("game_dir"),
+    }
+    if ctx.as_json:
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+    else:
+        info(f"workdir : {data['workdir']}")
+        info(f"config  : {data['config']} ({'存在' if data['config_exists'] else '不存在'})")
+        info(f"game_dir: {data['game_dir'] or '(未配置)'}")
     return 0
 
 
@@ -514,6 +673,10 @@ def cmd_status(ctx, args):
         "game_dir": cfg.get("game_dir"),
         "arch": ctx.arch,
         "kernel_version": ctx.kernel_version(),
+        "kernel_label": ctx.active_label("tefkernel"),
+        "loader_label": ctx.active_label("tefloader"),
+        "kernel_cache": [l for l, _ in ctx.cache_entries("tefkernel")],
+        "loader_cache": [l for l, _ in ctx.cache_entries("tefloader")],
         "kernel_lib": str(ctx.kernel_lib()) if ctx.kernel_lib() else None,
         "tefloader_zip": ctx.tefloader_zip.is_file(),
     }
@@ -568,8 +731,12 @@ def cmd_status(ctx, args):
     info(f"workdir      : {data['workdir']}")
     info(f"game_dir     : {data['game_dir'] or '(未配置)'}")
     info(f"arch         : {data['arch']}")
-    info(f"kernel       : {data['kernel_version'] or '(未安装)'}")
+    kver_display = data['kernel_version'] or ('(未记录版本)' if data['kernel_lib'] else '(未安装)')
+    klabel = data['kernel_label'] or ('未记录标签' if data['kernel_lib'] else '-')
+    info(f"kernel       : {kver_display} [选用 {klabel}；缓存 {len(data['kernel_cache'])} 个]")
     info(f"kernel lib   : {data['kernel_lib'] or '(未找到)'}")
+    llabel = data['loader_label'] or ('未记录标签' if data['tefloader_zip'] else '(未安装)')
+    info(f"tefloader    : {llabel} [缓存 {len(data['loader_cache'])} 个]")
     info(f"tefloader.zip: {'有' if data['tefloader_zip'] else '无'}")
     if data.get("game_dir"):
         info(f"tefloader bin: {'有' if data.get('tefloader_bin') else '未 patch'}")
@@ -587,71 +754,258 @@ def cmd_status(ctx, args):
     return 0
 
 
-def cmd_kernel(ctx, args):
-    if args.kernel_cmd == "install":
-        z = Path(args.zip).expanduser()
-        if not z.is_file():
-            raise TeFmError(f"文件不存在: {z}")
+def _zip_kernel_info(zip_path):
+    with zipfile.ZipFile(zip_path) as zf:
+        if "info.json" not in zf.namelist():
+            raise TeFmError(f"{zip_path} 缺少 info.json，不是 tefkernel 包")
+        return json.loads(zf.read("info.json").decode("utf-8-sig"))
+
+
+def _derive_label(zip_path, prefix_names):
+    """给没有版本元数据的包取一个稳定标签：文件名 -> 去前缀 -> 内容哈希兜底。"""
+    import hashlib
+
+    zip_path = Path(zip_path)
+    orig = zip_path.stem
+    stem = orig
+    for prefix in prefix_names:
+        if stem.lower().startswith(prefix):
+            stem = stem[len(prefix):].lstrip("-_. ")
+            break
+    stem = re.sub(r"[^0-9A-Za-z._+-]+", "-", stem).strip("-._")
+    if stem:
+        return stem
+    # 文件名就是 tefloader / tefkernel 这种通用名时，用 内容哈希 区分不同版本
+    h = hashlib.sha256(zip_path.read_bytes()).hexdigest()[:8]
+    return f"{orig}-{h}"
+
+
+LIB_SUFFIXES = (".so", ".dll", ".dylib")
+
+
+def _kernel_arch_from_name(name):
+    m = re.search(r"\.(linux|windows|macos|android|ios)\."
+                  r"(x86_64|x86|arm64|arm64-v8a|armeabi-v7a|arm)\.", name)
+    if not m:
+        return None, None
+    os_part = m.group(1)
+    arch = {"arm64-v8a": "arm64", "armeabi-v7a": "arm"}.get(m.group(2), m.group(2))
+    return os_part, arch
+
+
+def install_kernel_zip(ctx, zip_path, label=None):
+    zip_path = Path(zip_path).expanduser().resolve()
+    if not zip_path.is_file():
+        raise TeFmError(f"文件不存在: {zip_path}")
+    meta = _zip_kernel_info(zip_path)
+    ver = meta.get("version") or meta.get("versionCode") or _derive_label(zip_path, ["tefkernel"])
+    label = label or str(ver)
+
+    cache = ctx.cache_path("tefkernel", label)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    if cache.resolve() != zip_path:
+        shutil.copy2(zip_path, cache)
+
+    ctx.kernel_dir.mkdir(parents=True, exist_ok=True)
+    picked = 0
+    with zipfile.ZipFile(cache) as zf:
+        for n in zf.namelist():
+            m = safe_member(n)
+            if m is None or n.endswith("/"):
+                continue
+            if m == "info.json" or m.startswith("libtefkernel.") or m.startswith("tefkernel."):
+                out = ctx.kernel_dir / m
+                out.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(n) as src, open(out, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+                picked += 1
+    if picked == 0:
+        raise TeFmError("内核包里没有可安装的文件")
+
+    ctx.set_active_label("tefkernel", label)
+    return {"label": label, "version": meta.get("version"), "version_code": meta.get("versionCode"),
+            "cache": str(cache)}
+
+
+def install_kernel_lib(ctx, lib_path, label=None):
+    """直接安装一个裸内核动态库（构建产物），不要求 zip。"""
+    lib_path = Path(lib_path).expanduser().resolve()
+    if not lib_path.is_file():
+        raise TeFmError(f"文件不存在: {lib_path}")
+    if lib_path.suffix.lower() not in LIB_SUFFIXES:
+        raise TeFmError(f"不认识的内核文件: {lib_path.name}（支持 .zip / .so / .dll / .dylib）")
+
+    # 版本：优先同目录 info.json / --label，否则用 local-<arch> 作为标签
+    meta = read_json(lib_path.parent / "info.json", {}) or {}
+    lib_os, lib_arch = _kernel_arch_from_name(lib_path.name)
+    label = label or meta.get("version") or (f"local-{lib_arch}" if lib_arch else "local")
+
+    cache = ctx.cache_path("tefkernel", label, lib_path.suffix.lower())
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    if cache.resolve() != lib_path:
+        shutil.copy2(lib_path, cache)
+
+    # 文件名里能解析出平台/架构时，顺手清掉旧的同平台库，避免 kernel_lib() 选到旧文件
+    if lib_os and lib_arch:
+        if lib_os != os_name() or lib_arch != ctx.arch:
+            warn(f"这个库是 {lib_os}/{lib_arch}，当前机器是 {os_name()}/{ctx.arch}，"
+                 f"启动时可能找不到匹配的内核")
         ctx.kernel_dir.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(z) as zf:
-            names = zf.namelist()
-            if "info.json" not in names:
-                raise TeFmError("内核包缺少 info.json")
-            info_json = json.loads(zf.read("info.json").decode("utf-8-sig"))
-            picked = 0
-            for n in names:
-                m = safe_member(n)
-                if m is None or n.endswith("/"):
-                    continue
-                if m == "info.json" or m.startswith("libtefkernel.") or m.startswith("tefkernel."):
-                    out = ctx.kernel_dir / m
-                    out.parent.mkdir(parents=True, exist_ok=True)
-                    with zf.open(n) as src, open(out, "wb") as dst:
-                        shutil.copyfileobj(src, dst)
-                    picked += 1
-        if picked == 0:
-            raise TeFmError("内核包里没有可安装的文件")
-        info(f"内核已安装: {info_json.get('version')} -> {ctx.kernel_dir}")
-        lib = ctx.kernel_lib()
-        if not lib:
-            warn(f"当前平台 ({os_name()}/{ctx.arch}) 没有匹配的内核库，检查内核包内容")
+        for p in ctx.kernel_dir.iterdir():
+            if p.is_file() and p.suffix.lower() in LIB_SUFFIXES and "tefkernel" in p.name.lower():
+                p_os, p_arch = _kernel_arch_from_name(p.name)
+                if p_os == lib_os and p_arch == lib_arch:
+                    p.unlink(missing_ok=True)
+
+    ctx.kernel_dir.mkdir(parents=True, exist_ok=True)
+    dst = ctx.kernel_dir / lib_path.name
+    shutil.copy2(cache, dst)
+
+    # 维护 info.json，保证 status / version 显示的是当前选中的内核
+    info_path = ctx.kernel_dir / "info.json"
+    existing = read_json(info_path, {}) or {}
+    existing["version"] = meta.get("version") or label
+    existing.setdefault("versionCode", meta.get("versionCode", 0))
+    existing["source"] = lib_path.name
+    write_json(info_path, existing)
+
+    ctx.set_active_label("tefkernel", label)
+    return {"label": label, "version": meta.get("version") or label,
+            "version_code": meta.get("versionCode"), "cache": str(cache),
+            "lib": dst.name, "arch": lib_arch, "os": lib_os}
+
+
+def install_kernel_package(ctx, path, label=None):
+    """zip 或裸库都接受。"""
+    p = Path(path).expanduser()
+    if zipfile.is_zipfile(p):
+        return install_kernel_zip(ctx, p, label)
+    return install_kernel_lib(ctx, p, label)
+
+
+def install_loader_zip(ctx, zip_path, label=None):
+    zip_path = Path(zip_path).expanduser().resolve()
+    if not zip_path.is_file():
+        raise TeFmError(f"文件不存在: {zip_path}")
+    # tefloader.zip 当前没有版本元数据；优先用包内 info.json，其次文件名，最后哈希。
+    ver = None
+    try:
+        with zipfile.ZipFile(zip_path) as zf:
+            for n in ("info.json", "Info.json"):
+                if n in zf.namelist():
+                    j = json.loads(zf.read(n).decode("utf-8-sig"))
+                    ver = j.get("version") or j.get("versionCode")
+                    break
+    except zipfile.BadZipFile as e:
+        raise TeFmError(f"不是有效的 zip 包: {zip_path} ({e})")
+    label = label or (str(ver) if ver else _derive_label(zip_path, ["tefloader"]))
+
+    cache = ctx.cache_path("tefloader", label)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    if cache.resolve() != zip_path:
+        shutil.copy2(zip_path, cache)
+
+    ctx.kernel_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(cache, ctx.tefloader_zip)
+    ctx.set_active_label("tefloader", label)
+
+    extracted = None
+    if ctx.config.get("game_dir"):
+        extracted = extract_loader_runtime(ctx, verbose=True)
+    return {"label": label, "version": ver, "cache": str(cache), "extracted": extracted}
+
+
+def cmd_kernel(ctx, args):
+    sub = args.kernel_cmd
+
+    if sub == "install":
+        r = install_kernel_package(ctx, args.zip, args.label)
+        if ctx.as_json:
+            print(json.dumps(r, ensure_ascii=False))
         else:
-            info(f"匹配内核库: {lib.name}")
+            info(f"内核已安装: {r['label']} -> {ctx.kernel_dir}")
+            lib = ctx.kernel_lib()
+            if not lib:
+                warn(f"当前平台 ({os_name()}/{ctx.arch}) 没有匹配的内核库，检查内核包内容")
+            else:
+                info(f"匹配内核库: {lib.name}")
         return 0
 
-    if args.kernel_cmd == "version":
+    if sub == "list":
+        entries = ctx.cache_entries("tefkernel")
+        active = ctx.active_label("tefkernel") or ctx.kernel_version()
+        rows = [{"label": l, "path": str(p), "active": l == active} for l, p in entries]
+        if ctx.as_json:
+            print(json.dumps({"active": active, "packages": rows}, ensure_ascii=False, indent=2))
+        else:
+            if not rows:
+                info("(没有缓存的内核包)")
+            for r in rows:
+                info(f"{'*' if r['active'] else ' '} {r['label']:<16} {r['path']}")
+        return 0
+
+    if sub == "use":
+        path, label = ctx.resolve_cached("tefkernel", args.label)
+        r = install_kernel_package(ctx, path, label)
+        info(f"已切换到内核 {r['label']}")
+        lib = ctx.kernel_lib()
+        if not lib:
+            warn(f"当前平台 ({os_name()}/{ctx.arch}) 没有匹配的内核库")
+        return 0
+
+    if sub == "version":
         v = ctx.kernel_version()
         if ctx.as_json:
-            print(json.dumps({"version": v}))
+            print(json.dumps({"version": v, "label": ctx.active_label("tefkernel")}))
         else:
             info(v or "(未安装)")
         return 0
 
-    raise TeFmError("用法: tefm kernel install <tefkernel.zip> | tefm kernel version")
+    raise TeFmError("用法: tefm kernel install <zip> [--label L] | list | use <label|latest> | version")
 
 
 def cmd_loader(ctx, args):
-    if args.loader_cmd == "install":
-        z = Path(args.zip).expanduser()
-        if not z.is_file():
-            raise TeFmError(f"文件不存在: {z}")
-        ctx.kernel_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(z, ctx.tefloader_zip)
-        info(f"tefloader.zip 已保存: {ctx.tefloader_zip}")
-        cfg = ctx.config
-        if cfg.get("game_dir"):
-            n = extract_loader_runtime(ctx, verbose=True)
-            info(f"已解压 {n} 个运行时文件到游戏目录")
+    sub = args.loader_cmd
+
+    if sub == "install":
+        r = install_loader_zip(ctx, args.zip, args.label)
+        if ctx.as_json:
+            print(json.dumps(r, ensure_ascii=False))
         else:
-            info("尚未配置游戏目录，稍后执行 tefm init / tefm patch 时会自动解压")
+            info(f"tefloader 已安装: {r['label']} -> {ctx.tefloader_zip}")
+            if r["extracted"] is None:
+                info("尚未配置游戏目录，稍后执行 tefm init / tefm patch 时会自动解压")
+            else:
+                info(f"已解压 {r['extracted']} 个运行时文件到游戏目录")
         return 0
 
-    if args.loader_cmd == "runtime":
+    if sub == "list":
+        entries = ctx.cache_entries("tefloader")
+        active = ctx.active_label("tefloader")
+        rows = [{"label": l, "path": str(p), "active": l == active} for l, p in entries]
+        if ctx.as_json:
+            print(json.dumps({"active": active, "packages": rows}, ensure_ascii=False, indent=2))
+        else:
+            if not rows:
+                info("(没有缓存的 tefloader 包)")
+            for r in rows:
+                info(f"{'*' if r['active'] else ' '} {r['label']:<16} {r['path']}")
+        return 0
+
+    if sub == "use":
+        path, label = ctx.resolve_cached("tefloader", args.label)
+        r = install_loader_zip(ctx, path, label)
+        info(f"已切换到 tefloader {r['label']}")
+        if r["extracted"] is not None:
+            info(f"已解压 {r['extracted']} 个运行时文件到游戏目录")
+        return 0
+
+    if sub == "runtime":
         n = extract_loader_runtime(ctx, verbose=True)
         info(f"已解压 {n} 个运行时文件到游戏目录")
         return 0
 
-    raise TeFmError("用法: tefm loader install <tefloader.zip> | tefm loader runtime")
+    raise TeFmError("用法: tefm loader install <zip> [--label L] | list | use <label|latest> | runtime")
 
 
 def loader_runtime_prefix(ctx):
@@ -723,7 +1077,7 @@ def cmd_addon(ctx, args):
     if sub == "install":
         results = []
         for z in args.zips:
-            results += install_zip(ctx, z, auto_enable=not args.no_enable)
+            results += install_zip(ctx, z, auto_enable=not args.no_enable, force=args.force)
         if ctx.as_json:
             print(json.dumps(results, ensure_ascii=False, indent=2))
         else:
@@ -814,6 +1168,56 @@ def cmd_config(ctx, args):
     raise TeFmError("用法: tefm config get|set|list ...")
 
 
+# Mono 自带的 ConsoleDriver 读取 $TERM 的 terminfo；文件超过 4K 会直接抛
+# "File must be smaller than 4K"，导致 tefloader 还没启动就崩。
+# Debian 上 xterm / xterm-256color 都已经超过 4K，需要降级到 linux。
+_TERMINFO_LIMIT = 4000
+_TERMINFO_DIRS = ("/lib/terminfo", "/usr/share/terminfo", "/etc/terminfo")
+_SAFE_TERMS = ("linux", "screen-256color", "vt100", "dumb")
+
+
+def _terminfo_size(term):
+    if not term:
+        return None
+    for base in _TERMINFO_DIRS + (str(Path.home() / ".terminfo"),):
+        for sub in (term[0], f"{ord(term[0]):x}"):
+            p = Path(base) / sub / term
+            if p.is_file():
+                return p.stat().st_size
+    return None
+
+
+def safe_terminal():
+    """返回适合 Mono 的 TERM；无法判断时返回 None（保持原样）。"""
+    override = os.environ.get("TEFM_TERM")
+    if override:
+        return override
+    cur = os.environ.get("TERM")
+    if not cur:
+        # 没有 TERM 时 Mono 会走无 terminfo 的兜底路径，不用动
+        return cur
+    size = _terminfo_size(cur)
+    if size is None or size <= _TERMINFO_LIMIT:
+        return cur
+    for cand in _SAFE_TERMS:
+        s = _terminfo_size(cand)
+        if s and s <= _TERMINFO_LIMIT:
+            return cand
+    return "linux"
+
+
+def apply_safe_terminal(verbose=True):
+    if is_windows():
+        return
+    cur = os.environ.get("TERM")
+    fixed = safe_terminal()
+    if fixed and fixed != cur:
+        os.environ["TERM"] = fixed
+        if verbose and cur:
+            warn(f"$TERM={cur} 的 terminfo 超过 4K，Mono 会崩溃；本次改用 TERM={fixed}"
+                 f"（可用 TEFM_TERM 覆盖）")
+
+
 def cmd_run(ctx, args):
     game = ctx.game_dir
     arch = ctx.arch
@@ -856,6 +1260,7 @@ def cmd_run(ctx, args):
     sys.stderr.flush()
     # Linux 版官方启动脚本会设置这个，兼容大小写不一致的资源路径。
     os.environ.setdefault("MONO_IOMAP", "all")
+    apply_safe_terminal()
     os.chdir(str(game))
     try:
         os.execv(str(loader), cmd)
@@ -995,17 +1400,44 @@ def cmd_doctor(ctx, args):
               "tefloader 运行时已解压")
     except TeFmError as e:
         check(False, str(e))
-    check(ctx.kernel_version() is not None, f"内核已安装（{ctx.kernel_version() or '无'}）")
+    kver = ctx.kernel_version()
+    check(bool(kver or ctx.kernel_lib()),
+          f"内核已安装（{kver or ('未记录版本，但库文件存在' if ctx.kernel_lib() else '无')}）")
     check(ctx.kernel_lib() is not None, f"当前平台内核库（{os_name()}/{ctx.arch}）")
-    check(ctx.tefloader_zip.is_file(), "tefloader.zip 已保存")
 
+    # tefloader.zip 只用于“解压/切换运行时”。只要游戏目录里的运行时已就绪，
+    # 缺这个 zip 也能正常启动，所以不算致命问题。
+    if ctx.tefloader_zip.is_file():
+        check(True, "tefloader.zip 已保存")
+    else:
+        runtime_ok = False
+        try:
+            game = ctx.game_dir
+            runtime_ok = (game / "tefloader.exe").is_file() or (game / "tefloader").is_file()
+        except TeFmError:
+            pass
+        if runtime_ok:
+            info("  ! tefloader.zip 未保存（运行时已就绪，启动不受影响）")
+            default_zip = DEFAULT_WORKDIR / "tefkernel" / "tefloader.zip"
+            if default_zip.is_file() and default_zip != ctx.tefloader_zip:
+                info(f"    可复用默认目录里的包：tefm -w {ctx.workdir} loader install "
+                     f"{default_zip}")
+        else:
+            check(False, "tefloader.zip 已保存（当前工作目录里没有，游戏目录也没有运行时）")
+
+    any_loader = False
     for t in ("modloader", "module", "plugin"):
         root = ctx.addon_root(t)
         if not root.is_dir():
             continue
         for pid in enabled_ids(root):
+            if t == "modloader":
+                any_loader = True
             p = root / "pkg" / f"{pid}.tefpkg"
             check(p.is_file(), f"{ADDON_TYPE_NAMES[t]} 已启用且文件存在: {pid}")
+
+    if not any_loader:
+        info("  ! 当前工作目录没有启用任何 ModLoader（服务端将以无 Mod 状态启动）")
 
     if not ok:
         eprint("\n有检查项未通过。")
@@ -1019,60 +1451,89 @@ def cmd_doctor(ctx, args):
 # ---------------------------------------------------------------------------
 
 def build_parser():
+    # 允许把 -w / --json 写在子命令后面（argparse 默认只认子命令之前的全局参数）。
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("-w", "--workdir", default=argparse.SUPPRESS,
+                        help="工作目录（也可写在子命令前）")
+    common.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                        help="以 JSON 输出")
+
     p = argparse.ArgumentParser(
         prog=APP,
         description="无头 TEFManager：在 SSH / 服务器上管理 TEFKernel、tefloader 与各类附加包。",
         epilog="示例:\n"
-               "  tefm init --game '/home/me/GOG Games/Terraria/game'\n"
-               "  tefm kernel install tefkernel.zip\n"
-               "  tefm loader install tefloader.zip\n"
-               "  tefm patch\n"
-               "  tefm addon install LuaLoader.zip VeinMiner.zip\n"
-               "  tefm addon enable lzup333.lualoader\n"
-               "  tefm run --server -world /path/world.wld",
+               "  tefm init -w /srv/tefm --game '/srv/terraria' \\\n"
+               "       --kernel tefkernel-1.4.4.zip --loader tefloader.zip --patch\n"
+               "  tefm -w /srv/tefm kernel list\n"
+               "  tefm -w /srv/tefm kernel use 1.4.4\n"
+               "  tefm -w /srv/tefm addon install LuaLoader.zip VeinMiner.zip\n"
+               "  tefm -w /srv/tefm run --server --world /srv/terraria/Worlds/MyWorld.wld",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("-w", "--workdir", default=os.environ.get("TEFM_WORKDIR") or str(DEFAULT_WORKDIR),
-                   help="工作目录（默认 %(default)s，可用 TEFM_WORKDIR 覆盖）")
+    p.add_argument("-w", "--workdir", default=None,
+                   help=f"工作目录。省略时依次尝试 $TEFM_WORKDIR、当前目录的 tefm.json、"
+                        f"默认 {DEFAULT_WORKDIR}")
     p.add_argument("--json", action="store_true", help="以 JSON 输出（便于脚本处理）")
     sub = p.add_subparsers(dest="command", required=True)
 
-    sp = sub.add_parser("init", help="配置游戏目录")
+    sp = sub.add_parser("init", parents=[common], help="在指定目录初始化工作路径，可同时选定内核与 TEFLoader")
     sp.add_argument("--game", required=True, help="游戏目录（含 TerrariaServer.exe 的那一层）")
     sp.add_argument("--arch", choices=["x86_64", "x86", "arm64", "arm"], help="强制指定架构")
+    sp.add_argument("--kernel", help="内核 zip 路径，或缓存里的版本标签（如 1.4.4 / latest）")
+    sp.add_argument("--loader", help="tefloader zip 路径，或缓存里的标签（如 1.4.0 / latest）")
+    sp.add_argument("--patch", action="store_true", help="初始化后立即生成 tefloader.bin.<arch>")
+    sp.add_argument("--local", action="store_true",
+                    help="把当前目录作为工作目录（写 ./tefm.json，之后在该目录直接运行 tefm 即可）")
     sp.set_defaults(func=cmd_init)
 
-    sp = sub.add_parser("status", help="查看内核 / 附加包 / 启用状态")
+    sp = sub.add_parser("where", parents=[common], help="显示当前使用的工作目录与配置文件")
+    sp.set_defaults(func=cmd_where)
+
+    sp = sub.add_parser("status", parents=[common], help="查看内核 / 附加包 / 启用状态")
     sp.set_defaults(func=cmd_status)
 
-    sp = sub.add_parser("doctor", help="检查部署是否完整")
+    sp = sub.add_parser("doctor", parents=[common], help="检查部署是否完整")
     sp.set_defaults(func=cmd_doctor)
 
-    sp = sub.add_parser("kernel", help="内核管理")
+    sp = sub.add_parser("kernel", parents=[common], help="内核管理（多版本缓存 / 切换）")
     ksub = sp.add_subparsers(dest="kernel_cmd", required=True)
-    k = ksub.add_parser("install", help="安装 tefkernel.zip")
+    k = ksub.add_parser("install", help="安装 tefkernel.zip 或裸内核库（.so/.dll/.dylib）并加入缓存")
     k.add_argument("zip")
+    k.add_argument("--label", help="自定义版本标签（默认取包内 info.json 的 version）")
     k.set_defaults(func=cmd_kernel)
-    k = ksub.add_parser("version", help="显示内核版本")
+    k = ksub.add_parser("list", help="列出已缓存的内核版本")
+    k.set_defaults(func=cmd_kernel)
+    k = ksub.add_parser("use", help="切换到缓存中的某个内核版本")
+    k.add_argument("label")
+    k.set_defaults(func=cmd_kernel)
+    k = ksub.add_parser("version", help="显示当前内核版本")
     k.set_defaults(func=cmd_kernel)
 
-    sp = sub.add_parser("loader", help="tefloader 运行时管理")
+    sp = sub.add_parser("loader", parents=[common], help="tefloader 运行时管理（多版本缓存 / 切换）")
     lsub = sp.add_subparsers(dest="loader_cmd", required=True)
-    k = lsub.add_parser("install", help="安装 tefloader.zip 并解压到游戏目录")
+    k = lsub.add_parser("install", help="安装 tefloader.zip 并加入缓存")
     k.add_argument("zip")
+    k.add_argument("--label", help="自定义标签（默认取文件名或哈希）")
+    k.set_defaults(func=cmd_loader)
+    k = lsub.add_parser("list", help="列出已缓存的 tefloader 版本")
+    k.set_defaults(func=cmd_loader)
+    k = lsub.add_parser("use", help="切换到缓存中的某个 tefloader")
+    k.add_argument("label")
     k.set_defaults(func=cmd_loader)
     k = lsub.add_parser("runtime", help="重新解压 tefloader 运行时到游戏目录")
     k.set_defaults(func=cmd_loader)
 
-    sp = sub.add_parser("patch", help="生成 tefloader.bin.<arch> 并解压运行时")
+    sp = sub.add_parser("patch", parents=[common], help="生成 tefloader.bin.<arch> 并解压运行时")
     sp.add_argument("--force", action="store_true", help="覆盖已存在的 tefloader.bin")
     sp.set_defaults(func=cmd_patch)
 
-    sp = sub.add_parser("addon", help="附加包管理（ModLoader / Module / Plugin / Mod）")
+    sp = sub.add_parser("addon", parents=[common], help="附加包管理（ModLoader / Module / Plugin / Mod）")
     asub = sp.add_subparsers(dest="addon_cmd", required=True)
     a = asub.add_parser("install", help="从 zip 安装")
     a.add_argument("zips", nargs="+")
     a.add_argument("--no-enable", action="store_true", help="安装后不自动启用")
+    a.add_argument("--force", action="store_true",
+                   help="跳过内核最低版本等兼容性检查（强制安装）")
     a.set_defaults(func=cmd_addon)
     a = asub.add_parser("list", help="列出附加包（同 status）")
     a.set_defaults(func=cmd_addon)
@@ -1081,7 +1542,7 @@ def build_parser():
         a.add_argument("pkg_id")
         a.set_defaults(func=cmd_addon)
 
-    sp = sub.add_parser("config", help="读写 Mod / 附加包私有目录里的 config.json")
+    sp = sub.add_parser("config", parents=[common], help="读写 Mod / 附加包私有目录里的 config.json")
     csub = sp.add_subparsers(dest="config_cmd", required=True)
     c = csub.add_parser("get")
     c.add_argument("pkg_id")
@@ -1096,14 +1557,14 @@ def build_parser():
     c.add_argument("pkg_id")
     c.set_defaults(func=cmd_config)
 
-    sp = sub.add_parser("run", help="启动游戏 / 专用服（前台运行，适合 systemd / ssh）")
+    sp = sub.add_parser("run", parents=[common], help="启动游戏 / 专用服（前台运行，适合 systemd / ssh）")
     sp.add_argument("--server", action="store_true", help="以服务端启动 TerrariaServer")
     sp.add_argument("--dry-run", action="store_true", help="只打印命令")
     sp.add_argument("-world", "--world", help="世界文件路径（等价于透传 -world）")
     sp.add_argument("extra", nargs=argparse.REMAINDER, help="透传给游戏的参数")
     sp.set_defaults(func=cmd_run)
 
-    sp = sub.add_parser("service", help="生成 systemd 服务单元（便于长期挂在服务器上）")
+    sp = sub.add_parser("service", parents=[common], help="生成 systemd 服务单元（便于长期挂在服务器上）")
     sp.add_argument("--output", "-o", help="写入路径；省略则打印到标准输出")
     sp.add_argument("--user", action="store_true", help="生成用户级服务（WantedBy=default.target）")
     sp.add_argument("--world", help="世界文件路径，写入 ExecStart")
@@ -1111,7 +1572,7 @@ def build_parser():
     sp.add_argument("--force", action="store_true", help="覆盖已存在的文件")
     sp.set_defaults(func=cmd_service)
 
-    sp = sub.add_parser("logs", help="查看内核日志")
+    sp = sub.add_parser("logs", parents=[common], help="查看内核日志")
     sp.add_argument("-n", "--lines", type=int, default=80)
     sp.add_argument("-f", "--follow", action="store_true")
     sp.set_defaults(func=cmd_logs)
@@ -1127,6 +1588,11 @@ def main(argv=None):
         return args.func(ctx, args) or 0
     except TeFmError as e:
         die(str(e))
+    except PermissionError as e:
+        die(f"没有权限写入 {e.filename or '目标路径'}。\n"
+            f"若工作目录在 /srv 等系统路径，请用 sudo，或换到有权限的目录：-w ~/tefm")
+    except OSError as e:
+        die(f"文件操作失败: {e}")
     except KeyboardInterrupt:
         return 130
 
